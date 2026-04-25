@@ -16,34 +16,24 @@ internal readonly struct PointerInputState
     public bool PrimaryPressed { get; }
 }
 
-internal sealed class MovementSettings
-{
-    public float MoveSpeed;
-    public float RotationSpeed;
-    public float StoppingDistance;
-}
-
 internal readonly struct MovementUpdateContext
 {
     public MovementUpdateContext(
         Vector2 manualInput,
         bool pointerBlocked,
         PointerInputState pointerState,
-        Vector3 pointerWorldPosition,
-        MovementSettings settings)
+        Vector3 pointerWorldPosition)
     {
         ManualInput = manualInput;
         PointerBlocked = pointerBlocked;
         PointerState = pointerState;
         PointerWorldPosition = pointerWorldPosition;
-        Settings = settings;
     }
 
     public Vector2 ManualInput { get; }
     public bool PointerBlocked { get; }
     public PointerInputState PointerState { get; }
     public Vector3 PointerWorldPosition { get; }
-    public MovementSettings Settings { get; }
 }
 
 internal sealed class PlayerInputService : IInputService
@@ -82,9 +72,9 @@ internal sealed class PlayerMovementService : IMovementService
     private bool holdModeActive;
     private Vector3 holdWorldTarget;
 
-    public void UpdateMovement(PlayerShip player, MovementUpdateContext context, float deltaTime)
+    public void UpdateMovement(PlayerShip player, MovementUpdateContext context, MovementSettingsSO settings, float deltaTime)
     {
-        if (player == null || player.Transform == null || context.Settings == null)
+        if (player == null || player.Transform == null || settings == null)
         {
             return;
         }
@@ -104,22 +94,22 @@ internal sealed class PlayerMovementService : IMovementService
         }
         else if (holdModeActive)
         {
-            desiredDirection = GetHoldDirection(player, context.Settings);
+            desiredDirection = GetHoldDirection(player, settings);
         }
         else
         {
-            desiredDirection = GetClickDirection(player, context.Settings);
+            desiredDirection = GetClickDirection(player, settings);
         }
 
         float desiredSpeed = 0f;
         if (desiredDirection.sqrMagnitude > 0.001f)
         {
-            desiredSpeed = context.Settings.MoveSpeed * player.SpeedMultiplier;
+            desiredSpeed = settings.moveSpeed * player.SpeedMultiplier;
         }
 
         Vector2 desiredVelocity = desiredDirection * desiredSpeed;
         float smoothTime = Mathf.Clamp(1f / Mathf.Max(0.1f, player.Acceleration), 0.04f, 0.25f);
-        float maxSpeed = Mathf.Max(0.1f, context.Settings.MoveSpeed * Mathf.Max(0.1f, player.SpeedMultiplier));
+        float maxSpeed = Mathf.Max(0.1f, settings.moveSpeed * Mathf.Max(0.1f, player.SpeedMultiplier));
         player.Velocity = Vector2.SmoothDamp(player.Velocity, desiredVelocity, ref velocitySmoothRef, smoothTime, maxSpeed, deltaTime);
         player.Velocity = Vector2.Lerp(player.Velocity, Vector2.zero, Mathf.Clamp01(player.Drag * deltaTime));
         player.Transform.position += (Vector3)(player.Velocity * deltaTime);
@@ -131,7 +121,7 @@ internal sealed class PlayerMovementService : IMovementService
             player.Transform.rotation = Quaternion.Lerp(
                 player.Transform.rotation,
                 targetRotation,
-                context.Settings.RotationSpeed * deltaTime);
+                settings.rotationSpeed * deltaTime);
         }
     }
 
@@ -176,11 +166,11 @@ internal sealed class PlayerMovementService : IMovementService
         wasPointerPressed = pointerPressed;
     }
 
-    private Vector2 GetHoldDirection(PlayerShip player, MovementSettings settings)
+    private Vector2 GetHoldDirection(PlayerShip player, MovementSettingsSO settings)
     {
         Vector2 toTarget = (Vector2)(holdWorldTarget - player.Transform.position);
         float distance = toTarget.magnitude;
-        if (distance <= settings.StoppingDistance * 0.5f)
+        if (distance <= settings.stoppingDistance * 0.5f)
         {
             return Vector2.zero;
         }
@@ -188,7 +178,7 @@ internal sealed class PlayerMovementService : IMovementService
         return distance > 0.001f ? toTarget / distance : Vector2.zero;
     }
 
-    private static Vector2 GetClickDirection(PlayerShip player, MovementSettings settings)
+    private static Vector2 GetClickDirection(PlayerShip player, MovementSettingsSO settings)
     {
         if (!player.MoveCommandActive)
         {
@@ -198,7 +188,7 @@ internal sealed class PlayerMovementService : IMovementService
         Vector2 toTarget = (Vector2)(player.MoveCommandTarget - player.Transform.position);
         float distance = toTarget.magnitude;
 
-        if (distance <= settings.StoppingDistance && player.Velocity.magnitude <= 0.2f)
+        if (distance <= settings.stoppingDistance && player.Velocity.magnitude <= 0.2f)
         {
             player.MoveCommandActive = false;
             return Vector2.zero;

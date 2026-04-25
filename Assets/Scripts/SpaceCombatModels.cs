@@ -25,6 +25,7 @@ internal sealed class EnemyShip
     public float AttackCooldown;
     public float AttackTimer;
     public float Damage;
+    public int ScoreValue;
     public float DriftSpeed;
     public float HitFlashTimer;
     public float AttackFlashTimer;
@@ -37,6 +38,8 @@ internal sealed class EnemyShip
     public float Armor;
     public float MaxHull;
     public float Hull;
+    public WeaponDataSO WeaponData;
+    public GameObject Prefab;
 
     public float ShieldPercent => MaxShield <= 0f ? 0f : Shield / MaxShield;
     public float ArmorPercent => MaxArmor <= 0f ? 0f : Armor / MaxArmor;
@@ -54,6 +57,7 @@ internal sealed class Projectile
     public Transform Transform;
     public SpriteRenderer Renderer;
     public EnemyShip Target;
+    public GameObject Prefab;
     public float Damage;
     public float Speed = 18f;
     public float Lifetime;
@@ -74,6 +78,7 @@ internal sealed class ModuleState
     public float FalloffRange;
     public float RepairPerSecond;
     public float SpeedBonus;
+    public WeaponDataSO WeaponData;
 
     public Image SlotImage;
     public Text SlotTitle;
@@ -157,4 +162,22 @@ internal sealed class StarVisual
     public float BaseAlpha;
     public float TwinkleSpeed;
     public float TwinkleOffset;
+}
+
+[Serializable]
+public sealed class BackgroundLayerConfig
+{
+    public GameObject prefab;
+    [Range(0f, 1f)] public float parallaxFactor = 0.2f;
+    [Min(8f)] public float tileSize = 36f;
+    [Range(1, 3)] public int gridRadius = 1;
+}
+
+[Serializable]
+public sealed class WaveSpawnSettings
+{
+    [Min(1)] public int enemiesPerWave = 5;
+    [Min(0f)] public float initialWaveDelay = 3f;
+    [Min(0f)] public float timeBetweenWaves = 3f;
+    [Min(0f)] public float spawnOffscreenMargin = 2f;
 }

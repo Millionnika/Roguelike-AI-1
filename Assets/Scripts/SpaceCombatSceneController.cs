@@ -19,6 +19,17 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text waveText;
 
+    [Header("Data")]
+    [SerializeField] private MovementSettingsSO playerMovementSettings;
+    [SerializeField] private WeaponDataSO playerWeaponData;
+    [SerializeField] private List<EnemyDataSO> waveConfigs = new List<EnemyDataSO>();
+
+    [Header("Background Layers")]
+    [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
+
+    [Header("Wave Settings")]
+    [SerializeField] private WaveSpawnSettings waveSettings = new WaveSpawnSettings();
+
     private enum StartMenuPage
     {
         Main,
@@ -44,7 +55,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
     private readonly List<AttackBeamEffect> attackBeams = new List<AttackBeamEffect>();
     private readonly List<EngineParticle> engineParticles = new List<EngineParticle>();
-    private readonly List<StarVisual> stars = new List<StarVisual>();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
 
@@ -55,6 +65,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private IPoolService poolService;
     private ILocalizationService localizationService;
     private ISpaceCombatUiFactory uiFactory;
+    private IBackgroundParallaxService backgroundParallaxService;
 
     private Camera mainCamera;
     private PlayerShip player;
@@ -135,11 +146,12 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Sprite diamondSprite;
 
     private int wave = 1;
-    private bool gateActive;
+    private bool waitingForNextWave;
+    private bool firstWaveSpawned;
     private bool levelUpPending;
     private bool gameOver;
     private bool gameStarted;
-    private Vector3 gatePosition;
+    private float nextWaveTimer;
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
     private LanguageOption currentLanguage = LanguageOption.RU;
@@ -147,7 +159,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool useVirtualJoystick;
     private bool joystickDragging;
     private Vector2 joystickVector;
-    private readonly MovementSettings movementSettings = new MovementSettings { MoveSpeed = 6.2f, RotationSpeed = 8f, StoppingDistance = 0.25f };
+    private GameObject runtimeEnemyPrefab;
+    private GameObject runtimeStarLayerPrefab;
+    private GameObject runtimeNebulaLayerPrefab;
 
     internal void ConfigureServices(
         IPlatformService newPlatformService,
@@ -156,7 +170,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         ICombatService newCombatService,
         IPoolService newPoolService,
         ILocalizationService newLocalizationService,
-        ISpaceCombatUiFactory newUiFactory)
+        ISpaceCombatUiFactory newUiFactory,
+        IBackgroundParallaxService newBackgroundParallaxService)
     {
         platformService = newPlatformService;
         inputService = newInputService;
@@ -165,10 +180,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         poolService = newPoolService;
         localizationService = newLocalizationService;
         uiFactory = newUiFactory;
+        backgroundParallaxService = newBackgroundParallaxService;
     }
 
     private void EnsureServices()
     {
+        EnsureDataAssets();
         platformService ??= new RuntimePlatformService();
         inputService ??= new PlayerInputService();
         movementService ??= new PlayerMovementService();
@@ -176,10 +193,16 @@ public class SpaceCombatSceneController : MonoBehaviour
         poolService ??= new PoolService();
         localizationService ??= new SpaceCombatLocalizationService();
         uiFactory ??= new SpaceCombatUiFactory();
+        backgroundParallaxService ??= new BackgroundParallaxService();
+        combatService.SetDefaultWeaponData(playerWeaponData);
 
         if (projectilePrefab != null)
         {
             poolService.InitializePool(projectilePrefab, 24);
+        }
+        if (playerWeaponData != null && playerWeaponData.projectilePrefab != null)
+        {
+            poolService.InitializePool(playerWeaponData.projectilePrefab, 24);
         }
         if (beamPrefab != null)
         {
@@ -221,6 +244,24 @@ public class SpaceCombatSceneController : MonoBehaviour
         UpdateHud();
     }
 
+    private void OnDestroy()
+    {
+        backgroundParallaxService?.Dispose();
+
+        if (runtimeEnemyPrefab != null)
+        {
+            Destroy(runtimeEnemyPrefab);
+        }
+        if (runtimeStarLayerPrefab != null)
+        {
+            Destroy(runtimeStarLayerPrefab);
+        }
+        if (runtimeNebulaLayerPrefab != null)
+        {
+            Destroy(runtimeNebulaLayerPrefab);
+        }
+    }
+
     private void ValidateSerializedReferences()
     {
         if (projectilePrefab == null)
@@ -250,6 +291,45 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
+    private void EnsureDataAssets()
+    {
+        if (playerMovementSettings == null)
+        {
+            playerMovementSettings = ScriptableObject.CreateInstance<MovementSettingsSO>();
+            playerMovementSettings.moveSpeed = 6.2f;
+            playerMovementSettings.rotationSpeed = 8f;
+            playerMovementSettings.stoppingDistance = 0.25f;
+        }
+
+        if (playerWeaponData == null)
+        {
+            playerWeaponData = ScriptableObject.CreateInstance<WeaponDataSO>();
+            playerWeaponData.damage = 28f;
+            playerWeaponData.fireRate = 0.45f;
+            playerWeaponData.projectileSpeed = 18f;
+            playerWeaponData.projectilePrefab = projectilePrefab;
+        }
+
+        if (waveConfigs == null)
+        {
+            waveConfigs = new List<EnemyDataSO>();
+        }
+
+        if (waveConfigs.Count == 0)
+        {
+            EnemyDataSO fallbackEnemy = ScriptableObject.CreateInstance<EnemyDataSO>();
+            fallbackEnemy.name = "FallbackEnemyData";
+            fallbackEnemy.maxHealth = 100f;
+            fallbackEnemy.moveSpeed = 1.5f;
+            fallbackEnemy.scoreValue = 40;
+            fallbackEnemy.weaponData = playerWeaponData;
+            waveConfigs.Add(fallbackEnemy);
+        }
+
+        waveSettings ??= new WaveSpawnSettings();
+        backgroundLayers ??= new List<BackgroundLayerConfig>();
+    }
+
     private void Update()
     {
         if (!gameStarted)
@@ -277,7 +357,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         HandleInput(deltaTime);
         UpdatePlayer(deltaTime);
         UpdateCombat(deltaTime);
-        UpdateGate();
+        UpdateWaveState(deltaTime);
+        UpdateBackgroundParallax();
         UpdateEffects(deltaTime);
         UpdateVisuals();
         UpdateHud();
@@ -575,58 +656,9 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void BuildStarfield()
     {
-        stars.Clear();
-        UnityEngine.Random.InitState(1187);
-        for (int i = 0; i < 220; i++)
-        {
-            GameObject star = new GameObject("Star_" + i);
-            star.transform.SetParent(starRoot, false);
-            star.transform.position = new Vector3(
-                UnityEngine.Random.Range(-55f, 55f),
-                UnityEngine.Random.Range(-45f, 45f),
-                0f);
-
-            SpriteRenderer renderer = star.AddComponent<SpriteRenderer>();
-            renderer.sprite = circleSprite;
-            renderer.color = Color.Lerp(
-                new Color(0.5f, 0.7f, 1f, 0.5f),
-                new Color(1f, 0.95f, 0.8f, 0.85f),
-                UnityEngine.Random.value);
-
-            float scale = UnityEngine.Random.Range(0.03f, 0.12f);
-            star.transform.localScale = new Vector3(scale, scale, 1f);
-            renderer.sortingOrder = -20;
-            stars.Add(new StarVisual
-            {
-                Transform = star.transform,
-                Renderer = renderer,
-                BaseAlpha = renderer.color.a,
-                TwinkleSpeed = UnityEngine.Random.Range(0.7f, 1.9f),
-                TwinkleOffset = UnityEngine.Random.Range(0f, Mathf.PI * 2f)
-            });
-        }
-
-        for (int i = 0; i < 12; i++)
-        {
-            GameObject nebula = new GameObject("Nebula_" + i);
-            nebula.transform.SetParent(starRoot, false);
-            nebula.transform.position = new Vector3(
-                UnityEngine.Random.Range(-40f, 40f),
-                UnityEngine.Random.Range(-30f, 30f),
-                0f);
-
-            SpriteRenderer renderer = nebula.AddComponent<SpriteRenderer>();
-            renderer.sprite = circleSprite;
-            renderer.color = new Color(
-                UnityEngine.Random.Range(0.05f, 0.15f),
-                UnityEngine.Random.Range(0.22f, 0.42f),
-                UnityEngine.Random.Range(0.25f, 0.45f),
-                0.1f);
-
-            float scale = UnityEngine.Random.Range(3.5f, 6.5f);
-            nebula.transform.localScale = new Vector3(scale, scale * 0.7f, 1f);
-            renderer.sortingOrder = -30;
-        }
+        EnsureBackgroundLayers();
+        backgroundParallaxService.Dispose();
+        backgroundParallaxService.Initialize(starRoot, backgroundLayers, poolService);
     }
 
     private void BuildGate()
@@ -756,7 +788,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameOver = false;
         levelUpPending = false;
         wave = 1;
-        gateActive = false;
+        waitingForNextWave = false;
+        nextWaveTimer = 0f;
+        firstWaveSpawned = false;
         targetEnemy = null;
         activePerks.Clear();
         perkPanelObject.SetActive(false);
@@ -773,7 +807,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
         ResetModules();
         ApplyShipDefinition(starterShips[selectedShipIndex], true);
-        SpawnWave();
+        StartWaveCountdown(waveSettings != null ? waveSettings.initialWaveDelay : 3f, false);
         LogMessage(Localize("log_launch") + starterShips[selectedShipIndex].Name);
         LogMessage(Localize("log_sector_scan"));
     }
@@ -884,10 +918,11 @@ public class SpaceCombatSceneController : MonoBehaviour
             KeyLabel = "1",
             Type = ModuleType.Weapon,
             CapPerShot = 9f,
-            RateOfFire = 0.45f,
-            Damage = 28f,
+            RateOfFire = playerWeaponData != null ? playerWeaponData.fireRate : 0.45f,
+            Damage = playerWeaponData != null ? playerWeaponData.damage : 28f,
             OptimalRange = 5.1f,
-            FalloffRange = 3.2f
+            FalloffRange = 3.2f,
+            WeaponData = playerWeaponData
         });
         modules.Add(new ModuleState
         {
@@ -921,20 +956,31 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         ClearEnemies();
         ClearProjectiles();
-        gateActive = false;
-        gateTransform.gameObject.SetActive(false);
+        waitingForNextWave = false;
+        nextWaveTimer = 0f;
+        firstWaveSpawned = true;
 
-        int enemyCount = Mathf.Clamp(3 + wave, 4, 9);
-        string[] types = { "Scout", "Drone", "Raider", "Interceptor" };
+        if (gateTransform != null)
+        {
+            gateTransform.gameObject.SetActive(false);
+        }
+
+        int baseCount = waveSettings != null ? Mathf.Max(1, waveSettings.enemiesPerWave) : 5;
+        int enemyCount = Mathf.Clamp(baseCount + (wave - 1), baseCount, 24);
+        EnemyDataSO[] configs = waveConfigs != null && waveConfigs.Count > 0
+            ? waveConfigs.ToArray()
+            : Array.Empty<EnemyDataSO>();
 
         for (int i = 0; i < enemyCount; i++)
         {
-            float angle = i * Mathf.PI * 2f / enemyCount + UnityEngine.Random.Range(-0.35f, 0.35f);
-            float distance = UnityEngine.Random.Range(5.5f, 8.5f);
-            Vector3 position = new Vector3(Mathf.Cos(angle) * distance, Mathf.Sin(angle) * distance, 0f);
+            float margin = waveSettings != null ? waveSettings.spawnOffscreenMargin : 2f;
+            Vector3 position = GetOffscreenSpawnPosition(margin);
+            EnemyDataSO enemyData = configs.Length > 0
+                ? configs[UnityEngine.Random.Range(0, configs.Length)]
+                : null;
             EnemyShip enemy = CreateEnemy(
                 "E-" + (i + 1).ToString("00"),
-                types[UnityEngine.Random.Range(0, types.Length)],
+                enemyData,
                 position,
                 1f + (wave - 1) * 0.14f);
             enemies.Add(enemy);
@@ -945,43 +991,45 @@ public class SpaceCombatSceneController : MonoBehaviour
         LogMessage(Localize("log_hostiles") + enemies.Count);
     }
 
-    private EnemyShip CreateEnemy(string id, string typeName, Vector3 position, float levelScale)
+    private EnemyShip CreateEnemy(string id, EnemyDataSO enemyData, Vector3 position, float levelScale)
     {
-        GameObject enemyObject = new GameObject(id);
-        enemyObject.transform.SetParent(enemyRoot, false);
+        string typeName = enemyData != null ? enemyData.name : "Raider";
+        GameObject enemyPrefab = enemyData != null && enemyData.prefab != null
+            ? enemyData.prefab
+            : GetRuntimeEnemyPrefab();
+
+        GameObject enemyObject = poolService.Get(enemyPrefab, enemyRoot);
+        if (enemyObject == null)
+        {
+            enemyObject = new GameObject(id);
+            enemyObject.transform.SetParent(enemyRoot, false);
+        }
+
+        enemyObject.name = id;
         enemyObject.transform.position = position;
         enemyObject.transform.localScale = new Vector3(0.34f, 0.34f, 1f);
 
-        SpriteRenderer bodyRenderer = enemyObject.AddComponent<SpriteRenderer>();
+        SpriteRenderer bodyRenderer = enemyObject.GetComponent<SpriteRenderer>();
+        if (bodyRenderer == null)
+        {
+            bodyRenderer = enemyObject.AddComponent<SpriteRenderer>();
+        }
         bodyRenderer.sprite = circleSprite;
         bodyRenderer.color = new Color(0.75f, 0.2f, 0.24f, 1f);
         bodyRenderer.sortingOrder = 5;
 
-        GameObject shieldObject = new GameObject("Shield");
-        shieldObject.transform.SetParent(enemyObject.transform, false);
-        SpriteRenderer shieldRenderer = shieldObject.AddComponent<SpriteRenderer>();
-        shieldRenderer.sprite = ringSprite;
-        shieldRenderer.color = new Color(0.25f, 0.68f, 1f, 0.9f);
-        shieldRenderer.sortingOrder = 4;
-        shieldObject.transform.localScale = new Vector3(1.22f, 1.22f, 1f);
+        SpriteRenderer shieldRenderer = EnsureChildRenderer(enemyObject.transform, "Shield", ringSprite, new Color(0.25f, 0.68f, 1f, 0.9f), 4, new Vector3(1.22f, 1.22f, 1f), Vector3.zero);
+        SpriteRenderer targetRenderer = EnsureChildRenderer(enemyObject.transform, "TargetRing", ringSprite, new Color(1f, 0.88f, 0.42f, 1f), 6, new Vector3(1.6f, 1.6f, 1f), Vector3.zero);
+        targetRenderer.gameObject.SetActive(false);
+        SpriteRenderer thrusterRenderer = EnsureChildRenderer(enemyObject.transform, "Thruster", circleSprite, new Color(1f, 0.36f, 0.22f, 0.34f), 3, new Vector3(0.36f, 0.7f, 1f), new Vector3(0f, -0.72f, 0f));
 
-        GameObject targetObject = new GameObject("TargetRing");
-        targetObject.transform.SetParent(enemyObject.transform, false);
-        SpriteRenderer targetRenderer = targetObject.AddComponent<SpriteRenderer>();
-        targetRenderer.sprite = ringSprite;
-        targetRenderer.color = new Color(1f, 0.88f, 0.42f, 1f);
-        targetRenderer.sortingOrder = 6;
-        targetObject.transform.localScale = new Vector3(1.6f, 1.6f, 1f);
-        targetObject.SetActive(false);
-
-        GameObject thrusterObject = new GameObject("Thruster");
-        thrusterObject.transform.SetParent(enemyObject.transform, false);
-        thrusterObject.transform.localPosition = new Vector3(0f, -0.72f, 0f);
-        SpriteRenderer thrusterRenderer = thrusterObject.AddComponent<SpriteRenderer>();
-        thrusterRenderer.sprite = circleSprite;
-        thrusterRenderer.color = new Color(1f, 0.36f, 0.22f, 0.34f);
-        thrusterRenderer.sortingOrder = 3;
-        thrusterObject.transform.localScale = new Vector3(0.36f, 0.7f, 1f);
+        float baseHealth = (enemyData != null ? enemyData.maxHealth : 100f) * levelScale;
+        float shieldValue = Mathf.RoundToInt(baseHealth * 1.5f);
+        float armorValue = Mathf.RoundToInt(baseHealth * 1.2f);
+        float hullValue = Mathf.RoundToInt(baseHealth);
+        float enemyMoveSpeed = enemyData != null ? enemyData.moveSpeed : 1.5f;
+        WeaponDataSO enemyWeapon = enemyData != null ? enemyData.weaponData : null;
+        float enemyDamage = enemyWeapon != null ? enemyWeapon.damage * levelScale : 10f * levelScale;
 
         return new EnemyShip
         {
@@ -997,14 +1045,17 @@ public class SpaceCombatSceneController : MonoBehaviour
             OrbitSpeed = UnityEngine.Random.Range(0.4f, 0.95f),
             AttackCooldown = UnityEngine.Random.Range(1.15f, 1.8f),
             AttackTimer = UnityEngine.Random.Range(0f, 0.7f),
-            Damage = 10f * levelScale,
-            DriftSpeed = 1.5f + levelScale * 0.2f,
-            MaxShield = Mathf.RoundToInt(150f * levelScale),
-            Shield = Mathf.RoundToInt(150f * levelScale),
-            MaxArmor = Mathf.RoundToInt(120f * levelScale),
-            Armor = Mathf.RoundToInt(120f * levelScale),
-            MaxHull = Mathf.RoundToInt(100f * levelScale),
-            Hull = Mathf.RoundToInt(100f * levelScale),
+            Damage = enemyDamage,
+            ScoreValue = enemyData != null ? enemyData.scoreValue : 40,
+            DriftSpeed = enemyMoveSpeed + levelScale * 0.2f,
+            MaxShield = shieldValue,
+            Shield = shieldValue,
+            MaxArmor = armorValue,
+            Armor = armorValue,
+            MaxHull = hullValue,
+            Hull = hullValue,
+            WeaponData = enemyWeapon,
+            Prefab = enemyPrefab,
             BaseBodyColor = bodyRenderer.color,
             BaseShieldColor = shieldRenderer.color
         };
@@ -1016,7 +1067,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             if (enemies[i].Transform != null)
             {
-                Destroy(enemies[i].Transform.gameObject);
+                if (enemies[i].Prefab != null)
+                {
+                    poolService.Return(enemies[i].Prefab, enemies[i].Transform.gameObject);
+                }
+                else
+                {
+                    Destroy(enemies[i].Transform.gameObject);
+                }
             }
         }
 
@@ -1029,9 +1087,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             if (projectiles[i].Transform != null)
             {
-                if (projectilePrefab != null)
+                GameObject pooledPrefab = projectiles[i].Prefab != null ? projectiles[i].Prefab : projectilePrefab;
+                if (pooledPrefab != null)
                 {
-                    poolService.Return(projectilePrefab, projectiles[i].Transform.gameObject);
+                    poolService.Return(pooledPrefab, projectiles[i].Transform.gameObject);
                 }
             }
         }
@@ -1734,19 +1793,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             if (keyboard.digit2Key.wasPressedThisFrame) ToggleModule(1);
             if (keyboard.digit3Key.wasPressedThisFrame) ToggleModule(2);
             if (keyboard.digit4Key.wasPressedThisFrame) ToggleModule(3);
-
-            if (keyboard.gKey.wasPressedThisFrame && gateActive)
-            {
-                float gateDistance = Vector3.Distance(player.Transform.position, gatePosition);
-                if (gateDistance <= 2f)
-                {
-                    WarpToNextWave();
-                }
-                else
-                {
-                    LogMessage(Localize("log_move_gate"), "warning");
-                }
-            }
         }
 
         PointerInputState pointerState = inputService.ReadPointerState();
@@ -1755,16 +1801,12 @@ public class SpaceCombatSceneController : MonoBehaviour
             ? ScreenToWorldPosition(pointerState.ScreenPosition)
             : player.Transform.position;
 
-        movementSettings.MoveSpeed = player.Speed;
-        movementSettings.RotationSpeed = player.RotationResponsiveness;
-
         MovementUpdateContext movementContext = new MovementUpdateContext(
             moveInput,
             pointerBlocked,
             pointerState,
-            pointerWorldPosition,
-            movementSettings);
-        movementService.UpdateMovement(player, movementContext, deltaTime);
+            pointerWorldPosition);
+        movementService.UpdateMovement(player, movementContext, playerMovementSettings, deltaTime);
     }
 
     private void ToggleModule(int index)
@@ -1924,6 +1966,154 @@ public class SpaceCombatSceneController : MonoBehaviour
         return world;
     }
 
+    private void UpdateBackgroundParallax()
+    {
+        if (player != null && player.Transform != null && backgroundParallaxService != null)
+        {
+            backgroundParallaxService.Update(player.Transform.position);
+        }
+    }
+
+    private void EnsureBackgroundLayers()
+    {
+        if (backgroundLayers == null)
+        {
+            backgroundLayers = new List<BackgroundLayerConfig>();
+        }
+
+        if (backgroundLayers.Count > 0)
+        {
+            return;
+        }
+
+        backgroundLayers.Add(new BackgroundLayerConfig
+        {
+            prefab = GetRuntimeNebulaLayerPrefab(),
+            parallaxFactor = 0.08f,
+            tileSize = 48f,
+            gridRadius = 2
+        });
+        backgroundLayers.Add(new BackgroundLayerConfig
+        {
+            prefab = GetRuntimeStarLayerPrefab(),
+            parallaxFactor = 0.18f,
+            tileSize = 36f,
+            gridRadius = 2
+        });
+    }
+
+    private GameObject GetRuntimeStarLayerPrefab()
+    {
+        if (runtimeStarLayerPrefab != null)
+        {
+            return runtimeStarLayerPrefab;
+        }
+
+        runtimeStarLayerPrefab = new GameObject("RuntimeStarLayerPrefab");
+        runtimeStarLayerPrefab.SetActive(false);
+        runtimeStarLayerPrefab.hideFlags = HideFlags.DontSave;
+        SpriteRenderer renderer = runtimeStarLayerPrefab.AddComponent<SpriteRenderer>();
+        renderer.sprite = circleSprite;
+        renderer.color = new Color(0.7f, 0.85f, 1f, 0.85f);
+        renderer.sortingOrder = -20;
+        runtimeStarLayerPrefab.transform.localScale = new Vector3(0.08f, 0.08f, 1f);
+        return runtimeStarLayerPrefab;
+    }
+
+    private GameObject GetRuntimeNebulaLayerPrefab()
+    {
+        if (runtimeNebulaLayerPrefab != null)
+        {
+            return runtimeNebulaLayerPrefab;
+        }
+
+        runtimeNebulaLayerPrefab = new GameObject("RuntimeNebulaLayerPrefab");
+        runtimeNebulaLayerPrefab.SetActive(false);
+        runtimeNebulaLayerPrefab.hideFlags = HideFlags.DontSave;
+        SpriteRenderer renderer = runtimeNebulaLayerPrefab.AddComponent<SpriteRenderer>();
+        renderer.sprite = circleSprite;
+        renderer.color = new Color(0.1f, 0.24f, 0.35f, 0.16f);
+        renderer.sortingOrder = -30;
+        runtimeNebulaLayerPrefab.transform.localScale = new Vector3(5.5f, 3.8f, 1f);
+        return runtimeNebulaLayerPrefab;
+    }
+
+    private GameObject GetRuntimeEnemyPrefab()
+    {
+        if (runtimeEnemyPrefab != null)
+        {
+            return runtimeEnemyPrefab;
+        }
+
+        runtimeEnemyPrefab = new GameObject("RuntimeEnemyPrefab");
+        runtimeEnemyPrefab.SetActive(false);
+        runtimeEnemyPrefab.hideFlags = HideFlags.DontSave;
+        SpriteRenderer renderer = runtimeEnemyPrefab.AddComponent<SpriteRenderer>();
+        renderer.sprite = circleSprite;
+        renderer.color = new Color(0.75f, 0.2f, 0.24f, 1f);
+        renderer.sortingOrder = 5;
+        return runtimeEnemyPrefab;
+    }
+
+    private Vector3 GetOffscreenSpawnPosition(float margin)
+    {
+        Camera camera = mainCamera != null ? mainCamera : Camera.main;
+        if (camera == null)
+        {
+            return player != null ? player.Transform.position : Vector3.zero;
+        }
+
+        float depth = Mathf.Abs(camera.transform.position.z);
+        Vector3 min = camera.ViewportToWorldPoint(new Vector3(0f, 0f, depth));
+        Vector3 max = camera.ViewportToWorldPoint(new Vector3(1f, 1f, depth));
+        float extra = Mathf.Max(0f, margin);
+
+        int side = UnityEngine.Random.Range(0, 4);
+        switch (side)
+        {
+            case 0:
+                return new Vector3(UnityEngine.Random.Range(min.x, max.x), max.y + extra, 0f);
+            case 1:
+                return new Vector3(UnityEngine.Random.Range(min.x, max.x), min.y - extra, 0f);
+            case 2:
+                return new Vector3(min.x - extra, UnityEngine.Random.Range(min.y, max.y), 0f);
+            default:
+                return new Vector3(max.x + extra, UnityEngine.Random.Range(min.y, max.y), 0f);
+        }
+    }
+
+    private SpriteRenderer EnsureChildRenderer(
+        Transform parent,
+        string childName,
+        Sprite sprite,
+        Color color,
+        int sortingOrder,
+        Vector3 localScale,
+        Vector3 localPosition)
+    {
+        Transform child = parent.Find(childName);
+        if (child == null)
+        {
+            GameObject childObject = new GameObject(childName);
+            child = childObject.transform;
+            child.SetParent(parent, false);
+        }
+
+        child.localPosition = localPosition;
+        child.localScale = localScale;
+
+        SpriteRenderer renderer = child.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = child.gameObject.AddComponent<SpriteRenderer>();
+        }
+
+        renderer.sprite = sprite;
+        renderer.color = color;
+        renderer.sortingOrder = sortingOrder;
+        return renderer;
+    }
+
     private void UpdatePlayer(float deltaTime)
     {
         player.UpdateCapacitor(deltaTime);
@@ -2061,35 +2251,75 @@ public class SpaceCombatSceneController : MonoBehaviour
         activePerks.Clear();
     }
 
-    private void UpdateGate()
+    private void UpdateWaveState(float deltaTime)
     {
-        if (enemies.Count == 0 && !gateActive)
+        if (enemies.Count > 0)
         {
-            gateActive = true;
-            gatePosition = player.Transform.position + new Vector3(2.1f, 0.8f, 0f);
-            gateTransform.position = gatePosition;
-            gateTransform.gameObject.SetActive(true);
-            gateHintText.transform.parent.gameObject.SetActive(true);
-            gateHintText.text = Localize("warp_active");
-            LogMessage(Localize("log_warp_active"), "critical");
+            waitingForNextWave = false;
+            nextWaveTimer = 0f;
+            if (gateTransform != null)
+            {
+                gateTransform.gameObject.SetActive(false);
+            }
+            if (gateHintText != null)
+            {
+                gateHintText.transform.parent.gameObject.SetActive(false);
+            }
+
+            return;
         }
 
-        if (gateActive)
+        if (!waitingForNextWave)
         {
-            gateTransform.Rotate(0f, 0f, 45f * Time.deltaTime);
+            StartWaveCountdown(waveSettings != null ? waveSettings.timeBetweenWaves : 3f, true);
         }
+
+        nextWaveTimer = Mathf.Max(0f, nextWaveTimer - deltaTime);
+        if (gateHintText != null)
+        {
+            gateHintText.text = currentLanguage == LanguageOption.RU
+                ? "Следующая волна через " + nextWaveTimer.ToString("0.0") + "с"
+                : "Next wave in " + nextWaveTimer.ToString("0.0") + "s";
+        }
+
+        if (nextWaveTimer > 0f)
+        {
+            return;
+        }
+
+        waitingForNextWave = false;
+        if (firstWaveSpawned)
+        {
+            wave++;
+            player.Shield = player.MaxShield;
+            player.Armor = player.MaxArmor;
+            player.Hull = player.MaxHull;
+            player.Capacitor = player.MaxCapacitor;
+        }
+        if (gateHintText != null)
+        {
+            gateHintText.transform.parent.gameObject.SetActive(false);
+        }
+        if (firstWaveSpawned)
+        {
+            LogMessage(Localize("log_warp_sector") + wave, "critical");
+        }
+        SpawnWave();
     }
 
-    private void WarpToNextWave()
+    private void StartWaveCountdown(float delaySeconds, bool logActivation)
     {
-        wave++;
-        player.Shield = player.MaxShield;
-        player.Armor = player.MaxArmor;
-        player.Hull = player.MaxHull;
-        player.Capacitor = player.MaxCapacitor;
-        gateHintText.transform.parent.gameObject.SetActive(false);
-        LogMessage(Localize("log_warp_sector") + wave, "critical");
-        SpawnWave();
+        waitingForNextWave = true;
+        nextWaveTimer = Mathf.Max(0f, delaySeconds);
+        if (gateHintText != null)
+        {
+            gateHintText.transform.parent.gameObject.SetActive(true);
+        }
+
+        if (logActivation)
+        {
+            LogMessage(Localize("log_warp_active"), "warning");
+        }
     }
 
     private void UpdateEffects(float deltaTime)
@@ -2262,13 +2492,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < stars.Count; i++)
-        {
-            StarVisual star = stars[i];
-            Color color = star.Renderer.color;
-            color.a = star.BaseAlpha * Mathf.Lerp(0.72f, 1.3f, (Mathf.Sin(Time.time * star.TwinkleSpeed + star.TwinkleOffset) + 1f) * 0.5f);
-            star.Renderer.color = color;
-        }
     }
 
     private void UpdateHud()
@@ -2304,7 +2527,7 @@ public class SpaceCombatSceneController : MonoBehaviour
                     ? Localize("status_levelup")
                     : useVirtualJoystick ? Localize("status_play_mobile") : Localize("status_play_desktop");
 
-        if (!gateActive || !gameStarted)
+        if (!waitingForNextWave || !gameStarted)
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
         }

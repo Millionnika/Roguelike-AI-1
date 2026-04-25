@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,6 +14,7 @@ internal interface ICombatService
     CombatUpdateResult UpdateFrame(CombatUpdateContext context, float deltaTime);
     void ApplyDamage(SpaceFrontier.Player.PlayerStats stats, float amount);
     bool ApplyDamage(EnemyShip enemy, float amount);
+    void SetDefaultWeaponData(WeaponDataSO weaponData);
 }
 
 internal interface IInputService
@@ -22,7 +24,7 @@ internal interface IInputService
 
 internal interface IMovementService
 {
-    void UpdateMovement(SpaceFrontier.Player.PlayerShip player, MovementUpdateContext context, float deltaTime);
+    void UpdateMovement(SpaceFrontier.Player.PlayerShip player, MovementUpdateContext context, MovementSettingsSO settings, float deltaTime);
 }
 
 internal interface IPoolService
@@ -37,6 +39,13 @@ internal interface ILocalizationService
     string Localize(string key, bool ru);
     string GetShipRoleText(ShipDefinition ship, bool ru);
     string GetShipDescriptionText(ShipDefinition ship, bool ru);
+}
+
+internal interface IBackgroundParallaxService
+{
+    void Initialize(Transform parent, List<BackgroundLayerConfig> layers, IPoolService poolService);
+    void Update(Vector3 focusPosition);
+    void Dispose();
 }
 
 internal interface ISpaceCombatUiFactory

@@ -54,7 +54,9 @@ internal sealed class PoolService : IPoolService
             return instance;
         }
 
-        return UnityEngine.Object.Instantiate(prefab, parent, false);
+        GameObject created = UnityEngine.Object.Instantiate(prefab, parent, false);
+        created.SetActive(true);
+        return created;
     }
 
     public void Return(GameObject prefab, GameObject instance)
