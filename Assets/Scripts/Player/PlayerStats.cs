@@ -2,50 +2,53 @@ using UnityEngine;
 
 namespace SpaceFrontier.Player
 {
-    public class PlayerStats : MonoBehaviour
+    public sealed class PlayerStats
     {
-        [Header("Health & Protection")]
-        public float maxShield = 400f;
-        public float shield = 400f;
-        public float maxArmor = 300f;
-        public float armor = 300f;
-        public float maxHull = 200f;
-        public float hull = 200f;
+        public float MaxShield = 400f;
+        public float Shield = 400f;
+        public float MaxArmor = 300f;
+        public float Armor = 300f;
+        public float MaxHull = 200f;
+        public float Hull = 200f;
 
-        [Header("Energy System")]
-        public float maxCapacitor = 1000f;
-        public float capacitor = 1000f;
-        public float capacitorRechargeTime = 120f;
+        public float MaxCapacitor = 1000f;
+        public float Capacitor = 1000f;
+        public float CapacitorRechargeTime = 120f;
 
-        [Header("Progression")]
-        public int level = 1;
-        public int experience;
-        public int experienceToNext = 100;
+        public int Level = 1;
+        public int Experience;
+        public int ExperienceToNext = 100;
 
-        [Header("Multipliers")]
-        public float damageMultiplier = 1f;
-        public float speedMultiplier = 1f;
-        public float repairMultiplier = 1f;
+        public float DamageMultiplier = 1f;
+        public float SpeedMultiplier = 1f;
+        public float RepairMultiplier = 1f;
 
-        public float CapacitorPercent => maxCapacitor <= 0f ? 0f : capacitor / maxCapacitor;
-        public float ShieldPercent => maxShield <= 0f ? 0f : shield / maxShield;
-        public float ArmorPercent => maxArmor <= 0f ? 0f : armor / maxArmor;
-        public float HullPercent => maxHull <= 0f ? 0f : hull / maxHull;
+        public float CapacitorPercent => MaxCapacitor <= 0f ? 0f : Capacitor / MaxCapacitor;
+        public float ShieldPercent => MaxShield <= 0f ? 0f : Shield / MaxShield;
+        public float ArmorPercent => MaxArmor <= 0f ? 0f : Armor / MaxArmor;
+        public float HullPercent => MaxHull <= 0f ? 0f : Hull / MaxHull;
 
         public void UpdateCapacitor(float deltaTime)
         {
-            if (capacitor >= maxCapacitor) return;
+            if (Capacitor >= MaxCapacitor)
+            {
+                return;
+            }
 
-            float percent = capacitor / maxCapacitor;
+            float percent = Capacitor / MaxCapacitor;
             float rechargeCurve = Mathf.Max(0.25f, 3.2f * percent * (1f - percent));
-            float maxRechargePerSecond = (maxCapacitor / capacitorRechargeTime) * 2.55f;
-            capacitor = Mathf.Min(maxCapacitor, capacitor + maxRechargePerSecond * rechargeCurve * deltaTime);
+            float maxRechargePerSecond = (MaxCapacitor / CapacitorRechargeTime) * 2.55f;
+            Capacitor = Mathf.Min(MaxCapacitor, Capacitor + maxRechargePerSecond * rechargeCurve * deltaTime);
         }
 
         public bool ConsumeCapacitor(float amount)
         {
-            if (capacitor < amount) return false;
-            capacitor -= amount;
+            if (Capacitor < amount)
+            {
+                return false;
+            }
+
+            Capacitor -= amount;
             return true;
         }
 
@@ -53,45 +56,44 @@ namespace SpaceFrontier.Player
         {
             float remaining = amount;
 
-            if (shield > 0f)
+            if (Shield > 0f)
             {
-                float absorbed = Mathf.Min(shield, remaining);
-                shield -= absorbed;
+                float absorbed = Mathf.Min(Shield, remaining);
+                Shield -= absorbed;
                 remaining -= absorbed;
             }
 
-            if (remaining > 0f && armor > 0f)
+            if (remaining > 0f && Armor > 0f)
             {
-                float absorbed = Mathf.Min(armor, remaining);
-                armor -= absorbed;
+                float absorbed = Mathf.Min(Armor, remaining);
+                Armor -= absorbed;
                 remaining -= absorbed;
             }
 
             if (remaining > 0f)
             {
-                hull = Mathf.Max(0f, hull - remaining);
+                Hull = Mathf.Max(0f, Hull - remaining);
             }
         }
 
         public void HealShield(float amount)
         {
-            shield = Mathf.Min(maxShield, shield + amount);
+            Shield = Mathf.Min(MaxShield, Shield + amount);
         }
 
         public void HealArmor(float amount)
         {
-            armor = Mathf.Min(maxArmor, armor + amount);
+            Armor = Mathf.Min(MaxArmor, Armor + amount);
         }
 
-        public bool IsAlive() => hull > 0f;
+        public bool IsAlive()
+        {
+            return Hull > 0f;
+        }
 
         public void AddExperience(int amount)
         {
-            experience += amount;
-            if (experience >= experienceToNext)
-            {
-                // Level up logic should be handled by GameManager/EventManager
-            }
+            Experience += amount;
         }
     }
 }

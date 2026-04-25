@@ -9,9 +9,9 @@ public enum DevicePlatformFamily
     Unknown
 }
 
-public static class DevicePlatformService
+internal sealed class RuntimePlatformService : IPlatformService
 {
-    public static DevicePlatformFamily CurrentFamily
+    public DevicePlatformFamily CurrentFamily
     {
         get
         {
@@ -48,13 +48,30 @@ public static class DevicePlatformService
         }
     }
 
-    public static bool IsDesktopLike()
+    public bool IsDesktopLike()
     {
         return CurrentFamily == DevicePlatformFamily.Desktop;
     }
 
-    public static bool ShouldUseVirtualJoystick()
+    public bool ShouldUseVirtualJoystick()
     {
         return !IsDesktopLike();
+    }
+}
+
+public static class DevicePlatformService
+{
+    private static readonly IPlatformService Runtime = new RuntimePlatformService();
+
+    public static DevicePlatformFamily CurrentFamily => Runtime.CurrentFamily;
+
+    public static bool IsDesktopLike()
+    {
+        return Runtime.IsDesktopLike();
+    }
+
+    public static bool ShouldUseVirtualJoystick()
+    {
+        return Runtime.ShouldUseVirtualJoystick();
     }
 }

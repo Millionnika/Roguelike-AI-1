@@ -1,20 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using SpaceFrontier.Player;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class SpaceCombatSceneController : MonoBehaviour
 {
-    private enum ModuleType
-    {
-        Weapon,
-        ShieldRep,
-        ArmorRep,
-        Afterburner
-    }
-
     private enum StartMenuPage
     {
         Main,
@@ -26,290 +19,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         RU,
         ENG
-    }
-
-    private sealed class PlayerShip
-    {
-        public Transform Transform;
-        public SpriteRenderer BodyRenderer;
-        public SpriteRenderer AuraRenderer;
-        public SpriteRenderer ThrusterRenderer;
-        public float Speed = 6.2f;
-        public float Acceleration = 10f;
-        public float Drag = 1.15f;
-        public float RotationResponsiveness = 8f;
-        public float DamageMultiplier = 1f;
-        public float SpeedMultiplier = 1f;
-        public float RepairMultiplier = 1f;
-        public Vector2 Velocity;
-        public bool MoveCommandActive;
-        public Vector3 MoveCommandTarget;
-        public float HitFlashTimer;
-        public float ThrusterPulse;
-        public Color BaseBodyColor = Color.white;
-        public Color BaseAuraColor = Color.white;
-
-        public float MaxShield = 400f;
-        public float Shield = 400f;
-        public float MaxArmor = 300f;
-        public float Armor = 300f;
-        public float MaxHull = 200f;
-        public float Hull = 200f;
-
-        public float MaxCapacitor = 1000f;
-        public float Capacitor = 1000f;
-        public float CapacitorRechargeTime = 120f;
-
-        public int Level = 1;
-        public int Experience;
-        public int ExperienceToNext = 100;
-
-        public float CapacitorPercent => MaxCapacitor <= 0f ? 0f : Capacitor / MaxCapacitor;
-        public float ShieldPercent => MaxShield <= 0f ? 0f : Shield / MaxShield;
-        public float ArmorPercent => MaxArmor <= 0f ? 0f : Armor / MaxArmor;
-        public float HullPercent => MaxHull <= 0f ? 0f : Hull / MaxHull;
-
-        public void UpdateCapacitor(float deltaTime)
-        {
-            if (Capacitor >= MaxCapacitor)
-            {
-                return;
-            }
-
-            float percent = Capacitor / MaxCapacitor;
-            float rechargeCurve = Mathf.Max(0.25f, 3.2f * percent * (1f - percent));
-            float maxRechargePerSecond = (MaxCapacitor / CapacitorRechargeTime) * 2.55f;
-            Capacitor = Mathf.Min(MaxCapacitor, Capacitor + maxRechargePerSecond * rechargeCurve * deltaTime);
-        }
-
-        public bool ConsumeCapacitor(float amount)
-        {
-            if (Capacitor < amount)
-            {
-                return false;
-            }
-
-            Capacitor -= amount;
-            return true;
-        }
-
-        public void ApplyDamage(float amount)
-        {
-            float remaining = amount;
-
-            if (Shield > 0f)
-            {
-                float absorbed = Mathf.Min(Shield, remaining);
-                Shield -= absorbed;
-                remaining -= absorbed;
-            }
-
-            if (remaining > 0f && Armor > 0f)
-            {
-                float absorbed = Mathf.Min(Armor, remaining);
-                Armor -= absorbed;
-                remaining -= absorbed;
-            }
-
-            if (remaining > 0f)
-            {
-                Hull = Mathf.Max(0f, Hull - remaining);
-            }
-        }
-
-        public void HealShield(float amount)
-        {
-            Shield = Mathf.Min(MaxShield, Shield + amount);
-        }
-
-        public void HealArmor(float amount)
-        {
-            Armor = Mathf.Min(MaxArmor, Armor + amount);
-        }
-
-        public bool IsAlive()
-        {
-            return Hull > 0f;
-        }
-
-        public void AddExperience(int amount)
-        {
-            Experience += amount;
-        }
-    }
-
-    private sealed class EnemyShip
-    {
-        public string Id;
-        public string Type;
-        public Transform Transform;
-        public SpriteRenderer BodyRenderer;
-        public SpriteRenderer ShieldRenderer;
-        public SpriteRenderer TargetRenderer;
-        public SpriteRenderer ThrusterRenderer;
-        public float OrbitDistance;
-        public float OrbitAngle;
-        public float OrbitSpeed;
-        public float AttackCooldown;
-        public float AttackTimer;
-        public float Damage;
-        public float DriftSpeed;
-        public float HitFlashTimer;
-        public float AttackFlashTimer;
-        public Color BaseBodyColor = Color.white;
-        public Color BaseShieldColor = Color.white;
-
-        public float MaxShield;
-        public float Shield;
-        public float MaxArmor;
-        public float Armor;
-        public float MaxHull;
-        public float Hull;
-
-        public float ShieldPercent => MaxShield <= 0f ? 0f : Shield / MaxShield;
-        public float ArmorPercent => MaxArmor <= 0f ? 0f : Armor / MaxArmor;
-        public float HullPercent => MaxHull <= 0f ? 0f : Hull / MaxHull;
-
-        public bool IsAlive()
-        {
-            return Hull > 0f;
-        }
-
-        public bool TakeDamage(float amount)
-        {
-            float remaining = amount;
-
-            if (Shield > 0f)
-            {
-                float absorbed = Mathf.Min(Shield, remaining);
-                Shield -= absorbed;
-                remaining -= absorbed;
-            }
-
-            if (remaining > 0f && Armor > 0f)
-            {
-                float absorbed = Mathf.Min(Armor, remaining);
-                Armor -= absorbed;
-                remaining -= absorbed;
-            }
-
-            if (remaining > 0f)
-            {
-                Hull = Mathf.Max(0f, Hull - remaining);
-            }
-
-            return Hull <= 0f;
-        }
-    }
-
-    private sealed class Projectile
-    {
-        public Transform Transform;
-        public SpriteRenderer Renderer;
-        public EnemyShip Target;
-        public float Damage;
-        public float Speed = 18f;
-        public float Lifetime;
-    }
-
-    private sealed class ModuleState
-    {
-        public string Name;
-        public string KeyLabel;
-        public ModuleType Type;
-        public bool Active;
-        public float WeaponTimer;
-        public float CapPerSecond;
-        public float CapPerShot;
-        public float RateOfFire;
-        public float Damage;
-        public float OptimalRange;
-        public float FalloffRange;
-        public float RepairPerSecond;
-        public float SpeedBonus;
-
-        public Image SlotImage;
-        public Text SlotTitle;
-        public Text SlotKey;
-    }
-
-    private sealed class PerkChoice
-    {
-        public string Label;
-        public Action Apply;
-    }
-
-    private sealed class EnemyRow
-    {
-        public Text RootText;
-        public Image ShieldFill;
-        public Image ArmorFill;
-        public Image HullFill;
-        public RectTransform RootTransform;
-        public EnemyShip Enemy;
-    }
-
-    private sealed class ShipDefinition
-    {
-        public string Name;
-        public string Role;
-        public string Description;
-        public float Speed;
-        public float Acceleration;
-        public float Drag;
-        public float RotationResponsiveness;
-        public float MaxShield;
-        public float MaxArmor;
-        public float MaxHull;
-        public float MaxCapacitor;
-        public float CapacitorRechargeTime;
-        public float DamageMultiplier;
-        public float RepairMultiplier;
-        public Color AccentColor;
-        public Color AuraColor;
-    }
-
-    private sealed class ShipCardView
-    {
-        public RectTransform Rect;
-        public Image Background;
-        public Text Title;
-        public Text Stats;
-    }
-
-    private sealed class UiButtonView
-    {
-        public string Id;
-        public RectTransform Rect;
-        public Image Background;
-        public Text Label;
-    }
-
-    private sealed class AttackBeamEffect
-    {
-        public Transform Transform;
-        public SpriteRenderer Renderer;
-        public float Lifetime;
-        public float Duration;
-    }
-
-    private sealed class EngineParticle
-    {
-        public Transform Transform;
-        public SpriteRenderer Renderer;
-        public Vector3 Velocity;
-        public float Lifetime;
-        public float Duration;
-        public Color BaseColor;
-    }
-
-    private sealed class StarVisual
-    {
-        public Transform Transform;
-        public SpriteRenderer Renderer;
-        public float BaseAlpha;
-        public float TwinkleSpeed;
-        public float TwinkleOffset;
     }
 
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
@@ -327,6 +36,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<StarVisual> stars = new List<StarVisual>();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
+
+    private IPlatformService platformService;
+    private ILocalizationService localizationService;
+    private ISpaceCombatUiFactory uiFactory;
 
     private Camera mainCamera;
     private PlayerShip player;
@@ -420,10 +133,25 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool joystickDragging;
     private Vector2 joystickVector;
 
+    internal void ConfigureServices(IPlatformService newPlatformService, ILocalizationService newLocalizationService, ISpaceCombatUiFactory newUiFactory)
+    {
+        platformService = newPlatformService;
+        localizationService = newLocalizationService;
+        uiFactory = newUiFactory;
+    }
+
+    private void EnsureServices()
+    {
+        platformService ??= new RuntimePlatformService();
+        localizationService ??= new SpaceCombatLocalizationService();
+        uiFactory ??= new SpaceCombatUiFactory();
+    }
+
     private void Awake()
     {
+        EnsureServices();
         mainCamera = Camera.main;
-        useVirtualJoystick = DevicePlatformService.ShouldUseVirtualJoystick();
+        useVirtualJoystick = platformService.ShouldUseVirtualJoystick();
         if (mainCamera == null)
         {
             GameObject cameraObject = new GameObject("Main Camera");
@@ -618,78 +346,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private string Localize(string key)
     {
-        bool ru = currentLanguage == LanguageOption.RU;
-        switch (key)
-        {
-            case "overview": return ru ? "ОБЗОР" : "OVERVIEW";
-            case "enemy_header": return ru ? "ID          ТИП        ДИСТ.      СТАТУС" : "ID          TYPE        DIST       STATUS";
-            case "combat_log": return ru ? "ЖУРНАЛ БОЯ" : "COMBAT LOG";
-            case "ship_status": return ru ? "СОСТОЯНИЕ КОРАБЛЯ" : "SHIP STATUS";
-            case "target_none": return ru ? "Цель: нет" : "Target: none";
-            case "target_none_name": return ru ? "нет" : "none";
-            case "ship_none": return ru ? "Корабль: нет" : "Ship: none";
-            case "capacitor": return ru ? "Энергия: " : "Capacitor: ";
-            case "ship_label": return ru ? "Корабль: " : "Ship: ";
-            case "target_label": return ru ? "Цель: " : "Target: ";
-            case "level_label": return ru ? "Уровень: " : "Level: ";
-            case "xp_label": return ru ? "XP: " : "XP: ";
-            case "distance": return ru ? "Дистанция: " : "Distance: ";
-            case "warp_inactive": return ru ? "Варп-гейт неактивен" : "Warp gate inactive";
-            case "warp_active": return ru ? "Варп-гейт активен. Подлетите и нажмите [G]." : "Warp gate active. Move to the ring and press [G].";
-            case "status_menu": return ru ? "Меню: 1-3 выбор корабля  Enter запуск" : "Menu: 1-3 choose ship  Enter start";
-            case "status_gameover": return ru ? "ИГРА ОКОНЧЕНА" : "GAME OVER";
-            case "status_levelup": return ru ? "НОВЫЙ УРОВЕНЬ: выберите 1-3" : "LEVEL UP: choose 1-3";
-            case "status_play_desktop": return ru ? "WASD или ЛКМ движение  ЛКМ по списку выбирает цель  1-4 модули  G варп" : "WASD or LMB move  LMB on list selects target  1-4 modules  G warp";
-            case "status_play_mobile": return ru ? "Джойстик слева  тап по космосу автополёт  тап по списку выбирает цель" : "Left joystick  tap space to autopilot  tap list to target";
-            case "main_title": return ru ? "КОСМИЧЕСКИЙ РУБЕЖ" : "SPACE FRONTIER";
-            case "main_subtitle": return ru ? "Тактический бой среди звёзд" : "Tactical combat among the stars";
-            case "menu_new_game": return ru ? "НОВАЯ ИГРА" : "NEW GAME";
-            case "menu_settings": return ru ? "НАСТРОЙКИ" : "SETTINGS";
-            case "menu_exit": return ru ? "ВЫХОД" : "EXIT";
-            case "hangar_title": return ru ? "АНГАР ФЛОТА" : "STAR HANGAR";
-            case "hangar_subtitle": return ru ? "Выберите корабль и начните вылет" : "Choose your ship and launch into the sector";
-            case "hangar_hint_desktop": return ru ? "1-3 выбор корпуса, Enter или START для вылета." : "Press 1-3 to select a hull, Enter or START to launch.";
-            case "hangar_hint_mobile": return ru ? "Тап по карточке корабля и кнопке START для вылета." : "Tap a ship card and START to launch.";
-            case "start_operation": return ru ? "НАЧАТЬ" : "START";
-            case "back": return ru ? "НАЗАД" : "BACK";
-            case "settings_title": return ru ? "НАСТРОЙКИ" : "SETTINGS";
-            case "settings_subtitle": return ru ? "Язык интерфейса и лимит кадров" : "Interface language and frame rate limit";
-            case "settings_language": return ru ? "Язык" : "Language";
-            case "settings_fps": return ru ? "FPS" : "FPS";
-            case "lang_ru": return "RU";
-            case "lang_eng": return "ENG";
-            case "joystick_hint": return ru ? "Джойстик" : "Joystick";
-            case "perk_title": return ru ? "НОВЫЙ УРОВЕНЬ" : "LEVEL UP";
-            case "perk_pick": return ru ? "Нажмите 1, 2 или 3 для выбора." : "Press 1, 2 or 3 to choose.";
-            case "log_docked": return ru ? "Корабль в ангаре. Системы в режиме ожидания." : "Docked and awaiting launch.";
-            case "log_choose_hull": return ru ? "Выберите корпус и начните операцию." : "Choose a hull and begin operation.";
-            case "log_launch": return ru ? "Старт подтверждён: " : "Launch confirmed: ";
-            case "log_sector_scan": return ru ? "Сканирование сектора завершено. Обнаружены цели." : "Sector scan complete. Hostiles incoming.";
-            case "log_hostiles": return ru ? "Обнаружено противников: " : "Hostiles detected: ";
-            case "log_target_locked": return ru ? "Цель захвачена: " : "Target locked: ";
-            case "log_move_gate": return ru ? "Подлетите ближе к варп-гейту для прыжка." : "Move closer to the warp gate to jump.";
-            case "log_cap_dry": return ru ? "Энергия исчерпана. " : "Capacitor dry. ";
-            case "log_offline": return ru ? " отключён." : " offline.";
-            case "log_cap_insufficient": return ru ? "Недостаточно энергии для " : "Insufficient capacitor for ";
-            case "log_shot_missed": return ru ? "Промах по " : "Shot missed ";
-            case "log_hit": return ru ? "Попадание по " : "Hit ";
-            case "log_for": return ru ? " на " : " for ";
-            case "log_destroyed": return ru ? " уничтожен" : " destroyed";
-            case "log_levelup": return ru ? "Достигнут новый уровень. Выберите улучшение." : "Level up reached. Choose an upgrade.";
-            case "log_perk_selected": return ru ? "Выбрано улучшение: " : "Perk selected: ";
-            case "log_warp_active": return ru ? "Варп-гейт активирован" : "Warp gate activated";
-            case "log_warp_sector": return ru ? "Прыжок выполнен. Вход в сектор " : "Warp jump complete. Entering sector ";
-            case "log_enemy_hits": return ru ? " наносит урон " : " hits you for ";
-            case "log_hull_breach": return ru ? "Корабль уничтожен. Корпус разрушен." : "Hull breach detected. Ship destroyed.";
-            case "log_module_on": return ru ? " Модуль активирован." : " engaged.";
-            case "log_module_off": return ru ? " Модуль отключен." : " disengaged.";
-            case "perk_damage": return ru ? "Урон +15%" : "Damage +15%";
-            case "perk_capacitor": return ru ? "Энергия +20%" : "Capacitor +20%";
-            case "perk_shield": return ru ? "Щит +25%" : "Shield +25%";
-            case "perk_speed": return ru ? "Скорость +20%" : "Speed +20%";
-            case "perk_repair": return ru ? "Ремонт +30%" : "Repair +30%";
-            default: return key;
-        }
+        return localizationService.Localize(key, currentLanguage == LanguageOption.RU);
     }
 
     private void ApplyPerformanceSettings()
@@ -727,38 +384,12 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private string GetShipRoleText(ShipDefinition ship)
     {
-        if (currentLanguage == LanguageOption.ENG)
-        {
-            return ship.Role;
-        }
-
-        switch (ship.Name)
-        {
-            case "Aegis": return "Сбалансированный фрегат";
-            case "Bulwark": return "Тяжёлый крейсер";
-            case "Raptor": return "Ударный перехватчик";
-            default: return ship.Role;
-        }
+        return localizationService.GetShipRoleText(ship, currentLanguage == LanguageOption.RU);
     }
 
     private string GetShipDescriptionText(ShipDefinition ship)
     {
-        if (currentLanguage == LanguageOption.ENG)
-        {
-            return ship.Description;
-        }
-
-        switch (ship.Name)
-        {
-            case "Aegis":
-                return "Универсальный корабль с надёжной энергосистемой и хорошей живучестью. Лучший выбор для спокойного старта.";
-            case "Bulwark":
-                return "Медленный, но очень крепкий корабль с мощными щитами и бронёй. Дольше всех держится в затяжном бою.";
-            case "Raptor":
-                return "Быстрый охотник с повышенным уроном и бодрым восстановлением энергии. Требует движения и точного приоритета целей.";
-            default:
-                return ship.Description;
-        }
+        return localizationService.GetShipDescriptionText(ship, currentLanguage == LanguageOption.RU);
     }
 
     private void CreateSprites()
@@ -1118,14 +749,14 @@ public class SpaceCombatSceneController : MonoBehaviour
             startMenuDescriptionText.text = GetShipDescriptionText(ship);
             startMenuStatsText.text =
                 (currentLanguage == LanguageOption.RU
-                    ? "Скорость: " + ship.Speed.ToString("0.0") +
-                      "    Щит: " + Mathf.RoundToInt(ship.MaxShield) +
-                      "    Броня: " + Mathf.RoundToInt(ship.MaxArmor) +
-                      "    Корпус: " + Mathf.RoundToInt(ship.MaxHull) +
-                      "\nЭнергия: " + Mathf.RoundToInt(ship.MaxCapacitor) +
-                      "    Перезаряд: " + ship.CapacitorRechargeTime.ToString("0") + "с" +
-                      "    Урон: x" + ship.DamageMultiplier.ToString("0.00") +
-                      "    Ремонт: x" + ship.RepairMultiplier.ToString("0.00")
+                    ? "РЎРєРѕСЂРѕСЃС‚СЊ: " + ship.Speed.ToString("0.0") +
+                      "    Р©РёС‚: " + Mathf.RoundToInt(ship.MaxShield) +
+                      "    Р‘СЂРѕРЅСЏ: " + Mathf.RoundToInt(ship.MaxArmor) +
+                      "    РљРѕСЂРїСѓСЃ: " + Mathf.RoundToInt(ship.MaxHull) +
+                      "\nР­РЅРµСЂРіРёСЏ: " + Mathf.RoundToInt(ship.MaxCapacitor) +
+                      "    РџРµСЂРµР·Р°СЂСЏРґ: " + ship.CapacitorRechargeTime.ToString("0") + "СЃ" +
+                      "    РЈСЂРѕРЅ: x" + ship.DamageMultiplier.ToString("0.00") +
+                      "    Р РµРјРѕРЅС‚: x" + ship.RepairMultiplier.ToString("0.00")
                     : "Speed: " + ship.Speed.ToString("0.0") +
                       "    Shield: " + Mathf.RoundToInt(ship.MaxShield) +
                       "    Armor: " + Mathf.RoundToInt(ship.MaxArmor) +
@@ -1154,11 +785,11 @@ public class SpaceCombatSceneController : MonoBehaviour
             shipCardViews[i].Title.color = isSelected ? cardShip.AccentColor : Color.white;
             shipCardViews[i].Stats.text =
                 (currentLanguage == LanguageOption.RU
-                    ? "Щит " + Mathf.RoundToInt(cardShip.MaxShield) +
-                      "  Броня " + Mathf.RoundToInt(cardShip.MaxArmor) +
-                      "\nЭнергия " + Mathf.RoundToInt(cardShip.MaxCapacitor) +
-                      "  Скорость " + cardShip.Speed.ToString("0.0") +
-                      "\nУрон x" + cardShip.DamageMultiplier.ToString("0.00")
+                    ? "Р©РёС‚ " + Mathf.RoundToInt(cardShip.MaxShield) +
+                      "  Р‘СЂРѕРЅСЏ " + Mathf.RoundToInt(cardShip.MaxArmor) +
+                      "\nР­РЅРµСЂРіРёСЏ " + Mathf.RoundToInt(cardShip.MaxCapacitor) +
+                      "  РЎРєРѕСЂРѕСЃС‚СЊ " + cardShip.Speed.ToString("0.0") +
+                      "\nРЈСЂРѕРЅ x" + cardShip.DamageMultiplier.ToString("0.00")
                     : "Shield " + Mathf.RoundToInt(cardShip.MaxShield) +
                       "  Armor " + Mathf.RoundToInt(cardShip.MaxArmor) +
                       "\nCap " + Mathf.RoundToInt(cardShip.MaxCapacitor) +
@@ -2898,95 +2529,42 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private Image CreateImage(string objectName, Transform parent, Color color)
     {
-        GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(parent, false);
-        Image image = go.GetComponent<Image>();
-        image.sprite = squareSprite;
-        image.type = Image.Type.Simple;
-        image.color = color;
-        return image;
+        return uiFactory.CreateImage(objectName, parent, squareSprite, color);
     }
 
     private Text CreateText(string objectName, Transform parent, string content, int fontSize, FontStyle fontStyle, Color color)
     {
-        GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(parent, false);
-        Text text = go.GetComponent<Text>();
-        text.font = uiFont;
-        text.text = content;
-        text.fontSize = fontSize;
-        text.fontStyle = fontStyle;
-        text.color = color;
-        text.alignment = TextAnchor.MiddleLeft;
-        return text;
+        return uiFactory.CreateText(objectName, parent, uiFont, content, fontSize, fontStyle, color);
     }
 
     private void AddOutline(GameObject target, Color color)
     {
-        Outline outline = target.AddComponent<Outline>();
-        outline.effectColor = color;
-        outline.effectDistance = new Vector2(1f, -1f);
+        uiFactory.AddOutline(target, color);
     }
 
     private Image CreateBar(Transform parent, Vector2 anchoredPosition, Color fillColor)
     {
-        Image background = CreateImage("BarBackground", parent, new Color(0.1f, 0.16f, 0.2f, 1f));
-        RectTransform backgroundRect = background.rectTransform;
-        backgroundRect.anchorMin = new Vector2(0f, 1f);
-        backgroundRect.anchorMax = new Vector2(0f, 1f);
-        backgroundRect.pivot = new Vector2(0f, 1f);
-        backgroundRect.sizeDelta = new Vector2(252f, 10f);
-        backgroundRect.anchoredPosition = anchoredPosition;
-
-        Image fill = CreateImage("Fill", background.transform, fillColor);
-        RectTransform fillRect = fill.rectTransform;
-        fillRect.anchorMin = new Vector2(0f, 0f);
-        fillRect.anchorMax = new Vector2(0f, 1f);
-        fillRect.pivot = new Vector2(0f, 0.5f);
-        fillRect.sizeDelta = new Vector2(252f, 0f);
-        fillRect.anchoredPosition = Vector2.zero;
-        return fill;
+        return uiFactory.CreateBar(parent, squareSprite, anchoredPosition, fillColor);
     }
 
     private Image CreateLabeledBar(Transform parent, string label, Vector2 anchoredPosition, Color fillColor)
     {
-        Text text = CreateText(label + "Label", parent, label, 13, FontStyle.Bold, new Color(0.88f, 0.94f, 1f));
-        SetAnchoredRect(text.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), anchoredPosition, anchoredPosition + new Vector2(52f, -16f));
-
-        Image background = CreateImage(label + "Bg", parent, new Color(0.12f, 0.17f, 0.2f, 1f));
-        RectTransform backgroundRect = background.rectTransform;
-        backgroundRect.anchorMin = new Vector2(0f, 1f);
-        backgroundRect.anchorMax = new Vector2(0f, 1f);
-        backgroundRect.pivot = new Vector2(0f, 1f);
-        backgroundRect.sizeDelta = new Vector2(180f, 12f);
-        backgroundRect.anchoredPosition = anchoredPosition + new Vector2(64f, 0f);
-
-        Image fill = CreateImage(label + "Fill", background.transform, fillColor);
-        RectTransform fillRect = fill.rectTransform;
-        fillRect.anchorMin = new Vector2(0f, 0f);
-        fillRect.anchorMax = new Vector2(0f, 1f);
-        fillRect.pivot = new Vector2(0f, 0.5f);
-        fillRect.sizeDelta = new Vector2(180f, 0f);
-        fillRect.anchoredPosition = Vector2.zero;
-        return fill;
+        return uiFactory.CreateLabeledBar(parent, squareSprite, uiFont, label, anchoredPosition, fillColor);
     }
 
     private void SetAnchoredRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
     {
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        bool isTopAnchored = Mathf.Approximately(anchorMin.y, anchorMax.y) && Mathf.Approximately(anchorMax.y, 1f);
-        rect.offsetMin = new Vector2(offsetMin.x, isTopAnchored ? offsetMax.y : offsetMin.y);
-        rect.offsetMax = new Vector2(offsetMax.x, isTopAnchored ? offsetMin.y : offsetMax.y);
+        uiFactory.SetAnchoredRect(rect, anchorMin, anchorMax, offsetMin, offsetMax);
     }
 
     private void SetFillWidth(RectTransform rect, float percent, float maxWidth)
     {
-        rect.sizeDelta = new Vector2(Mathf.Clamp01(percent) * maxWidth, rect.sizeDelta.y);
+        uiFactory.SetFillWidth(rect, percent, maxWidth);
     }
 
     private void SetFillHeight(RectTransform rect, float percent, float maxHeight)
     {
-        rect.sizeDelta = new Vector2(rect.sizeDelta.x, Mathf.Clamp01(percent) * maxHeight);
+        uiFactory.SetFillHeight(rect, percent, maxHeight);
     }
 }
+
