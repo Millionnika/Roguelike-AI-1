@@ -15,6 +15,16 @@ internal interface ICombatService
     bool ApplyDamage(EnemyShip enemy, float amount);
 }
 
+internal interface IInputService
+{
+    PointerInputState ReadPointerState();
+}
+
+internal interface IMovementService
+{
+    void UpdateMovement(SpaceFrontier.Player.PlayerShip player, MovementUpdateContext context, float deltaTime);
+}
+
 internal interface IPoolService
 {
     GameObject Get(GameObject prefab, Transform parent);

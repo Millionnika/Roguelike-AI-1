@@ -49,6 +49,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
 
     private IPlatformService platformService;
+    private IInputService inputService;
+    private IMovementService movementService;
     private ICombatService combatService;
     private IPoolService poolService;
     private ILocalizationService localizationService;
@@ -145,10 +147,20 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool useVirtualJoystick;
     private bool joystickDragging;
     private Vector2 joystickVector;
+    private readonly MovementSettings movementSettings = new MovementSettings { MoveSpeed = 6.2f, RotationSpeed = 8f, StoppingDistance = 0.25f };
 
-    internal void ConfigureServices(IPlatformService newPlatformService, ICombatService newCombatService, IPoolService newPoolService, ILocalizationService newLocalizationService, ISpaceCombatUiFactory newUiFactory)
+    internal void ConfigureServices(
+        IPlatformService newPlatformService,
+        IInputService newInputService,
+        IMovementService newMovementService,
+        ICombatService newCombatService,
+        IPoolService newPoolService,
+        ILocalizationService newLocalizationService,
+        ISpaceCombatUiFactory newUiFactory)
     {
         platformService = newPlatformService;
+        inputService = newInputService;
+        movementService = newMovementService;
         combatService = newCombatService;
         poolService = newPoolService;
         localizationService = newLocalizationService;
@@ -158,6 +170,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void EnsureServices()
     {
         platformService ??= new RuntimePlatformService();
+        inputService ??= new PlayerInputService();
+        movementService ??= new PlayerMovementService();
         combatService ??= new CombatService();
         poolService ??= new PoolService();
         localizationService ??= new SpaceCombatLocalizationService();
@@ -1712,11 +1726,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             {
                 return;
             }
-
-            if (!IsGameplayHudBlocked(pointerPosition))
-            {
-                IssueMoveCommand(pointerPosition);
-            }
         }
 
         if (keyboard != null)
@@ -1740,46 +1749,22 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
         }
 
-        Vector2 thrust = moveInput;
-        if (thrust.sqrMagnitude <= 0.01f && player.MoveCommandActive)
-        {
-            Vector2 toTarget = (Vector2)(player.MoveCommandTarget - player.Transform.position);
-            float distance = toTarget.magnitude;
-            float brakingDistance = Mathf.Max(0.35f, player.Velocity.sqrMagnitude / Mathf.Max(0.1f, player.Acceleration * 2f));
-            if (distance <= 0.25f && player.Velocity.magnitude <= 0.2f)
-            {
-                player.MoveCommandActive = false;
-                player.Velocity = Vector2.Lerp(player.Velocity, Vector2.zero, 0.6f);
-            }
-            else
-            {
-                float desiredMagnitude = distance <= brakingDistance
-                    ? Mathf.Clamp01(distance / brakingDistance)
-                    : 1f;
-                thrust = toTarget.normalized * desiredMagnitude;
-            }
-        }
+        PointerInputState pointerState = inputService.ReadPointerState();
+        bool pointerBlocked = pointerState.HasPointer && IsGameplayHudBlocked(pointerState.ScreenPosition);
+        Vector3 pointerWorldPosition = pointerState.HasPointer
+            ? ScreenToWorldPosition(pointerState.ScreenPosition)
+            : player.Transform.position;
 
-        if (thrust.sqrMagnitude > 1f)
-        {
-            thrust.Normalize();
-        }
+        movementSettings.MoveSpeed = player.Speed;
+        movementSettings.RotationSpeed = player.RotationResponsiveness;
 
-        player.Velocity += thrust * (player.Acceleration * player.SpeedMultiplier) * deltaTime;
-        float maxSpeed = player.Speed * player.SpeedMultiplier;
-        player.Velocity = Vector2.ClampMagnitude(player.Velocity, maxSpeed);
-        float damping = Mathf.Clamp01(player.Drag * deltaTime);
-        player.Velocity = Vector2.Lerp(player.Velocity, Vector2.zero, damping);
-        player.Transform.position += (Vector3)(player.Velocity * deltaTime);
-
-        if (player.Velocity.sqrMagnitude > 0.02f)
-        {
-            float angle = Mathf.Atan2(player.Velocity.y, player.Velocity.x) * Mathf.Rad2Deg - 90f;
-            player.Transform.rotation = Quaternion.Lerp(
-                player.Transform.rotation,
-                Quaternion.Euler(0f, 0f, angle),
-                player.RotationResponsiveness * deltaTime);
-        }
+        MovementUpdateContext movementContext = new MovementUpdateContext(
+            moveInput,
+            pointerBlocked,
+            pointerState,
+            pointerWorldPosition,
+            movementSettings);
+        movementService.UpdateMovement(player, movementContext, deltaTime);
     }
 
     private void ToggleModule(int index)
@@ -1813,14 +1798,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         return moveInput.sqrMagnitude > 1f ? moveInput.normalized : moveInput;
-    }
-
-    private void IssueMoveCommand(Vector2 screenPosition)
-    {
-        Vector3 world = mainCamera.ScreenToWorldPoint(screenPosition);
-        world.z = 0f;
-        player.MoveCommandActive = true;
-        player.MoveCommandTarget = world;
     }
 
     private bool TrySelectEnemyFromOverview(Vector2 screenPosition)
@@ -1932,6 +1909,19 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         screenPosition = Vector2.zero;
         return false;
+    }
+
+    private Vector3 ScreenToWorldPosition(Vector2 screenPosition)
+    {
+        Camera camera = mainCamera != null ? mainCamera : Camera.main;
+        if (camera == null)
+        {
+            return Vector3.zero;
+        }
+
+        Vector3 world = camera.ScreenToWorldPoint(screenPosition);
+        world.z = 0f;
+        return world;
     }
 
     private void UpdatePlayer(float deltaTime)
