@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>EVE-like · Tactical Space Combat</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #0a0c0f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Consolas', monospace;
+        }
+        .game-container {
+            display: flex;
+            width: 1400px;
+            height: 900px;
+            background: #020304;
+            border: 2px solid #2a3a4a;
+            box-shadow: 0 0 30px #000000cc;
+            position: relative;
+        }
+        /* Центральная область с канвасом */
+        .canvas-area {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 50%, #0e1a24, #030608);
+            cursor: crosshair;
+        }
+        /* Combat Log */
+        .combat-log {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            width: 280px;
+            height: 180px;
+            background: rgba(0, 5, 10, 0.85);
+            border: 1px solid #2e5a7a;
+            border-radius: 6px;
+            padding: 8px;
+            color: #b0e0ff;
+            font-size: 13px;
+            font-family: 'Consolas', monospace;
+            overflow-y: auto;
+            backdrop-filter: blur(2px);
+            box-shadow: inset 0 0 10px #00000080;
+            pointer-events: none;
+        }
+        .combat-log div {
+            margin-bottom: 3px;
+            border-bottom: 1px dotted #2a4a66;
+            padding-bottom: 2px;
+            color: #9cc9ff;
+        }
+        .combat-log .warning { color: #ffaa66; font-weight: bold; }
+        .combat-log .critical { color: #ff5e5e; font-weight: bold; }
+        .combat-log .hit { color: #ffd966; }
+        .combat-log .miss { color: #8899aa; font-style: italic; }
+
+        /* Overview — правый блок */
+        .overview-panel {
+            width: 280px;
+            background: #0b1219;
+            border-left: 2px solid #1e3f5a;
+            display: flex;
+            flex-direction: column;
+            padding: 10px 6px;
+            color: #d0e2ff;
+        }
+        .overview-title {
+            font-size: 16px;
+            letter-spacing: 3px;
+            text-align: center;
+            border-bottom: 1px solid #2a5a7a;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+            color: #7fc4ff;
+            text-shadow: 0 0 5px #0066cc;
+        }
+        
+        /* Панель выбранной цели */
+        .target-panel {
+            background: #0d1b26;
+            border: 1px solid #3f8ab3;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .target-panel.active { display: block; }
+        .target-name { font-weight: bold; color: #ffd966; font-size: 14px; margin-bottom: 4px; }
+        .target-dist { font-size: 12px; color: #8fcbff; margin-bottom: 8px; }
+        .stat-bar { height: 6px; background: #1a2a33; border-radius: 3px; margin-bottom: 4px; overflow: hidden; }
+        .stat-fill { height: 100%; width: 100%; transition: width 0.1s; }
+        .stat-fill.shield { background: #3a9eff; box-shadow: 0 0 5px #3a9eff; }
+        .stat-fill.armor { background: #b0b0b0; }
+        .stat-fill.hull { background: #d94f4f; box-shadow: 0 0 5px #ff6a6a; }
+
+        #enemyList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .enemy-entry {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            background: #0f1a24;
+            border: 1px solid #1d3f55;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.1s;
+            font-size: 13px;
+        }
+        .enemy-entry:hover {
+            background: #1e3a50;
+            border-color: #3f8ab3;
+        }
+        .enemy-entry.targeted {
+            background: #1e4f6b;
+            border-color: #7fc4ff;
+            box-shadow: 0 0 8px #2a9df4;
+        }
+        .enemy-id {
+            width: 45px;
+            font-family: monospace;
+            color: #aad0ff;
+        }
+        .enemy-type {
+            width: 55px;
+            color: #bbd9ff;
+        }
+        .enemy-dist {
+            width: 55px;
+            text-align: right;
+            color: #8fcbff;
+        }
+        
+        /* Мини-полоски ХП в списке */
+        .enemy-bars {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-left: 8px;
+        }
+        .enemy-bars .bar {
+            height: 3px;
+            background: #1a2a33;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .enemy-bars .fill { height: 100%; width: 100%; transition: width 0.1s; }
+        .enemy-bars .fill.shield { background: #3a9eff; }
+        .enemy-bars .fill.armor { background: #b0b0b0; }
+        .enemy-bars .fill.hull { background: #d94f4f; }
+
+        /* Левел-ап модалка */
+        .levelup-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #0d1b26e0;
+            backdrop-filter: blur(6px);
+            border: 2px solid #3c8db0;
+            border-radius: 16px;
+            padding: 24px 32px;
+            color: #e2f0ff;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 0 0 60px #000000cc;
+        }
+        .levelup-modal h2 {
+            margin-top: 0;
+            color: #ffd966;
+        }
+        .perk-choices {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .perk-btn {
+            background: #152b3b;
+            border: 2px solid #3f7e9e;
+            color: white;
+            padding: 12px 18px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            min-width: 130px;
+        }
+        .perk-btn:hover {
+            background: #2a5777;
+            border-color: #8fcbff;
+            box-shadow: 0 0 20px #2a9df4;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .gate-hint {
+            position: absolute;
+            bottom: 220px;
+            left: 20px;
+            color: #aae0ff;
+            background: #0a1b2caa;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            border-left: 4px solid #5fc4ff;
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <div class="canvas-area">
+        <canvas id="gameCanvas" width="1100" height="900"></canvas>
+        <div class="combat-log" id="combatLog">
+            <div>⚡ Системы онлайн</div>
+            <div>🛸 Сканирование сектора...</div>
+        </div>
+        <div id="gateMessage" class="gate-hint hidden">🌀 Варп-гейт активен · нажмите [G] для прыжка</div>
+    </div>
+
+    <div class="overview-panel">
+        <div class="overview-title">📡 OVERVIEW</div>
+        
+        <div id="targetPanel" class="target-panel">
+            <div class="target-name" id="tpName">-</div>
+            <div class="target-dist" id="tpDist">-</div>
+            <div class="stat-bar"><div class="stat-fill shield" id="tpShield" style="width:100%"></div></div>
+            <div class="stat-bar"><div class="stat-fill armor" id="tpArmor" style="width:100%"></div></div>
+            <div class="stat-bar"><div class="stat-fill hull" id="tpHull" style="width:100%"></div></div>
+        </div>
+
+        <div style="display:flex; padding:0 8px; font-size:12px; color:#7fafcf; margin-bottom:4px;">
+            <span style="width:45px;">ID</span>
+            <span style="width:55px;">Тип</span>
+            <span style="width:55px; text-align:right;">Дист.</span>
+            <span style="flex:1; margin-left:8px;">Статус</span>
+        </div>
+        <ul id="enemyList"></ul>
+        
+        <div style="margin-top:10px; border-top:1px solid #1e405a; padding-top:8px; font-size:13px;">
+            <div>⚡ Capacitor: <span id="capText">100%</span></div>
+            <div>🛡️ Shield / Armor / Hull</div>
+            <div>🎯 Выбрано: <span id="targetDisplay">нет</span></div>
+            <div>⭐ Уровень: <span id="levelDisplay">1</span> · XP: <span id="xpDisplay">0/100</span></div>
+        </div>
+    </div>
+
+    <div id="levelupModal" class="levelup-modal hidden">
+        <h2>⬆️ LEVEL UP</h2>
+        <p>Выберите улучшение:</p>
+        <div class="perk-choices" id="perkContainer"></div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        "use strict";
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const combatLogDiv = document.getElementById('combatLog');
+        const enemyListEl = document.getElementById('enemyList');
+        const capText = document.getElementById('capText');
+        const targetDisplay = document.getElementById('targetDisplay');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const xpDisplay = document.getElementById('xpDisplay');
+        const gateMsg = document.getElementById('gateMessage');
+        const levelupModal = document.getElementById('levelupModal');
+        const perkContainer = document.getElementById('perkContainer');
+
+        const CW = 1100, CH = 900;
+        canvas.width = CW; canvas.height = CH;
+
+        const PLAYER_RADIUS = 14;
+        const ENEMY_RADIUS = 12;
+        const BULLET_SPEED = 650;
+        const BULLET_RADIUS = 4;
+
+        function logMessage(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.textContent = msg;
+            if (type === 'hit') div.className = 'hit';
+            else if (type === 'miss') div.className = 'miss';
+            else if (type === 'critical') div.className = 'critical';
+            else if (type === 'warning') div.className = 'warning';
+            combatLogDiv.appendChild(div);
+            combatLogDiv.scrollTop = combatLogDiv.scrollHeight;
+            if (combatLogDiv.children.length > 30) {
+                combatLogDiv.removeChild(combatLogDiv.children[0]);
+            }
+        }
+
+        function randomRange(min, max) { return Math.random() * (max - min) + min; }
+        function distance(x1,y1,x2,y2) { return Math.hypot(x2-x1, y2-y1); }
+
+        class Player {
+            constructor() {
+                this.x = 0; this.y = 0;
+                this.vx = 0; this.vy = 0;
+                this.speed = 280;
+                this.radius = PLAYER_RADIUS;
+
+                this.maxShield = 400; this.shield = 400;
+                this.maxArmor = 300; this.armor = 300;
+                this.maxHull = 200; this.hull = 200;
+
+                this.maxCap = 1000; this.capacitor = 1000;
+                this.capRechargeTime = 120;
+                
+                this.level = 1; this.xp = 0; this.xpToNext = 100;
+                
+                this.damageMult = 1.0; this.speedMult = 1.0;
+                this.capCapacityMult = 1.0; this.repairAmountMult = 1.0;
+            }
+
+            getCapRechargeRate(deltaSec) {
+                if (this.capacitor >= this.maxCap) return 0;
+                const capPercent = this.capacitor / this.maxCap;
+                let rechargeFactor = 2.8 * capPercent * (1 - capPercent);
+                rechargeFactor = Math.max(0.1, rechargeFactor); 
+                const maxRechargePerSec = (this.maxCap / this.capRechargeTime) * 2.4;
+                return maxRechargePerSec * rechargeFactor * deltaSec;
+            }
+
+            updateCapacitor(dt) {
+                if (this.capacitor < this.maxCap) {
+                    const regen = this.getCapRechargeRate(dt);
+                    this.capacitor = Math.min(this.maxCap, this.capacitor + regen);
+                }
+            }
+
+            consumeCap(amount) {
+                if (this.capacitor >= amount) {
+                    this.capacitor -= amount;
+                    return true;
+                }
+                return false;
+            }
+
+            takeDamage(amount) {
+                let remaining = amount;
+                if (this.shield > 0) {
+                    const shieldDmg = Math.min(this.shield, remaining);
+                    this.shield -= shieldDmg;
+                    remaining -= shieldDmg;
+                }
+                if (remaining > 0 && this.armor > 0) {
+                    const armorDmg = Math.min(this.armor, remaining);
+                    this.armor -= armorDmg;
+                    remaining -= armorDmg;
+                }
+                if (remaining > 0) {
+                    this.hull = Math.max(0, this.hull - remaining);
+                }
+            }
+
+            isAlive() { return this.hull > 0; }
+
+            move(dx, dy, dt) {
+                const spd = this.speed * this.speedMult;
+                this.vx = dx * spd;
+                this.vy = dy * spd;
+                this.x += this.vx * dt;
+                this.y += this.vy * dt;
+            }
+
+            addXp(amount) {
+                this.xp += amount;
+                while (this.xp >= this.xpToNext && this.level < 99) {
+                    this.levelUp();
+                }
+            }
+
+            levelUp() {
+                this.level++;
+                this.xp -= this.xpToNext;
+                this.xpToNext = Math.floor(this.xpToNext * 1.5);
+                this.maxHull += 30; this.hull = this.maxHull;
+                this.maxArmor += 40; this.armor = this.maxArmor;
+                this.maxShield += 50; this.shield = this.maxShield;
+                showPerkSelection();
+                logMessage(`⭐ Достигнут уровень ${this.level}!`, 'warning');
+            }
+        }
+
+        class Enemy {
+            constructor(id, typeName, x, y, levelScale = 1) {
+                this.id = id;
+                this.type = typeName;
+                this.x = x; this.y = y;
+                this.radius = ENEMY_RADIUS;
+                this.orbitDistance = randomRange(180, 300);
+                this.angle = Math.random() * Math.PI * 2;
+                this.orbitSpeed = 0.8 + Math.random() * 0.7;
+                
+                const scale = levelScale;
+                this.maxShield = Math.floor(150 * scale); this.shield = this.maxShield;
+                this.maxArmor = Math.floor(120 * scale); this.armor = this.maxArmor;
+                this.maxHull = Math.floor(100 * scale); this.hull = this.maxHull;
+                
+                this.damage = 12 * scale;
+                this.attackCooldown = 1.4;
+                this.attackTimer = randomRange(0, 0.8);
+                this.speed = 90 * scale;
+            }
+
+            update(dt, playerX, playerY) {
+                const dx = this.x - playerX;
+                const dy = this.y - playerY;
+                const dist = Math.hypot(dx, dy);
+                const targetDist = this.orbitDistance;
+                
+                if (dist > 0.01) {
+                    const angleToPlayer = Math.atan2(dy, dx);
+                    const diff = targetDist - dist;
+                    const move = diff * 1.2 * dt;
+                    const newX = this.x + Math.cos(angleToPlayer) * move;
+                    const newY = this.y + Math.sin(angleToPlayer) * move;
+                    
+                    this.angle += this.orbitSpeed * dt;
+                    const orbitOffset = 0.6;
+                    this.x = newX + Math.cos(this.angle) * orbitOffset * this.speed * dt;
+                    this.y = newY + Math.sin(this.angle) * orbitOffset * this.speed * dt;
+                }
+                this.attackTimer += dt;
+            }
+
+            canAttack() { return this.attackTimer >= this.attackCooldown; }
+            resetAttack() { this.attackTimer = 0; }
+
+            takeDamage(amount) {
+                let remaining = amount;
+                if (this.shield > 0) {
+                    const d = Math.min(this.shield, remaining);
+                    this.shield -= d; remaining -= d;
+                }
+                if (remaining > 0 && this.armor > 0) {
+                    const d = Math.min(this.armor, remaining);
+                    this.armor -= d; remaining -= d;
+                }
+                if (remaining > 0) {
+                    this.hull = Math.max(0, this.hull - remaining);
+                }
+                return this.hull <= 0;
+            }
+
+            isAlive() { return this.hull > 0; }
+        }
+
+        class Bullet {
+            constructor(x, y, targetEnemy, damage) {
+                this.x = x; this.y = y;
+                this.target = targetEnemy;
+                this.damage = damage;
+                this.speed = BULLET_SPEED;
+                this.radius = BULLET_RADIUS;
+                this.active = true;
+            }
+
+            update(dt) {
+                if (!this.target || !this.target.isAlive()) {
+                    this.active = false; return;
+                }
+                const dx = this.target.x - this.x;
+                const dy = this.target.y - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < this.speed * dt + this.target.radius) {
+                    this.active = false; return true;
+                }
+                this.x += (dx / dist) * this.speed * dt;
+                this.y += (dy / dist) * this.speed * dt;
+                return false;
+            }
+        }
+
+        class Module {
+            constructor(name, key, type, config) {
+                this.name = name; this.key = key; this.type = type;
+                this.active = false; this.config = config;
+                this.weaponTimer = 0;
+            }
+            toggle() { this.active = !this.active; }
+        }
+
+        class Game {
+            constructor() {
+                this.player = new Player();
+                this.enemies = [];
+                this.bullets = [];
+                this.modules = [];
+                this.target = null;
+                this.wave = 1;
+                this.gateActive = false;
+                this.lastTimestamp = 0;
+                this.gameOver = false;
+                this.paused = false;
+                this.perkPending = false;
+                this.keys = { w: false, a: false, s: false, d: false };
+                
+                this.initModules();
+                this.spawnWave();
+                this.setupEventListeners();
+            }
+
+            initModules() {
+                this.modules = [
+                    new Module('Гибридная пушка', '1', 'weapon', { optimal: 220, falloff: 180, damage: 28, capPerShot: 22, rof: 0.9 }),
+                    new Module('Shield Booster', '2', 'shieldRep', { repAmount: 40, capPerSec: 28, cooldown: 0.5 }),
+                    new Module('Armor Repairer', '3', 'armorRep', { repAmount: 35, capPerSec: 24, cooldown: 0.6 }),
+                    new Module('Afterburner', '4', 'afterburner', { speedBonus: 1.7, capPerSec: 18 })
+                ];
+            }
+
+            spawnWave() {
+                this.enemies = [];
+                const count = 3 + Math.floor(this.wave * 1.3);
+                const levelScale = 0.8 + this.wave * 0.3;
+                for (let i=0; i<count; i++) {
+                    const angle = (i / count) * Math.PI*2;
+                    const dist = 350 + Math.random()*150;
+                    const x = this.player.x + Math.cos(angle)*dist;
+                    const y = this.player.y + Math.sin(angle)*dist;
+                    const type = ['Frigate', 'Destroyer', 'Cruiser'][i%3];
+                    this.enemies.push(new Enemy(`E-${this.wave*100+i}`, type, x, y, levelScale));
+                }
+                this.gateActive = false;
+                gateMsg.classList.add('hidden');
+                logMessage(`🌌 Волна ${this.wave}: ${count} противников`, 'warning');
+            }
+
+            setupEventListeners() {
+                window.addEventListener('keydown', (e) => {
+                    const k = e.key.toLowerCase();
+                    if (k === 'w' || k === 'a' || k === 's' || k === 'd') { this.keys[k] = true; e.preventDefault(); }
+                    if (k >= '1' && k <= '4') {
+                        const idx = parseInt(k)-1;
+                        if (this.modules[idx]) {
+                            this.modules[idx].toggle();
+                            logMessage(`${this.modules[idx].name} ${this.modules[idx].active?'активирован':'отключен'}`);
+                        }
+                        e.preventDefault();
+                    }
+                    if (k === 'g' && this.gateActive) this.warpToNextLevel();
+                });
+                window.addEventListener('keyup', (e) => {
+                    const k = e.key.toLowerCase();
+                    if (k === 'w' || k === 'a' || k === 's' || k === 'd') { this.keys[k] = false; e.preventDefault(); }
+                });
+                canvas.addEventListener('click', (e) => this.handleCanvasClick(e));
+                canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+            }
+
+            handleCanvasClick(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseCanvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const mouseCanvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
+                
+                const slotW = 70, slotH = 70, startX = CW-340, startY = CH-130;
+                for (let i=0; i<this.modules.length; i++) {
+                    const x = startX + i*80;
+                    if (mouseCanvasX >= x && mouseCanvasX <= x+slotW && mouseCanvasY >= startY && mouseCanvasY <= startY+slotH) {
+                        this.modules[i].toggle();
+                        return;
+                    }
+                }
+                
+                const worldX = this.player.x + (mouseCanvasX - CW/2);
+                const worldY = this.player.y + (mouseCanvasY - CH/2);
+                let closest = null, minDist = 35;
+                for (let e of this.enemies) {
+                    const d = distance(worldX, worldY, e.x, e.y);
+                    if (d < minDist) { minDist = d; closest = e; }
+                }
+                if (closest) this.setTarget(closest);
+            }
+
+            setTarget(enemy) {
+                this.target = enemy;
+                targetDisplay.textContent = enemy ? `${enemy.id} (${enemy.type})` : 'нет';
+                logMessage(`🎯 Цель захвачена: ${enemy.id}`, 'info');
+                this.updateOverview();
+            }
+
+            updateOverview() {
+                const list = enemyListEl;
+                this.enemies.sort((a,b)=> distance(a.x,a.y,this.player.x,this.player.y) - distance(b.x,b.y,this.player.x,this.player.y));
+                
+                // Удаляем уничтоженных
+                const currentIds = this.enemies.map(e => e.id);
+                Array.from(list.children).forEach(li => {
+                    if (!currentIds.includes(li.dataset.id)) li.remove();
+                });
+
+                // Обновляем существующих или добавляем новых (чтобы не убивать DOM и клики)
+                for (let e of this.enemies) {
+                    let li = list.querySelector(`[data-id="${e.id}"]`);
+                    if (!li) {
+                        li = document.createElement('li');
+                        li.dataset.id = e.id;
+                        li.addEventListener('click', () => this.setTarget(e));
+                        list.appendChild(li);
+                    }
+                    
+                    li.className = 'enemy-entry' + (this.target === e ? ' targeted' : '');
+                    const dist = distance(e.x, e.y, this.player.x, this.player.y).toFixed(0);
+                    
+                    const sPct = (e.shield / e.maxShield) * 100;
+                    const aPct = (e.armor / e.maxArmor) * 100;
+                    const hPct = (e.hull / e.maxHull) * 100;
+
+                    li.innerHTML = `
+                        <span class="enemy-id">${e.id}</span>
+                        <span class="enemy-type">${e.type}</span>
+                        <span class="enemy-dist">${dist} км</span>
+                        <div class="enemy-bars">
+                            <div class="bar"><div class="fill shield" style="width:${sPct}%"></div></div>
+                            <div class="bar"><div class="fill armor" style="width:${aPct}%"></div></div>
+                            <div class="bar"><div class="fill hull" style="width:${hPct}%"></div></div>
+                        </div>
+                    `;
+                }
+
+                // Обновляем панель текущей цели
+                const tp = document.getElementById('targetPanel');
+                if (this.target && this.target.isAlive()) {
+                    tp.classList.add('active');
+                    document.getElementById('tpName').textContent = `${this.target.id} (${this.target.type})`;
+                    document.getElementById('tpDist').textContent = `Дистанция: ${distance(this.target.x, this.target.y, this.player.x, this.player.y).toFixed(0)} км`;
+                    document.getElementById('tpShield').style.width = `${(this.target.shield / this.target.maxShield) * 100}%`;
+                    document.getElementById('tpArmor').style.width = `${(this.target.armor / this.target.maxArmor) * 100}%`;
+                    document.getElementById('tpHull').style.width = `${(this.target.hull / this.target.maxHull) * 100}%`;
+                } else {
+                    tp.classList.remove('active');
+                }
+
+                capText.textContent = Math.floor(this.player.capacitor / this.player.maxCap * 100) + '%';
+                levelDisplay.textContent = this.player.level;
+                xpDisplay.textContent = `${this.player.xp}/${this.player.xpToNext}`;
+            }
+
+            warpToNextLevel() {
+                if (!this.gateActive) return;
+                this.wave++;
+                this.player.shield = this.player.maxShield;
+                this.player.armor = this.player.maxArmor;
+                this.player.hull = this.player.maxHull;
+                this.player.capacitor = this.player.maxCap;
+                this.spawnWave();
+                this.target = null;
+                targetDisplay.textContent = 'нет';
+                logMessage(`🚀 Прыжок в сектор уровня ${this.wave}`, 'critical');
+            }
+
+            gameLoop(now) {
+                if (this.gameOver) return;
+                const dt = Math.min(0.03, (now - (this.lastTimestamp || now)) / 1000);
+                this.lastTimestamp = now;
+                
+                if (!this.perkPending && !this.paused) {
+                    this.updatePlayer(dt);
+                    this.updateEnemies(dt);
+                    this.updateModules(dt);
+                    this.updateBullets(dt);
+                    this.checkWaveCompletion();
+                }
+                
+                this.render();
+                requestAnimationFrame((t) => this.gameLoop(t));
+            }
+
+            updatePlayer(dt) {
+                let dx = 0, dy = 0;
+                if (this.keys.w) dy -= 1;
+                if (this.keys.s) dy += 1;
+                if (this.keys.a) dx -= 1;
+                if (this.keys.d) dx += 1;
+                if (dx !== 0 || dy !== 0) {
+                    const len = Math.hypot(dx, dy);
+                    dx /= len; dy /= len;
+                }
+                this.player.move(dx, dy, dt);
+                this.player.updateCapacitor(dt);
+                
+                if (!this.player.isAlive()) {
+                    this.gameOver = true;
+                    logMessage('💀 Корабль уничтожен. Игра окончена.', 'critical');
+                }
+            }
+
+            updateEnemies(dt) {
+                for (let e of this.enemies) {
+                    e.update(dt, this.player.x, this.player.y);
+                    if (e.canAttack() && this.player.isAlive()) {
+                        const dist = distance(e.x, e.y, this.player.x, this.player.y);
+                        if (dist < 280) {
+                            this.player.takeDamage(e.damage);
+                            logMessage(`⚠️ ${e.id} наносит ${e.damage.toFixed(0)} урона`, 'hit');
+                            e.resetAttack();
+                        }
+                    }
+                }
+            }
+
+            updateModules(dt) {
+                for (let mod of this.modules) {
+                    if (!mod.active) continue;
+                    const capCost = mod.type==='weapon'? 0 : mod.config.capPerSec * dt;
+                    if (mod.type !== 'weapon' && !this.player.consumeCap(capCost)) {
+                        mod.active = false;
+                        logMessage(`🔋 Недостаточно энергии: ${mod.name} отключен`, 'critical');
+                        continue;
+                    }
+                    
+                    if (mod.type === 'weapon') {
+                        mod.weaponTimer += dt;
+                        const rof = mod.config.rof;
+                        while (mod.weaponTimer >= rof && this.target && this.target.isAlive()) {
+                            mod.weaponTimer -= rof;
+                            if (this.player.consumeCap(mod.config.capPerShot)) {
+                                this.fireWeapon(mod);
+                            } else {
+                                mod.active = false;
+                                logMessage(`🔋 Энергия исчерпана, орудие отключено`, 'critical');
+                                break;
+                            }
+                        }
+                    } else if (mod.type === 'shieldRep') {
+                        if (this.player.shield < this.player.maxShield) {
+                            const rep = mod.config.repAmount * this.player.repairAmountMult * dt;
+                            this.player.shield = Math.min(this.player.maxShield, this.player.shield + rep);
+                        }
+                    } else if (mod.type === 'armorRep') {
+                        if (this.player.armor < this.player.maxArmor) {
+                            const rep = mod.config.repAmount * this.player.repairAmountMult * dt;
+                            this.player.armor = Math.min(this.player.maxArmor, this.player.armor + rep);
+                        }
+                    } else if (mod.type === 'afterburner') {
+                        this.player.speedMult = mod.config.speedBonus;
+                    }
+                }
+                const ab = this.modules.find(m=>m.type==='afterburner');
+                if (!ab || !ab.active) this.player.speedMult = 1.0;
+            }
+
+            fireWeapon(mod) {
+                if (!this.target) return;
+                const dist = distance(this.player.x, this.player.y, this.target.x, this.target.y);
+                const optimal = mod.config.optimal;
+                const falloff = mod.config.falloff;
+                let hitChance = 1.0;
+                if (dist > optimal) {
+                    const exponent = Math.pow((dist - optimal) / falloff, 2);
+                    hitChance = Math.pow(0.5, exponent);
+                }
+                if (Math.random() < hitChance) {
+                    this.bullets.push(new Bullet(this.player.x, this.player.y, this.target, mod.config.damage * this.player.damageMult));
+                } else {
+                    logMessage(`❌ Промах по ${this.target.id}`, 'miss');
+                }
+            }
+
+            updateBullets(dt) {
+                for (let i=this.bullets.length-1; i>=0; i--) {
+                    const b = this.bullets[i];
+                    if (b.update(dt) && b.target && b.target.isAlive()) {
+                        logMessage(`💥 Попадание по ${b.target.id} на ${b.damage.toFixed(1)}`, 'hit');
+                        if (b.target.takeDamage(b.damage)) {
+                            this.handleEnemyDeath(b.target);
+                        }
+                        this.bullets.splice(i,1);
+                    }
+                }
+            }
+
+            handleEnemyDeath(enemy) {
+                logMessage(`✅ ${enemy.id} уничтожен`, 'warning');
+                this.player.addXp(40 + this.wave * 8);
+                const idx = this.enemies.indexOf(enemy);
+                if (idx > -1) this.enemies.splice(idx, 1);
+                if (this.target === enemy) {
+                    this.target = null;
+                    targetDisplay.textContent = 'нет';
+                }
+                this.updateOverview();
+            }
+
+            checkWaveCompletion() {
+                if (this.enemies.length === 0 && !this.gateActive) {
+                    this.gateActive = true;
+                    this.gateX = this.player.x + 40;
+                    this.gateY = this.player.y - 30;
+                    gateMsg.classList.remove('hidden');
+                    logMessage('🌀 Варп-гейт активирован! Нажмите G для прыжка', 'critical');
+                }
+            }
+
+            render() {
+                ctx.clearRect(0, 0, CW, CH);
+                ctx.save();
+                ctx.translate(CW/2 - this.player.x, CH/2 - this.player.y);
+                
+                for (let e of this.enemies) this.drawEnemy(e);
+                for (let b of this.bullets) {
+                    ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, 2*Math.PI);
+                    ctx.fillStyle = '#FFD966'; ctx.shadowColor = '#FFAA00'; ctx.shadowBlur = 10; ctx.fill();
+                }
+                
+                this.drawPlayer();
+                
+                if (this.gateActive) {
+                    ctx.beginPath(); ctx.arc(this.gateX, this.gateY, 28, 0, 2*Math.PI);
+                    ctx.strokeStyle = '#7fc4ff'; ctx.lineWidth = 4; ctx.shadowBlur = 25; ctx.shadowColor = '#2ad4ff';
+                    ctx.stroke(); ctx.fillStyle = '#1a4f7a80'; ctx.fill();
+                }
+                ctx.restore();
+                
+                this.drawHUD();
+                this.updateOverview(); 
+            }
+
+            drawPlayer() {
+                ctx.shadowBlur = 20; ctx.shadowColor = '#3a9eff';
+                ctx.beginPath(); ctx.arc(this.player.x, this.player.y, this.player.radius, 0, 2*Math.PI);
+                ctx.fillStyle = '#3a8fe0'; ctx.fill();
+                ctx.strokeStyle = '#b0e0ff'; ctx.lineWidth = 3; ctx.stroke();
+            }
+
+            drawEnemy(e) {
+                ctx.shadowBlur = 12; ctx.shadowColor = '#c44';
+                ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, 2*Math.PI);
+                ctx.fillStyle = '#b33'; ctx.fill();
+
+                // Отрисовка энергетического щита (тускнеет при получении урона)
+                if (e.shield > 0) {
+                    ctx.beginPath();
+                    ctx.arc(e.x, e.y, e.radius + 3, 0, 2 * Math.PI);
+                    ctx.strokeStyle = `rgba(58, 158, 255, ${e.shield / e.maxShield})`;
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowBlur = 0;
+                    ctx.stroke();
+                }
+
+                if (this.target === e) {
+                    ctx.strokeStyle = '#FFD966'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(e.x, e.y, e.radius+8, 0, 2*Math.PI); ctx.stroke();
+                }
+            }
+
+            drawHUD() {
+                const cx = CW/2, cy = CH-100, rad = 70;
+                this.drawArc(cx-10, cy, rad, this.player.shield/this.player.maxShield, '#3a9eff', 12);
+                this.drawArc(cx-10, cy, rad-16, this.player.armor/this.player.maxArmor, '#b0b0b0', 10);
+                this.drawArc(cx-10, cy, rad-32, this.player.hull/this.player.maxHull, '#d94f4f', 10);
+                
+                ctx.beginPath(); ctx.arc(cx-10, cy, 26, 0, 2*Math.PI);
+                ctx.fillStyle = '#0a121c'; ctx.fill();
+                ctx.strokeStyle = '#5faaff'; ctx.lineWidth = 4; ctx.stroke();
+                
+                const capPerc = this.player.capacitor/this.player.maxCap;
+                ctx.beginPath(); ctx.arc(cx-10, cy, 22, -Math.PI/2, -Math.PI/2 + 2*Math.PI*capPerc);
+                ctx.lineTo(cx-10, cy); ctx.fillStyle = '#ffd966cc'; ctx.fill();
+                
+                const slotStartX = CW-340, slotY = CH-130;
+                for (let i=0; i<this.modules.length; i++) {
+                    const m = this.modules[i], x = slotStartX + i*80;
+                    ctx.fillStyle = m.active ? '#1e4f6b' : '#0f1a24';
+                    ctx.strokeStyle = m.active ? '#7fc4ff' : '#3a5f7a';
+                    ctx.lineWidth = 2; ctx.fillRect(x, slotY, 70, 70); ctx.strokeRect(x, slotY, 70, 70);
+                    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Consolas'; ctx.textAlign = 'center';
+                    ctx.fillText(m.key, x+35, slotY+25); ctx.font = '10px Consolas'; ctx.fillText(m.name.slice(0,8), x+35, slotY+50);
+                }
+            }
+
+            drawArc(cx, cy, radius, percent, color, width) {
+                ctx.beginPath(); ctx.arc(cx, cy, radius, 0.75*Math.PI, 0.75*Math.PI + 1.5*Math.PI*percent);
+                ctx.lineCap = 'round'; ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+            }
+
+            showPerkSelection() {
+                this.perkPending = true;
+                const perks = [
+                    { name: '🔫 Урон +15%', effect: (p)=> p.damageMult += 0.15 },
+                    { name: '⚡ Конденсатор +20%', effect: (p)=> { p.maxCap = Math.floor(p.maxCap*1.2); p.capacitor = p.maxCap; } },
+                    { name: '🛡️ Щиты +25%', effect: (p)=> { p.maxShield = Math.floor(p.maxShield*1.25); p.shield = p.maxShield; } },
+                    { name: '🚀 Скорость +20%', effect: (p)=> p.speedMult += 0.2 },
+                    { name: '🔧 Ремонт +30%', effect: (p)=> p.repairAmountMult += 0.3 },
+                ];
+                const selected = [];
+                for (let i=0; i<3; i++) selected.push(perks[Math.floor(Math.random()*perks.length)]);
+                
+                perkContainer.innerHTML = '';
+                selected.forEach((perk) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'perk-btn'; btn.textContent = perk.name;
+                    btn.onclick = () => {
+                        perk.effect(this.player);
+                        this.perkPending = false;
+                        levelupModal.classList.add('hidden');
+                        logMessage(`✨ Перк выбран: ${perk.name}`, 'warning');
+                        this.updateOverview();
+                    };
+                    perkContainer.appendChild(btn);
+                });
+                levelupModal.classList.remove('hidden');
+            }
+        }
+
+        const game = new Game();
+        requestAnimationFrame((t) => game.gameLoop(t));
+        window.showPerkSelection = () => game.showPerkSelection();
+    })();
+</script>
+</body>
+</html>
