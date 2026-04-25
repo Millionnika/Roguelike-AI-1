@@ -18,10 +18,13 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private Slider healthBar;
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text waveText;
+    [SerializeField] private EquipmentUIController equipmentUiController;
 
     [Header("Data")]
     [SerializeField] private MovementSettingsSO playerMovementSettings;
     [SerializeField] private WeaponDataSO playerWeaponData;
+    [SerializeField] private List<ModuleDataSO> defaultInstalledModules = new List<ModuleDataSO>();
+    [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
     [SerializeField] private List<EnemyDataSO> waveConfigs = new List<EnemyDataSO>();
 
     [Header("Background Layers")]
@@ -49,12 +52,12 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<string> combatLog = new List<string>();
     private readonly List<EnemyRow> enemyRows = new List<EnemyRow>();
     private readonly List<PerkChoice> activePerks = new List<PerkChoice>();
-    private readonly List<ShipDefinition> starterShips = new List<ShipDefinition>();
     private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
     private readonly List<AttackBeamEffect> attackBeams = new List<AttackBeamEffect>();
     private readonly List<EngineParticle> engineParticles = new List<EngineParticle>();
+    private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
 
@@ -75,6 +78,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Transform enemyRoot;
     private Transform projectileRoot;
     private Transform gateTransform;
+    private Transform weaponSlotsRoot;
 
     private Canvas hudCanvas;
     private Text combatLogText;
@@ -163,6 +167,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject runtimeStarLayerPrefab;
     private GameObject runtimeNebulaLayerPrefab;
 
+    public event Action<ShipEquipmentState> EquipmentStateChanged;
+    public ShipEquipmentState CurrentEquipmentState => equipmentState;
+
     internal void ConfigureServices(
         IPlatformService newPlatformService,
         IInputService newInputService,
@@ -231,11 +238,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         ConfigureCamera();
         CreateSprites();
         CreateStarterShips();
-        CreateModules();
         BuildWorld();
-        BuildHud();
         SpawnPlayer();
+        if (equipmentUiController != null)
+        {
+            equipmentUiController.Bind(this);
+        }
         SelectShip(0);
+        BuildHud();
         ApplyPerformanceSettings();
         ShowStartMenu(true);
         RefreshLocalizedTexts();
@@ -246,6 +256,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (equipmentUiController != null)
+        {
+            equipmentUiController.Bind(null);
+        }
+
         backgroundParallaxService?.Dispose();
 
         if (runtimeEnemyPrefab != null)
@@ -289,6 +304,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Debug.LogError("SpaceCombatSceneController: waveText is not assigned.", this);
         }
+        if (equipmentUiController == null)
+        {
+            Debug.LogWarning("SpaceCombatSceneController: equipmentUiController is not assigned. Equipment panel will not update.", this);
+        }
+        if (availableShips == null || availableShips.Count == 0)
+        {
+            Debug.LogWarning("SpaceCombatSceneController: availableShips is empty. Runtime fallback ships will be used.", this);
+        }
     }
 
     private void EnsureDataAssets()
@@ -307,8 +330,17 @@ public class SpaceCombatSceneController : MonoBehaviour
             playerWeaponData.damage = 28f;
             playerWeaponData.fireRate = 0.45f;
             playerWeaponData.projectileSpeed = 18f;
+            playerWeaponData.capacitorPerShot = 9f;
+            playerWeaponData.requiredClass = ShipClass.Light;
             playerWeaponData.projectilePrefab = projectilePrefab;
         }
+        else if (playerWeaponData.projectilePrefab == null)
+        {
+            playerWeaponData.projectilePrefab = projectilePrefab;
+        }
+
+        availableShips ??= new List<ShipDataSO>();
+        defaultInstalledModules ??= new List<ModuleDataSO>();
 
         if (waveConfigs == null)
         {
@@ -380,9 +412,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
             if (startMenuPage == StartMenuPage.Hangar)
             {
-                if (keyboard.digit1Key.wasPressedThisFrame) SelectShip(0);
-                if (keyboard.digit2Key.wasPressedThisFrame && starterShips.Count > 1) SelectShip(1);
-                if (keyboard.digit3Key.wasPressedThisFrame && starterShips.Count > 2) SelectShip(2);
+                int hotkeyShipIndex = ReadShipHotkey(keyboard);
+                if (hotkeyShipIndex >= 0 && availableShips != null && hotkeyShipIndex < availableShips.Count)
+                {
+                    SelectShip(hotkeyShipIndex);
+                }
 
                 if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame)
                 {
@@ -478,6 +512,20 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
+    private static int ReadShipHotkey(Keyboard keyboard)
+    {
+        if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) return 0;
+        if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) return 1;
+        if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) return 2;
+        if (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame) return 3;
+        if (keyboard.digit5Key.wasPressedThisFrame || keyboard.numpad5Key.wasPressedThisFrame) return 4;
+        if (keyboard.digit6Key.wasPressedThisFrame || keyboard.numpad6Key.wasPressedThisFrame) return 5;
+        if (keyboard.digit7Key.wasPressedThisFrame || keyboard.numpad7Key.wasPressedThisFrame) return 6;
+        if (keyboard.digit8Key.wasPressedThisFrame || keyboard.numpad8Key.wasPressedThisFrame) return 7;
+        if (keyboard.digit9Key.wasPressedThisFrame || keyboard.numpad9Key.wasPressedThisFrame) return 8;
+        return -1;
+    }
+
     private void LateUpdate()
     {
         if (player != null && player.Transform != null && mainCamera != null)
@@ -535,12 +583,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         UpdateStartMenuVisuals();
     }
 
-    private string GetShipRoleText(ShipDefinition ship)
+    private string GetShipRoleText(ShipDataSO ship)
     {
         return localizationService.GetShipRoleText(ship, currentLanguage == LanguageOption.RU);
     }
 
-    private string GetShipDescriptionText(ShipDefinition ship)
+    private string GetShipDescriptionText(ShipDataSO ship)
     {
         return localizationService.GetShipDescriptionText(ship, currentLanguage == LanguageOption.RU);
     }
@@ -580,64 +628,132 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void CreateStarterShips()
     {
-        starterShips.Clear();
-        starterShips.Add(new ShipDefinition
+        if (availableShips == null)
         {
-            Name = "Aegis",
-            Role = "Balanced Frigate",
-            Description = "Universal hull with reliable capacitor and solid survivability. Good first choice for learning the combat loop.",
-            Speed = 6.5f,
-            Acceleration = 11f,
-            Drag = 1.6f,
-            RotationResponsiveness = 8.5f,
-            MaxShield = 430f,
-            MaxArmor = 320f,
-            MaxHull = 220f,
-            MaxCapacitor = 1200f,
-            CapacitorRechargeTime = 92f,
-            DamageMultiplier = 1f,
-            RepairMultiplier = 1f,
-            AccentColor = new Color(0.28f, 0.6f, 0.94f, 1f),
-            AuraColor = new Color(0.38f, 0.76f, 1f, 0.72f)
-        });
-        starterShips.Add(new ShipDefinition
+            availableShips = new List<ShipDataSO>();
+        }
+
+        if (availableShips.Count > 0)
         {
-            Name = "Bulwark",
-            Role = "Heavy Cruiser",
-            Description = "Slow but durable platform with the best shields and armor. Repairs are stronger and capacitor is deep enough for long fights.",
-            Speed = 5.4f,
-            Acceleration = 8.2f,
-            Drag = 1.95f,
-            RotationResponsiveness = 6.6f,
-            MaxShield = 580f,
-            MaxArmor = 430f,
-            MaxHull = 290f,
-            MaxCapacitor = 1450f,
-            CapacitorRechargeTime = 88f,
-            DamageMultiplier = 0.94f,
-            RepairMultiplier = 1.22f,
-            AccentColor = new Color(0.18f, 0.78f, 0.8f, 1f),
-            AuraColor = new Color(0.42f, 1f, 0.92f, 0.72f)
-        });
-        starterShips.Add(new ShipDefinition
-        {
-            Name = "Raptor",
-            Role = "Strike Interceptor",
-            Description = "Fast hunter with stronger volleys and snappier capacitor recovery. Lower defenses reward mobility and target focus.",
-            Speed = 8f,
-            Acceleration = 13.4f,
-            Drag = 1.15f,
-            RotationResponsiveness = 10.5f,
-            MaxShield = 320f,
-            MaxArmor = 210f,
-            MaxHull = 170f,
-            MaxCapacitor = 1050f,
-            CapacitorRechargeTime = 72f,
-            DamageMultiplier = 1.2f,
-            RepairMultiplier = 0.9f,
-            AccentColor = new Color(1f, 0.58f, 0.18f, 1f),
-            AuraColor = new Color(1f, 0.75f, 0.36f, 0.72f)
-        });
+            return;
+        }
+
+        availableShips.Add(CreateRuntimeShipData(
+            "Aegis",
+            "Balanced Frigate",
+            "Сбалансированный фрегат",
+            "Universal hull with reliable capacitor and solid survivability. Good first choice for learning the combat loop.",
+            "Универсальный корпус с надежной энергетикой и хорошей живучестью.",
+            ShipClass.Medium,
+            6.5f,
+            11f,
+            8.5f,
+            1.6f,
+            430f,
+            320f,
+            220f,
+            1200f,
+            92f,
+            2,
+            4,
+            1f,
+            1f,
+            new Color(0.28f, 0.6f, 0.94f, 1f),
+            new Color(0.38f, 0.76f, 1f, 0.72f)));
+
+        availableShips.Add(CreateRuntimeShipData(
+            "Bulwark",
+            "Heavy Cruiser",
+            "Тяжёлый крейсер",
+            "Slow but durable platform with the best shields and armor. Repairs are stronger and capacitor is deep enough for long fights.",
+            "Медленный, но очень прочный корабль с мощными щитами и бронёй.",
+            ShipClass.Heavy,
+            5.4f,
+            8.2f,
+            6.6f,
+            1.95f,
+            580f,
+            430f,
+            290f,
+            1450f,
+            88f,
+            3,
+            4,
+            0.94f,
+            1.22f,
+            new Color(0.18f, 0.78f, 0.8f, 1f),
+            new Color(0.42f, 1f, 0.92f, 0.72f)));
+
+        availableShips.Add(CreateRuntimeShipData(
+            "Raptor",
+            "Strike Interceptor",
+            "Ударный перехватчик",
+            "Fast hunter with stronger volleys and snappier capacitor recovery. Lower defenses reward mobility and target focus.",
+            "Быстрый охотник с повышенным уроном. Требует мобильности и приоритета целей.",
+            ShipClass.Light,
+            8f,
+            13.4f,
+            10.5f,
+            1.15f,
+            320f,
+            210f,
+            170f,
+            1050f,
+            72f,
+            2,
+            3,
+            1.2f,
+            0.9f,
+            new Color(1f, 0.58f, 0.18f, 1f),
+            new Color(1f, 0.75f, 0.36f, 0.72f)));
+    }
+
+    private static ShipDataSO CreateRuntimeShipData(
+        string displayName,
+        string role,
+        string roleRu,
+        string description,
+        string descriptionRu,
+        ShipClass shipClass,
+        float maxSpeed,
+        float acceleration,
+        float rotationSpeed,
+        float drag,
+        float maxShield,
+        float maxArmor,
+        float maxHull,
+        float capacitor,
+        float capacitorRechargeTime,
+        int weaponSlotCount,
+        int moduleSlotCount,
+        float damageMultiplier,
+        float repairMultiplier,
+        Color accentColor,
+        Color auraColor)
+    {
+        ShipDataSO data = ScriptableObject.CreateInstance<ShipDataSO>();
+        data.displayName = displayName;
+        data.role = role;
+        data.roleRu = roleRu;
+        data.description = description;
+        data.descriptionRu = descriptionRu;
+        data.shipClass = shipClass;
+        data.maxSpeed = maxSpeed;
+        data.acceleration = acceleration;
+        data.rotationSpeed = rotationSpeed;
+        data.drag = drag;
+        data.maxShield = maxShield;
+        data.maxArmor = maxArmor;
+        data.maxHull = maxHull;
+        data.capacitor = capacitor;
+        data.capacitorRechargeTime = capacitorRechargeTime;
+        data.weaponSlotCount = weaponSlotCount;
+        data.moduleSlotCount = moduleSlotCount;
+        data.damageMultiplier = damageMultiplier;
+        data.repairMultiplier = repairMultiplier;
+        data.accentColor = accentColor;
+        data.auraColor = auraColor;
+        return data;
     }
 
     private void BuildWorld()
@@ -723,55 +839,61 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void SelectShip(int index)
     {
-        if (starterShips.Count == 0)
+        if (availableShips == null || availableShips.Count == 0)
         {
             return;
         }
 
-        selectedShipIndex = Mathf.Clamp(index, 0, starterShips.Count - 1);
-        ApplyShipDefinition(starterShips[selectedShipIndex], false);
+        selectedShipIndex = Mathf.Clamp(index, 0, availableShips.Count - 1);
+        ApplyShipDefinition(availableShips[selectedShipIndex], false);
         UpdateStartMenuVisuals();
     }
 
-    private void ApplyShipDefinition(ShipDefinition ship, bool resetProgress)
+    private void ApplyShipDefinition(ShipDataSO ship, bool resetProgress)
     {
-        if (player == null)
+        if (player == null || ship == null)
         {
             return;
         }
 
-        player.Speed = ship.Speed;
-        player.Acceleration = ship.Acceleration;
-        player.Drag = ship.Drag;
-        player.RotationResponsiveness = ship.RotationResponsiveness;
+        player.Speed = Mathf.Max(0.1f, ship.maxSpeed);
+        player.Acceleration = Mathf.Max(0.1f, ship.acceleration);
+        player.Drag = Mathf.Max(0f, ship.drag);
+        player.RotationResponsiveness = Mathf.Max(0.1f, ship.rotationSpeed);
         player.SpeedMultiplier = 1f;
-        player.DamageMultiplier = ship.DamageMultiplier;
-        player.RepairMultiplier = ship.RepairMultiplier;
-        player.MaxShield = ship.MaxShield;
-        player.Shield = ship.MaxShield;
-        player.MaxArmor = ship.MaxArmor;
-        player.Armor = ship.MaxArmor;
-        player.MaxHull = ship.MaxHull;
-        player.Hull = ship.MaxHull;
-        player.MaxCapacitor = ship.MaxCapacitor;
-        player.Capacitor = ship.MaxCapacitor;
-        player.CapacitorRechargeTime = ship.CapacitorRechargeTime;
+        player.DamageMultiplier = Mathf.Max(0.1f, ship.damageMultiplier);
+        player.RepairMultiplier = Mathf.Max(0.1f, ship.repairMultiplier);
+        player.MaxShield = Mathf.Max(1f, ship.maxShield);
+        player.Shield = player.MaxShield;
+        player.MaxArmor = Mathf.Max(1f, ship.maxArmor);
+        player.Armor = player.MaxArmor;
+        player.MaxHull = Mathf.Max(1f, ship.maxHull);
+        player.Hull = player.MaxHull;
+        player.MaxCapacitor = Mathf.Max(1f, ship.capacitor);
+        player.Capacitor = player.MaxCapacitor;
+        player.CapacitorRechargeTime = Mathf.Max(1f, ship.capacitorRechargeTime);
         player.Transform.position = Vector3.zero;
         player.Transform.rotation = Quaternion.identity;
         player.Velocity = Vector2.zero;
         player.MoveCommandActive = false;
 
+        playerMovementSettings.moveSpeed = player.Speed;
+        playerMovementSettings.rotationSpeed = ship.rotationSpeed;
+
         if (player.BodyRenderer != null)
         {
-            player.BodyRenderer.color = ship.AccentColor;
-            player.BaseBodyColor = ship.AccentColor;
+            player.BodyRenderer.color = ship.accentColor;
+            player.BaseBodyColor = ship.accentColor;
         }
 
         if (player.AuraRenderer != null)
         {
-            player.AuraRenderer.color = ship.AuraColor;
-            player.BaseAuraColor = ship.AuraColor;
+            player.AuraRenderer.color = ship.auraColor;
+            player.BaseAuraColor = ship.auraColor;
         }
+
+        CreateModules(ship.moduleSlotCount);
+        ConfigureEquipment(ship);
 
         if (resetProgress)
         {
@@ -781,8 +903,114 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
+    private void ConfigureEquipment(ShipDataSO ship)
+    {
+        if (player == null || player.Transform == null || ship == null)
+        {
+            return;
+        }
+
+        equipmentState.ShipData = ship;
+        equipmentState.ConfigureSlots(Mathf.Max(0, ship.weaponSlotCount), Mathf.Max(0, ship.moduleSlotCount));
+        RebuildWeaponSlots(ship.weaponSlotCount);
+
+        bool canInstallDefaultWeapon = CanShipUseWeapon(ship.shipClass, playerWeaponData);
+        for (int i = 0; i < equipmentState.InstalledWeapons.Count; i++)
+        {
+            equipmentState.InstalledWeapons[i] = canInstallDefaultWeapon ? playerWeaponData : null;
+            equipmentState.WeaponTimers[i] = 0f;
+        }
+
+        for (int i = 0; i < equipmentState.InstalledModules.Count; i++)
+        {
+            ModuleDataSO moduleData = defaultInstalledModules != null && i < defaultInstalledModules.Count
+                ? defaultInstalledModules[i]
+                : null;
+            equipmentState.InstalledModules[i] = moduleData;
+        }
+
+        if (!canInstallDefaultWeapon && playerWeaponData != null)
+        {
+            Debug.LogWarning(
+                "SpaceCombatSceneController: playerWeaponData is not compatible with ship class " + ship.shipClass +
+                ". Configure WeaponDataSO.requiredClass or assign a compatible weapon.");
+        }
+
+        NotifyEquipmentStateChanged();
+    }
+
+    private void RebuildWeaponSlots(int weaponSlotCount)
+    {
+        int slotCount = Mathf.Max(0, weaponSlotCount);
+
+        if (weaponSlotsRoot == null)
+        {
+            weaponSlotsRoot = new GameObject("WeaponSlots").transform;
+            weaponSlotsRoot.SetParent(player.Transform, false);
+        }
+
+        for (int i = weaponSlotsRoot.childCount - 1; i >= 0; i--)
+        {
+            Destroy(weaponSlotsRoot.GetChild(i).gameObject);
+        }
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            GameObject slotObject = new GameObject("WeaponSlot_" + (i + 1));
+            slotObject.transform.SetParent(weaponSlotsRoot, false);
+
+            float lerp = slotCount <= 1 ? 0.5f : i / (float)(slotCount - 1);
+            float x = Mathf.Lerp(-0.38f, 0.38f, lerp);
+            float y = Mathf.Lerp(0.58f, 0.66f, 1f - Mathf.Abs(lerp - 0.5f) * 2f);
+            slotObject.transform.localPosition = new Vector3(x, y, 0f);
+            slotObject.transform.localRotation = Quaternion.identity;
+
+            if (i < equipmentState.WeaponMuzzles.Count)
+            {
+                equipmentState.WeaponMuzzles[i] = slotObject.transform;
+            }
+        }
+    }
+
+    private static bool CanShipUseWeapon(ShipClass shipClass, WeaponDataSO weaponData)
+    {
+        if (weaponData == null)
+        {
+            return false;
+        }
+
+        return GetShipClassRank(shipClass) >= GetShipClassRank(weaponData.requiredClass);
+    }
+
+    private static int GetShipClassRank(ShipClass shipClass)
+    {
+        switch (shipClass)
+        {
+            case ShipClass.Light: return 0;
+            case ShipClass.Medium: return 1;
+            case ShipClass.Heavy: return 2;
+            default: return 0;
+        }
+    }
+
+    private void NotifyEquipmentStateChanged()
+    {
+        EquipmentStateChanged?.Invoke(equipmentState);
+        if (equipmentUiController != null)
+        {
+            equipmentUiController.Refresh(equipmentState);
+        }
+    }
+
     private void StartRun()
     {
+        if (availableShips == null || availableShips.Count == 0)
+        {
+            Debug.LogError("SpaceCombatSceneController: no ships configured in availableShips.");
+            return;
+        }
+        selectedShipIndex = Mathf.Clamp(selectedShipIndex, 0, availableShips.Count - 1);
+
         ShowStartMenu(false);
         gameStarted = true;
         gameOver = false;
@@ -806,9 +1034,9 @@ public class SpaceCombatSceneController : MonoBehaviour
             gateHintText.transform.parent.gameObject.SetActive(false);
         }
         ResetModules();
-        ApplyShipDefinition(starterShips[selectedShipIndex], true);
+        ApplyShipDefinition(availableShips[selectedShipIndex], true);
         StartWaveCountdown(waveSettings != null ? waveSettings.initialWaveDelay : 3f, false);
-        LogMessage(Localize("log_launch") + starterShips[selectedShipIndex].Name);
+        LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
     }
 
@@ -842,65 +1070,63 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateStartMenuVisuals()
     {
-        if (starterShips.Count == 0 || selectedShipIndex < 0 || selectedShipIndex >= starterShips.Count)
+        if (availableShips == null || availableShips.Count == 0 || selectedShipIndex < 0 || selectedShipIndex >= availableShips.Count)
         {
             return;
         }
 
-        ShipDefinition ship = starterShips[selectedShipIndex];
+        ShipDataSO ship = availableShips[selectedShipIndex];
         if (startMenuShipNameText != null)
         {
-            startMenuShipNameText.text = ship.Name;
+            startMenuShipNameText.text = ship.displayName;
             startMenuRoleText.text = GetShipRoleText(ship);
             startMenuDescriptionText.text = GetShipDescriptionText(ship);
             startMenuStatsText.text =
                 (currentLanguage == LanguageOption.RU
-                    ? "РЎРєРѕСЂРѕСЃС‚СЊ: " + ship.Speed.ToString("0.0") +
-                      "    Р©РёС‚: " + Mathf.RoundToInt(ship.MaxShield) +
-                      "    Р‘СЂРѕРЅСЏ: " + Mathf.RoundToInt(ship.MaxArmor) +
-                      "    РљРѕСЂРїСѓСЃ: " + Mathf.RoundToInt(ship.MaxHull) +
-                      "\nР­РЅРµСЂРіРёСЏ: " + Mathf.RoundToInt(ship.MaxCapacitor) +
-                      "    РџРµСЂРµР·Р°СЂСЏРґ: " + ship.CapacitorRechargeTime.ToString("0") + "СЃ" +
-                      "    РЈСЂРѕРЅ: x" + ship.DamageMultiplier.ToString("0.00") +
-                      "    Р РµРјРѕРЅС‚: x" + ship.RepairMultiplier.ToString("0.00")
-                    : "Speed: " + ship.Speed.ToString("0.0") +
-                      "    Shield: " + Mathf.RoundToInt(ship.MaxShield) +
-                      "    Armor: " + Mathf.RoundToInt(ship.MaxArmor) +
-                      "    Hull: " + Mathf.RoundToInt(ship.MaxHull) +
-                      "\nCapacitor: " + Mathf.RoundToInt(ship.MaxCapacitor) +
-                      "    Recharge: " + ship.CapacitorRechargeTime.ToString("0") + "s" +
-                      "    Damage: x" + ship.DamageMultiplier.ToString("0.00") +
-                      "    Repair: x" + ship.RepairMultiplier.ToString("0.00"));
-            startMenuPreviewImage.color = ship.AccentColor;
+                    ? "Скорость: " + ship.maxSpeed.ToString("0.0") +
+                      "    Щит: " + Mathf.RoundToInt(ship.maxShield) +
+                      "    Броня: " + Mathf.RoundToInt(ship.maxArmor) +
+                      "    Корпус: " + Mathf.RoundToInt(ship.maxHull) +
+                      "\nЭнергия: " + Mathf.RoundToInt(ship.capacitor) +
+                      "    Перезаряд: " + ship.capacitorRechargeTime.ToString("0") + "с" +
+                      "    Слоты оружия: " + Mathf.Max(0, ship.weaponSlotCount) +
+                      "    Слоты модулей: " + Mathf.Max(0, ship.moduleSlotCount)
+                    : "Speed: " + ship.maxSpeed.ToString("0.0") +
+                      "    Shield: " + Mathf.RoundToInt(ship.maxShield) +
+                      "    Armor: " + Mathf.RoundToInt(ship.maxArmor) +
+                      "    Hull: " + Mathf.RoundToInt(ship.maxHull) +
+                      "\nCapacitor: " + Mathf.RoundToInt(ship.capacitor) +
+                      "    Recharge: " + ship.capacitorRechargeTime.ToString("0") + "s" +
+                      "    Weapon slots: " + Mathf.Max(0, ship.weaponSlotCount) +
+                      "    Module slots: " + Mathf.Max(0, ship.moduleSlotCount));
+            startMenuPreviewImage.color = ship.accentColor;
         }
 
         if (startButtonImage != null)
         {
-            startButtonImage.color = Color.Lerp(new Color(0.12f, 0.3f, 0.42f, 1f), ship.AccentColor, 0.45f);
-            startButtonText.text = Localize("start_operation") + " " + ship.Name.ToUpperInvariant();
+            startButtonImage.color = Color.Lerp(new Color(0.12f, 0.3f, 0.42f, 1f), ship.accentColor, 0.45f);
+            startButtonText.text = Localize("start_operation") + " " + ship.displayName.ToUpperInvariant();
         }
 
         for (int i = 0; i < shipCardViews.Count; i++)
         {
-            ShipDefinition cardShip = starterShips[i];
+            ShipDataSO cardShip = availableShips[i];
             bool isSelected = i == selectedShipIndex;
             shipCardViews[i].Background.color = isSelected
                 ? new Color(0.12f, 0.26f, 0.36f, 1f)
                 : new Color(0.06f, 0.12f, 0.17f, 0.96f);
-            shipCardViews[i].Title.text = cardShip.Name + "\n<size=16>" + GetShipRoleText(cardShip) + "</size>";
-            shipCardViews[i].Title.color = isSelected ? cardShip.AccentColor : Color.white;
+            shipCardViews[i].Title.text = cardShip.displayName + "\n<size=16>" + GetShipRoleText(cardShip) + "</size>";
+            shipCardViews[i].Title.color = isSelected ? cardShip.accentColor : Color.white;
             shipCardViews[i].Stats.text =
                 (currentLanguage == LanguageOption.RU
-                    ? "Р©РёС‚ " + Mathf.RoundToInt(cardShip.MaxShield) +
-                      "  Р‘СЂРѕРЅСЏ " + Mathf.RoundToInt(cardShip.MaxArmor) +
-                      "\nР­РЅРµСЂРіРёСЏ " + Mathf.RoundToInt(cardShip.MaxCapacitor) +
-                      "  РЎРєРѕСЂРѕСЃС‚СЊ " + cardShip.Speed.ToString("0.0") +
-                      "\nРЈСЂРѕРЅ x" + cardShip.DamageMultiplier.ToString("0.00")
-                    : "Shield " + Mathf.RoundToInt(cardShip.MaxShield) +
-                      "  Armor " + Mathf.RoundToInt(cardShip.MaxArmor) +
-                      "\nCap " + Mathf.RoundToInt(cardShip.MaxCapacitor) +
-                      "  Speed " + cardShip.Speed.ToString("0.0") +
-                      "\nDamage x" + cardShip.DamageMultiplier.ToString("0.00"));
+                    ? "Щит " + Mathf.RoundToInt(cardShip.maxShield) +
+                      "  Броня " + Mathf.RoundToInt(cardShip.maxArmor) +
+                      "\nСкорость " + cardShip.maxSpeed.ToString("0.0") +
+                      "  Пушки " + Mathf.Max(0, cardShip.weaponSlotCount)
+                    : "Shield " + Mathf.RoundToInt(cardShip.maxShield) +
+                      "  Armor " + Mathf.RoundToInt(cardShip.maxArmor) +
+                      "\nSpeed " + cardShip.maxSpeed.ToString("0.0") +
+                      "  Guns " + Mathf.Max(0, cardShip.weaponSlotCount));
         }
 
         if (startMenuHintText != null)
@@ -909,45 +1135,59 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void CreateModules()
+    private void CreateModules(int moduleSlotCount)
     {
         modules.Clear();
+        int supportedSlots = Mathf.Clamp(Mathf.Max(1, moduleSlotCount), 1, 4);
+
         modules.Add(new ModuleState
         {
-            Name = "Pulse Laser",
+            Name = "Weapon Group",
             KeyLabel = "1",
             Type = ModuleType.Weapon,
-            CapPerShot = 9f,
+            CapPerShot = playerWeaponData != null ? playerWeaponData.capacitorPerShot : 9f,
             RateOfFire = playerWeaponData != null ? playerWeaponData.fireRate : 0.45f,
             Damage = playerWeaponData != null ? playerWeaponData.damage : 28f,
             OptimalRange = 5.1f,
             FalloffRange = 3.2f,
             WeaponData = playerWeaponData
         });
-        modules.Add(new ModuleState
+
+        if (supportedSlots > 1)
         {
-            Name = "Shield Rep",
-            KeyLabel = "2",
-            Type = ModuleType.ShieldRep,
-            CapPerSecond = 7f,
-            RepairPerSecond = 32f
-        });
-        modules.Add(new ModuleState
+            modules.Add(new ModuleState
+            {
+                Name = "Shield Rep",
+                KeyLabel = "2",
+                Type = ModuleType.ShieldRep,
+                CapPerSecond = 7f,
+                RepairPerSecond = 32f
+            });
+        }
+
+        if (supportedSlots > 2)
         {
-            Name = "Armor Rep",
-            KeyLabel = "3",
-            Type = ModuleType.ArmorRep,
-            CapPerSecond = 6f,
-            RepairPerSecond = 24f
-        });
-        modules.Add(new ModuleState
+            modules.Add(new ModuleState
+            {
+                Name = "Armor Rep",
+                KeyLabel = "3",
+                Type = ModuleType.ArmorRep,
+                CapPerSecond = 6f,
+                RepairPerSecond = 24f
+            });
+        }
+
+        if (supportedSlots > 3)
         {
-            Name = "Afterburn",
-            KeyLabel = "4",
-            Type = ModuleType.Afterburner,
-            CapPerSecond = 5f,
-            SpeedBonus = 1.55f
-        });
+            modules.Add(new ModuleState
+            {
+                Name = "Afterburn",
+                KeyLabel = "4",
+                Type = ModuleType.Afterburner,
+                CapPerSecond = 5f,
+                SpeedBonus = 1.55f
+            });
+        }
 
         BindModuleSlots();
     }
@@ -1464,7 +1704,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         cardsRoot.anchoredPosition = new Vector2(0f, -124f);
 
         shipCardViews.Clear();
-        for (int i = 0; i < starterShips.Count; i++)
+        int shipCount = availableShips != null ? availableShips.Count : 0;
+        for (int i = 0; i < shipCount; i++)
         {
             shipCardViews.Add(CreateShipCard(cardsRoot, i));
         }
@@ -1706,16 +1947,39 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void BindModuleSlots()
     {
-        for (int i = 0; i < modules.Count; i++)
+        for (int i = 0; i < 4; i++)
         {
-            if (modules[i].SlotImage == null)
+            if (modulePanelRect == null)
             {
                 continue;
             }
 
-            modules[i].SlotKey.text = "[" + modules[i].KeyLabel + "]";
-            modules[i].SlotTitle.text = modules[i].Name;
-            UpdateModuleVisual(modules[i]);
+            Transform slotTransform = modulePanelRect.Find("ModuleSlot_" + i);
+            if (slotTransform == null)
+            {
+                continue;
+            }
+
+            Image slotImage = slotTransform.GetComponent<Image>();
+            Text slotKey = slotTransform.Find("Key") != null ? slotTransform.Find("Key").GetComponent<Text>() : null;
+            Text slotTitle = slotTransform.Find("Label") != null ? slotTransform.Find("Label").GetComponent<Text>() : null;
+
+            if (i < modules.Count)
+            {
+                ModuleState module = modules[i];
+                module.SlotImage = slotImage;
+                module.SlotKey = slotKey;
+                module.SlotTitle = slotTitle;
+                module.SlotKey.text = "[" + module.KeyLabel + "]";
+                module.SlotTitle.text = module.Name;
+                UpdateModuleVisual(module);
+            }
+            else
+            {
+                if (slotKey != null) slotKey.text = string.Empty;
+                if (slotTitle != null) slotTitle.text = string.Empty;
+                if (slotImage != null) slotImage.color = new Color(0.05f, 0.1f, 0.14f, 0.45f);
+            }
         }
     }
 
@@ -2140,6 +2404,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             Enemies = enemies,
             Projectiles = projectiles,
             Modules = modules,
+            EquipmentState = equipmentState,
             TargetEnemy = targetEnemy,
             ProjectileRoot = projectileRoot,
             ProjectilePrefab = projectilePrefab,
@@ -2499,7 +2764,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         combatLogText.text = string.Join("\n", combatLog);
         capacitorText.text = Localize("capacitor") + Mathf.RoundToInt(player.CapacitorPercent * 100f) + "%";
         targetDisplayText.text = Localize("target_label") + (targetEnemy != null ? targetEnemy.Id + " (" + targetEnemy.Type + ")" : Localize("target_none_name"));
-        shipText.text = Localize("ship_label") + starterShips[selectedShipIndex].Name;
+        string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
+            ? availableShips[selectedShipIndex].displayName
+            : "-";
+        shipText.text = Localize("ship_label") + shipName;
         levelText.text = Localize("level_label") + player.Level;
         experienceText.text = Localize("xp_label") + player.Experience + " / " + player.ExperienceToNext;
 
@@ -2530,6 +2798,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (!waitingForNextWave || !gameStarted)
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
+        }
+
+        if (equipmentUiController != null)
+        {
+            equipmentUiController.RefreshCooldowns(equipmentState);
         }
 
         UpdateUI();

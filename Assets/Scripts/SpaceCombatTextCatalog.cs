@@ -75,30 +75,50 @@ internal sealed class SpaceCombatLocalizationService : ILocalizationService
         }
     }
 
-    public string GetShipRoleText(ShipDefinition ship, bool ru)
+    public string GetShipRoleText(ShipDataSO ship, bool ru)
     {
         if (!ru)
         {
-            return ship.Role;
+            return ship != null ? ship.role : string.Empty;
         }
 
-        switch (ship.Name)
+        if (ship == null)
+        {
+            return string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ship.roleRu))
+        {
+            return ship.roleRu;
+        }
+
+        switch (ship.displayName)
         {
             case "Aegis": return "Сбалансированный фрегат";
             case "Bulwark": return "Тяжёлый крейсер";
             case "Raptor": return "Ударный перехватчик";
-            default: return ship.Role;
+            default: return ship.role;
         }
     }
 
-    public string GetShipDescriptionText(ShipDefinition ship, bool ru)
+    public string GetShipDescriptionText(ShipDataSO ship, bool ru)
     {
         if (!ru)
         {
-            return ship.Description;
+            return ship != null ? ship.description : string.Empty;
         }
 
-        switch (ship.Name)
+        if (ship == null)
+        {
+            return string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ship.descriptionRu))
+        {
+            return ship.descriptionRu;
+        }
+
+        switch (ship.displayName)
         {
             case "Aegis":
                 return "Универсальный корабль с надёжной энергосистемой и хорошей живучестью. Лучший выбор для спокойного старта.";
@@ -107,7 +127,7 @@ internal sealed class SpaceCombatLocalizationService : ILocalizationService
             case "Raptor":
                 return "Быстрый охотник с повышенным уроном и бодрым восстановлением энергии. Требует движения и точного приоритета целей.";
             default:
-                return ship.Description;
+                return ship.description;
         }
     }
 }

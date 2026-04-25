@@ -9,6 +9,7 @@ internal sealed class CombatUpdateContext
     public List<EnemyShip> Enemies;
     public List<Projectile> Projectiles;
     public List<ModuleState> Modules;
+    public ShipEquipmentState EquipmentState;
     public EnemyShip TargetEnemy;
     public Transform ProjectileRoot;
     public GameObject ProjectilePrefab;
@@ -43,6 +44,7 @@ internal sealed class CombatService : ICombatService
 
         UpdateEnemies(context, deltaTime);
         UpdateModules(context, deltaTime);
+        UpdateInstalledWeapons(context, deltaTime);
         UpdateProjectiles(context, deltaTime);
 
         return new CombatUpdateResult(context.TargetEnemy, levelUpRequested);
@@ -151,6 +153,12 @@ internal sealed class CombatService : ICombatService
 
     private void UpdateModules(CombatUpdateContext context, float deltaTime)
     {
+        if (context.Modules == null)
+        {
+            context.Player.SpeedMultiplier = 1f;
+            return;
+        }
+
         bool afterburnerActive = false;
 
         for (int i = 0; i < context.Modules.Count; i++)
@@ -163,53 +171,30 @@ internal sealed class CombatService : ICombatService
 
             if (module.Type == ModuleType.Weapon)
             {
-                WeaponDataSO weaponData = module.WeaponData != null ? module.WeaponData : defaultWeaponData;
-                float fireRate = weaponData != null ? weaponData.fireRate : module.RateOfFire;
-                fireRate = Mathf.Max(0.05f, fireRate);
-                module.WeaponTimer += deltaTime;
-                while (module.WeaponTimer >= fireRate)
-                {
-                    module.WeaponTimer -= fireRate;
-                    if (context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
-                    {
-                        break;
-                    }
-
-                    if (!context.Player.ConsumeCapacitor(module.CapPerShot))
-                    {
-                        module.Active = false;
-                        context.UpdateModuleVisual?.Invoke(module);
-                        context.LogMessage?.Invoke(context.Localize("log_cap_dry") + module.Name + context.Localize("log_offline"), "critical");
-                        break;
-                    }
-
-                    FireWeapon(context, module, weaponData);
-                }
+                continue;
             }
-            else
-            {
-                float capUse = module.CapPerSecond * deltaTime;
-                if (!context.Player.ConsumeCapacitor(capUse))
-                {
-                    module.Active = false;
-                    context.UpdateModuleVisual?.Invoke(module);
-                    context.LogMessage?.Invoke(context.Localize("log_cap_insufficient") + module.Name, "warning");
-                    continue;
-                }
 
-                if (module.Type == ModuleType.ShieldRep)
-                {
-                    context.Player.HealShield(module.RepairPerSecond * context.Player.RepairMultiplier * deltaTime);
-                }
-                else if (module.Type == ModuleType.ArmorRep)
-                {
-                    context.Player.HealArmor(module.RepairPerSecond * context.Player.RepairMultiplier * deltaTime);
-                }
-                else if (module.Type == ModuleType.Afterburner)
-                {
-                    afterburnerActive = true;
-                    context.Player.SpeedMultiplier = module.SpeedBonus;
-                }
+            float capUse = module.CapPerSecond * deltaTime;
+            if (!context.Player.ConsumeCapacitor(capUse))
+            {
+                module.Active = false;
+                context.UpdateModuleVisual?.Invoke(module);
+                context.LogMessage?.Invoke(context.Localize("log_cap_insufficient") + module.Name, "warning");
+                continue;
+            }
+
+            if (module.Type == ModuleType.ShieldRep)
+            {
+                context.Player.HealShield(module.RepairPerSecond * context.Player.RepairMultiplier * deltaTime);
+            }
+            else if (module.Type == ModuleType.ArmorRep)
+            {
+                context.Player.HealArmor(module.RepairPerSecond * context.Player.RepairMultiplier * deltaTime);
+            }
+            else if (module.Type == ModuleType.Afterburner)
+            {
+                afterburnerActive = true;
+                context.Player.SpeedMultiplier = module.SpeedBonus;
             }
         }
 
@@ -219,7 +204,86 @@ internal sealed class CombatService : ICombatService
         }
     }
 
-    private void FireWeapon(CombatUpdateContext context, ModuleState module, WeaponDataSO weaponData)
+    private void UpdateInstalledWeapons(CombatUpdateContext context, float deltaTime)
+    {
+        if (context.EquipmentState == null || context.EquipmentState.InstalledWeapons.Count == 0)
+        {
+            return;
+        }
+
+        while (context.EquipmentState.WeaponTimers.Count < context.EquipmentState.InstalledWeapons.Count)
+        {
+            context.EquipmentState.WeaponTimers.Add(0f);
+        }
+
+        ModuleState weaponControlModule = GetWeaponControlModule(context.Modules);
+        if (weaponControlModule == null || !weaponControlModule.Active)
+        {
+            return;
+        }
+
+        for (int slotIndex = 0; slotIndex < context.EquipmentState.InstalledWeapons.Count; slotIndex++)
+        {
+            WeaponDataSO weaponData = context.EquipmentState.InstalledWeapons[slotIndex];
+            if (weaponData == null)
+            {
+                continue;
+            }
+
+            float fireRate = Mathf.Max(0.05f, weaponData.fireRate);
+            float timer = context.EquipmentState.WeaponTimers[slotIndex] + deltaTime;
+
+            while (timer >= fireRate)
+            {
+                timer -= fireRate;
+
+                if (context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
+                {
+                    break;
+                }
+
+                float capacitorPerShot = Mathf.Max(0f, weaponData.capacitorPerShot > 0f ? weaponData.capacitorPerShot : weaponControlModule.CapPerShot);
+                if (!context.Player.ConsumeCapacitor(capacitorPerShot))
+                {
+                    weaponControlModule.Active = false;
+                    context.UpdateModuleVisual?.Invoke(weaponControlModule);
+                    context.LogMessage?.Invoke(context.Localize("log_cap_dry") + weaponControlModule.Name + context.Localize("log_offline"), "critical");
+                    timer = 0f;
+                    break;
+                }
+
+                Vector3 muzzlePosition = context.Player.Transform.position;
+                if (slotIndex < context.EquipmentState.WeaponMuzzles.Count && context.EquipmentState.WeaponMuzzles[slotIndex] != null)
+                {
+                    muzzlePosition = context.EquipmentState.WeaponMuzzles[slotIndex].position;
+                }
+
+                FireWeapon(context, weaponControlModule, weaponData, muzzlePosition);
+            }
+
+            context.EquipmentState.WeaponTimers[slotIndex] = timer;
+        }
+    }
+
+    private static ModuleState GetWeaponControlModule(List<ModuleState> modules)
+    {
+        if (modules == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < modules.Count; i++)
+        {
+            if (modules[i].Type == ModuleType.Weapon)
+            {
+                return modules[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void FireWeapon(CombatUpdateContext context, ModuleState weaponControlModule, WeaponDataSO weaponData, Vector3 origin)
     {
         if (context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
         {
@@ -241,9 +305,9 @@ internal sealed class CombatService : ICombatService
 
         float distance = Vector3.Distance(context.Player.Transform.position, context.TargetEnemy.Transform.position);
         float hitChance = 1f;
-        if (distance > module.OptimalRange)
+        if (distance > weaponControlModule.OptimalRange)
         {
-            float exponent = Mathf.Pow((distance - module.OptimalRange) / Mathf.Max(0.5f, module.FalloffRange), 2f);
+            float exponent = Mathf.Pow((distance - weaponControlModule.OptimalRange) / Mathf.Max(0.5f, weaponControlModule.FalloffRange), 2f);
             hitChance = Mathf.Pow(0.5f, exponent);
         }
 
@@ -258,7 +322,7 @@ internal sealed class CombatService : ICombatService
         {
             return;
         }
-        projectileObject.transform.position = context.Player.Transform.position;
+        projectileObject.transform.position = origin;
 
         SpriteRenderer renderer = projectileObject.GetComponent<SpriteRenderer>();
         if (renderer == null)
@@ -270,7 +334,7 @@ internal sealed class CombatService : ICombatService
         projectileObject.transform.localScale = new Vector3(0.12f, 0.12f, 1f);
 
         float projectileSpeed = weaponData != null ? weaponData.projectileSpeed : 18f;
-        float weaponDamage = weaponData != null ? weaponData.damage : module.Damage;
+        float weaponDamage = weaponData != null ? weaponData.damage : weaponControlModule.Damage;
 
         context.Projectiles.Add(new Projectile
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -85,6 +86,39 @@ internal sealed class ModuleState
     public Text SlotKey;
 }
 
+public sealed class ShipEquipmentState
+{
+    public ShipDataSO ShipData;
+    public readonly List<WeaponDataSO> InstalledWeapons = new List<WeaponDataSO>();
+    public readonly List<ModuleDataSO> InstalledModules = new List<ModuleDataSO>();
+    public readonly List<Transform> WeaponMuzzles = new List<Transform>();
+    public readonly List<float> WeaponTimers = new List<float>();
+
+    public void ConfigureSlots(int weaponSlotCount, int moduleSlotCount)
+    {
+        int sanitizedWeaponSlots = Mathf.Max(0, weaponSlotCount);
+        int sanitizedModuleSlots = Mathf.Max(0, moduleSlotCount);
+
+        Resize(InstalledWeapons, sanitizedWeaponSlots);
+        Resize(WeaponMuzzles, sanitizedWeaponSlots);
+        Resize(WeaponTimers, sanitizedWeaponSlots);
+        Resize(InstalledModules, sanitizedModuleSlots);
+    }
+
+    private static void Resize<T>(List<T> list, int targetCount)
+    {
+        while (list.Count < targetCount)
+        {
+            list.Add(default(T));
+        }
+
+        while (list.Count > targetCount)
+        {
+            list.RemoveAt(list.Count - 1);
+        }
+    }
+}
+
 internal sealed class PerkChoice
 {
     public string Label;
@@ -99,26 +133,6 @@ internal sealed class EnemyRow
     public Image HullFill;
     public RectTransform RootTransform;
     public EnemyShip Enemy;
-}
-
-internal sealed class ShipDefinition
-{
-    public string Name;
-    public string Role;
-    public string Description;
-    public float Speed;
-    public float Acceleration;
-    public float Drag;
-    public float RotationResponsiveness;
-    public float MaxShield;
-    public float MaxArmor;
-    public float MaxHull;
-    public float MaxCapacitor;
-    public float CapacitorRechargeTime;
-    public float DamageMultiplier;
-    public float RepairMultiplier;
-    public Color AccentColor;
-    public Color AuraColor;
 }
 
 internal sealed class ShipCardView

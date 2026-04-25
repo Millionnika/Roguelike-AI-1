@@ -37,8 +37,8 @@ internal interface IPoolService
 internal interface ILocalizationService
 {
     string Localize(string key, bool ru);
-    string GetShipRoleText(ShipDefinition ship, bool ru);
-    string GetShipDescriptionText(ShipDefinition ship, bool ru);
+    string GetShipRoleText(ShipDataSO ship, bool ru);
+    string GetShipDescriptionText(ShipDataSO ship, bool ru);
 }
 
 internal interface IBackgroundParallaxService
