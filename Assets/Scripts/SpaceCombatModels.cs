@@ -47,31 +47,6 @@ internal sealed class EnemyShip
         return Hull > 0f;
     }
 
-    public bool TakeDamage(float amount)
-    {
-        float remaining = amount;
-
-        if (Shield > 0f)
-        {
-            float absorbed = Mathf.Min(Shield, remaining);
-            Shield -= absorbed;
-            remaining -= absorbed;
-        }
-
-        if (remaining > 0f && Armor > 0f)
-        {
-            float absorbed = Mathf.Min(Armor, remaining);
-            Armor -= absorbed;
-            remaining -= absorbed;
-        }
-
-        if (remaining > 0f)
-        {
-            Hull = Mathf.Max(0f, Hull - remaining);
-        }
-
-        return Hull <= 0f;
-    }
 }
 
 internal sealed class Projectile

@@ -2,12 +2,23 @@
 using System.Collections.Generic;
 using System.Text;
 using SpaceFrontier.Player;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class SpaceCombatSceneController : MonoBehaviour
 {
+    [Header("Prefabs")]
+    [SerializeField] private GameObject projectilePrefab;
+    [SerializeField] private GameObject beamPrefab;
+    [SerializeField] private GameObject engineParticlePrefab;
+
+    [Header("UI References")]
+    [SerializeField] private Slider healthBar;
+    [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private TMP_Text waveText;
+
     private enum StartMenuPage
     {
         Main,
@@ -38,6 +49,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
 
     private IPlatformService platformService;
+    private ICombatService combatService;
+    private IPoolService poolService;
     private ILocalizationService localizationService;
     private ISpaceCombatUiFactory uiFactory;
 
@@ -133,9 +146,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool joystickDragging;
     private Vector2 joystickVector;
 
-    internal void ConfigureServices(IPlatformService newPlatformService, ILocalizationService newLocalizationService, ISpaceCombatUiFactory newUiFactory)
+    internal void ConfigureServices(IPlatformService newPlatformService, ICombatService newCombatService, IPoolService newPoolService, ILocalizationService newLocalizationService, ISpaceCombatUiFactory newUiFactory)
     {
         platformService = newPlatformService;
+        combatService = newCombatService;
+        poolService = newPoolService;
         localizationService = newLocalizationService;
         uiFactory = newUiFactory;
     }
@@ -143,13 +158,29 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void EnsureServices()
     {
         platformService ??= new RuntimePlatformService();
+        combatService ??= new CombatService();
+        poolService ??= new PoolService();
         localizationService ??= new SpaceCombatLocalizationService();
         uiFactory ??= new SpaceCombatUiFactory();
+
+        if (projectilePrefab != null)
+        {
+            poolService.InitializePool(projectilePrefab, 24);
+        }
+        if (beamPrefab != null)
+        {
+            poolService.InitializePool(beamPrefab, 16);
+        }
+        if (engineParticlePrefab != null)
+        {
+            poolService.InitializePool(engineParticlePrefab, 32);
+        }
     }
 
     private void Awake()
     {
         EnsureServices();
+        ValidateSerializedReferences();
         mainCamera = Camera.main;
         useVirtualJoystick = platformService.ShouldUseVirtualJoystick();
         if (mainCamera == null)
@@ -174,6 +205,35 @@ public class SpaceCombatSceneController : MonoBehaviour
         LogMessage(Localize("log_docked"));
         LogMessage(Localize("log_choose_hull"));
         UpdateHud();
+    }
+
+    private void ValidateSerializedReferences()
+    {
+        if (projectilePrefab == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: projectilePrefab is not assigned.", this);
+        }
+        if (beamPrefab == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: beamPrefab is not assigned.", this);
+        }
+        if (engineParticlePrefab == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: engineParticlePrefab is not assigned.", this);
+        }
+
+        if (healthBar == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: healthBar is not assigned.", this);
+        }
+        if (scoreText == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: scoreText is not assigned.", this);
+        }
+        if (waveText == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: waveText is not assigned.", this);
+        }
     }
 
     private void Update()
@@ -202,9 +262,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         HandleInput(deltaTime);
         UpdatePlayer(deltaTime);
-        UpdateEnemies(deltaTime);
-        UpdateModules(deltaTime);
-        UpdateProjectiles(deltaTime);
+        UpdateCombat(deltaTime);
         UpdateGate();
         UpdateEffects(deltaTime);
         UpdateVisuals();
@@ -957,7 +1015,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             if (projectiles[i].Transform != null)
             {
-                Destroy(projectiles[i].Transform.gameObject);
+                if (projectilePrefab != null)
+                {
+                    poolService.Return(projectilePrefab, projectiles[i].Transform.gameObject);
+                }
             }
         }
 
@@ -1891,214 +1952,29 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void UpdateEnemies(float deltaTime)
+    private void UpdateCombat(float deltaTime)
     {
-        Vector3 playerPosition = player.Transform.position;
-        for (int i = enemies.Count - 1; i >= 0; i--)
+        CombatUpdateContext context = new CombatUpdateContext
         {
-            EnemyShip enemy = enemies[i];
-            if (!enemy.IsAlive())
-            {
-                continue;
-            }
+            Player = player,
+            Enemies = enemies,
+            Projectiles = projectiles,
+            Modules = modules,
+            TargetEnemy = targetEnemy,
+            ProjectileRoot = projectileRoot,
+            ProjectilePrefab = projectilePrefab,
+            PoolService = poolService,
+            Wave = wave,
+            Localize = Localize,
+            LogMessage = LogMessage,
+            UpdateModuleVisual = UpdateModuleVisual,
+            CreateAttackBeam = CreateAttackBeam
+        };
 
-            Vector3 direction = enemy.Transform.position - playerPosition;
-            float currentDistance = direction.magnitude;
-            if (currentDistance > 0.01f)
-            {
-                Vector3 radialDirection = direction.normalized;
-                float radialShift = (enemy.OrbitDistance - currentDistance) * deltaTime;
-                enemy.Transform.position += radialDirection * radialShift;
-            }
+        CombatUpdateResult result = combatService.UpdateFrame(context, deltaTime);
+        targetEnemy = result.TargetEnemy;
 
-            enemy.OrbitAngle += enemy.OrbitSpeed * deltaTime;
-            Vector3 tangent = new Vector3(-Mathf.Sin(enemy.OrbitAngle), Mathf.Cos(enemy.OrbitAngle), 0f);
-            enemy.Transform.position += tangent * enemy.DriftSpeed * deltaTime;
-
-            Vector3 toPlayer = playerPosition - enemy.Transform.position;
-            if (toPlayer.sqrMagnitude > 0.001f)
-            {
-                float lookAngle = Mathf.Atan2(toPlayer.y, toPlayer.x) * Mathf.Rad2Deg - 90f;
-                enemy.Transform.rotation = Quaternion.Euler(0f, 0f, lookAngle);
-            }
-
-            enemy.AttackTimer += deltaTime;
-            enemy.AttackFlashTimer = Mathf.Max(0f, enemy.AttackFlashTimer - deltaTime * 4f);
-            enemy.HitFlashTimer = Mathf.Max(0f, enemy.HitFlashTimer - deltaTime * 4.5f);
-            if (enemy.AttackTimer >= enemy.AttackCooldown && toPlayer.magnitude <= 3.8f)
-            {
-                enemy.AttackTimer = 0f;
-                enemy.AttackFlashTimer = 1f;
-                player.ApplyDamage(enemy.Damage);
-                player.HitFlashTimer = 1f;
-                CreateAttackBeam(enemy.Transform.position, player.Transform.position, new Color(1f, 0.32f, 0.24f, 0.95f));
-                LogMessage(enemy.Id + Localize("log_enemy_hits") + Mathf.RoundToInt(enemy.Damage), "hit");
-            }
-        }
-    }
-
-    private void UpdateModules(float deltaTime)
-    {
-        bool afterburnerActive = false;
-
-        for (int i = 0; i < modules.Count; i++)
-        {
-            ModuleState module = modules[i];
-            if (!module.Active)
-            {
-                continue;
-            }
-
-            if (module.Type == ModuleType.Weapon)
-            {
-                module.WeaponTimer += deltaTime;
-                while (module.WeaponTimer >= module.RateOfFire)
-                {
-                    module.WeaponTimer -= module.RateOfFire;
-                    if (targetEnemy == null || !targetEnemy.IsAlive())
-                    {
-                        break;
-                    }
-
-                    if (!player.ConsumeCapacitor(module.CapPerShot))
-                    {
-                        module.Active = false;
-                        UpdateModuleVisual(module);
-                        LogMessage(Localize("log_cap_dry") + module.Name + Localize("log_offline"), "critical");
-                        break;
-                    }
-
-                    FireWeapon(module);
-                }
-            }
-            else
-            {
-                float capUse = module.CapPerSecond * deltaTime;
-                if (!player.ConsumeCapacitor(capUse))
-                {
-                    module.Active = false;
-                    UpdateModuleVisual(module);
-                    LogMessage(Localize("log_cap_insufficient") + module.Name, "warning");
-                    continue;
-                }
-
-                if (module.Type == ModuleType.ShieldRep)
-                {
-                    player.HealShield(module.RepairPerSecond * player.RepairMultiplier * deltaTime);
-                }
-                else if (module.Type == ModuleType.ArmorRep)
-                {
-                    player.HealArmor(module.RepairPerSecond * player.RepairMultiplier * deltaTime);
-                }
-                else if (module.Type == ModuleType.Afterburner)
-                {
-                    afterburnerActive = true;
-                    player.SpeedMultiplier = module.SpeedBonus;
-                }
-            }
-        }
-
-        if (!afterburnerActive)
-        {
-            player.SpeedMultiplier = 1f;
-        }
-    }
-
-    private void FireWeapon(ModuleState module)
-    {
-        if (targetEnemy == null || !targetEnemy.IsAlive())
-        {
-            return;
-        }
-
-        float distance = Vector3.Distance(player.Transform.position, targetEnemy.Transform.position);
-        float hitChance = 1f;
-        if (distance > module.OptimalRange)
-        {
-            float exponent = Mathf.Pow((distance - module.OptimalRange) / Mathf.Max(0.5f, module.FalloffRange), 2f);
-            hitChance = Mathf.Pow(0.5f, exponent);
-        }
-
-        if (UnityEngine.Random.value > hitChance)
-        {
-            LogMessage(Localize("log_shot_missed") + targetEnemy.Id, "miss");
-            return;
-        }
-
-        GameObject projectileObject = new GameObject("Projectile");
-        projectileObject.transform.SetParent(projectileRoot, false);
-        projectileObject.transform.position = player.Transform.position;
-
-        SpriteRenderer renderer = projectileObject.AddComponent<SpriteRenderer>();
-        renderer.sprite = circleSprite;
-        renderer.color = new Color(1f, 0.87f, 0.4f, 1f);
-        renderer.sortingOrder = 6;
-        projectileObject.transform.localScale = new Vector3(0.12f, 0.12f, 1f);
-
-        projectiles.Add(new Projectile
-        {
-            Transform = projectileObject.transform,
-            Renderer = renderer,
-            Target = targetEnemy,
-            Damage = module.Damage * player.DamageMultiplier
-        });
-    }
-
-    private void UpdateProjectiles(float deltaTime)
-    {
-        for (int i = projectiles.Count - 1; i >= 0; i--)
-        {
-            Projectile projectile = projectiles[i];
-            if (projectile.Target == null || !projectile.Target.IsAlive())
-            {
-                Destroy(projectile.Transform.gameObject);
-                projectiles.RemoveAt(i);
-                continue;
-            }
-
-            Vector3 toTarget = projectile.Target.Transform.position - projectile.Transform.position;
-            float moveDistance = projectile.Speed * deltaTime;
-            if (toTarget.magnitude <= moveDistance + 0.2f)
-            {
-                bool destroyed = projectile.Target.TakeDamage(projectile.Damage);
-                projectile.Target.HitFlashTimer = 1f;
-                LogMessage(Localize("log_hit") + projectile.Target.Id + Localize("log_for") + Mathf.RoundToInt(projectile.Damage), "hit");
-                Destroy(projectile.Transform.gameObject);
-                projectiles.RemoveAt(i);
-
-                if (destroyed)
-                {
-                    HandleEnemyDestroyed(projectile.Target);
-                }
-
-                continue;
-            }
-
-            projectile.Lifetime += deltaTime;
-            float pulse = 1f + Mathf.Sin(projectile.Lifetime * 20f) * 0.15f;
-            projectile.Transform.localScale = new Vector3(0.12f * pulse, 0.12f * pulse, 1f);
-            projectile.Transform.position += toTarget.normalized * moveDistance;
-        }
-    }
-
-    private void HandleEnemyDestroyed(EnemyShip enemy)
-    {
-        LogMessage(enemy.Id + Localize("log_destroyed"), "warning");
-        player.AddExperience(40 + wave * 8);
-        enemies.Remove(enemy);
-
-        if (enemy.Transform != null)
-        {
-            Destroy(enemy.Transform.gameObject);
-        }
-
-        if (targetEnemy == enemy)
-        {
-            targetEnemy = enemies.Count > 0 ? enemies[0] : null;
-            UpdateTargetState();
-        }
-
-        if (player.Experience >= player.ExperienceToNext)
+        if (result.LevelUpRequested)
         {
             BeginLevelUp();
         }
@@ -2239,7 +2115,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             beam.Transform.localScale = new Vector3(beam.Transform.localScale.x, Mathf.Lerp(0.18f, 0.05f, t), 1f);
             if (beam.Lifetime >= beam.Duration)
             {
-                Destroy(beam.Transform.gameObject);
+                if (beamPrefab != null)
+                {
+                    poolService.Return(beamPrefab, beam.Transform.gameObject);
+                }
                 attackBeams.RemoveAt(i);
             }
         }
@@ -2256,7 +2135,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             particle.Transform.localScale = Vector3.one * Mathf.Lerp(0.14f, 0.04f, t);
             if (particle.Lifetime >= particle.Duration)
             {
-                Destroy(particle.Transform.gameObject);
+                if (engineParticlePrefab != null)
+                {
+                    poolService.Return(engineParticlePrefab, particle.Transform.gameObject);
+                }
                 engineParticles.RemoveAt(i);
             }
         }
@@ -2264,15 +2146,27 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void CreateAttackBeam(Vector3 start, Vector3 end, Color color)
     {
-        GameObject beamObject = new GameObject("AttackBeam");
-        beamObject.transform.SetParent(projectileRoot, false);
+        if (beamPrefab == null)
+        {
+            return;
+        }
+
+        GameObject beamObject = poolService.Get(beamPrefab, projectileRoot);
+        if (beamObject == null)
+        {
+            return;
+        }
         Vector3 delta = end - start;
         float length = Mathf.Max(0.2f, delta.magnitude);
         beamObject.transform.position = (start + end) * 0.5f;
         beamObject.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
         beamObject.transform.localScale = new Vector3(length, 0.18f, 1f);
 
-        SpriteRenderer renderer = beamObject.AddComponent<SpriteRenderer>();
+        SpriteRenderer renderer = beamObject.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = beamObject.AddComponent<SpriteRenderer>();
+        }
         renderer.sprite = squareSprite;
         renderer.color = color;
         renderer.sortingOrder = 7;
@@ -2292,12 +2186,24 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        GameObject particleObject = new GameObject("EngineParticle");
-        particleObject.transform.SetParent(projectileRoot, false);
+        if (engineParticlePrefab == null)
+        {
+            return;
+        }
+
+        GameObject particleObject = poolService.Get(engineParticlePrefab, projectileRoot);
+        if (particleObject == null)
+        {
+            return;
+        }
         particleObject.transform.position = position + direction.normalized * 0.08f;
         particleObject.transform.localScale = Vector3.one * 0.12f;
 
-        SpriteRenderer renderer = particleObject.AddComponent<SpriteRenderer>();
+        SpriteRenderer renderer = particleObject.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = particleObject.AddComponent<SpriteRenderer>();
+        }
         renderer.sprite = circleSprite;
         renderer.sortingOrder = 2;
         Color color = baseColor;
@@ -2411,6 +2317,31 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (!gateActive || !gameStarted)
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
+        }
+
+        UpdateUI();
+    }
+
+    private void UpdateUI()
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        if (healthBar != null)
+        {
+            healthBar.value = player.HullPercent;
+        }
+
+        if (scoreText != null)
+        {
+            scoreText.text = player.Experience.ToString();
+        }
+
+        if (waveText != null)
+        {
+            waveText.text = wave.ToString();
         }
     }
 

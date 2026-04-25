@@ -144,11 +144,6 @@ namespace SpaceFrontier.Player
             return Stats.ConsumeCapacitor(amount);
         }
 
-        public void ApplyDamage(float amount)
-        {
-            Stats.ApplyDamage(amount);
-        }
-
         public void HealShield(float amount)
         {
             Stats.HealShield(amount);

@@ -52,30 +52,6 @@ namespace SpaceFrontier.Player
             return true;
         }
 
-        public void ApplyDamage(float amount)
-        {
-            float remaining = amount;
-
-            if (Shield > 0f)
-            {
-                float absorbed = Mathf.Min(Shield, remaining);
-                Shield -= absorbed;
-                remaining -= absorbed;
-            }
-
-            if (remaining > 0f && Armor > 0f)
-            {
-                float absorbed = Mathf.Min(Armor, remaining);
-                Armor -= absorbed;
-                remaining -= absorbed;
-            }
-
-            if (remaining > 0f)
-            {
-                Hull = Mathf.Max(0f, Hull - remaining);
-            }
-        }
-
         public void HealShield(float amount)
         {
             Shield = Mathf.Min(MaxShield, Shield + amount);

@@ -8,6 +8,20 @@ internal interface IPlatformService
     bool ShouldUseVirtualJoystick();
 }
 
+internal interface ICombatService
+{
+    CombatUpdateResult UpdateFrame(CombatUpdateContext context, float deltaTime);
+    void ApplyDamage(SpaceFrontier.Player.PlayerStats stats, float amount);
+    bool ApplyDamage(EnemyShip enemy, float amount);
+}
+
+internal interface IPoolService
+{
+    GameObject Get(GameObject prefab, Transform parent);
+    void Return(GameObject prefab, GameObject instance);
+    void InitializePool(GameObject prefab, int initialCount);
+}
+
 internal interface ILocalizationService
 {
     string Localize(string key, bool ru);
