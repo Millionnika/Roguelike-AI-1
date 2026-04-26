@@ -10,9 +10,7 @@ using UnityEngine.UI;
 public class SpaceCombatSceneController : MonoBehaviour
 {
     [Header("Prefabs")]
-    [SerializeField] private GameObject projectilePrefab;
     [SerializeField] private GameObject beamPrefab;
-    [SerializeField] private GameObject engineParticlePrefab;
 
     [Header("UI References")]
     [SerializeField] private Slider healthBar;
@@ -22,8 +20,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private SlotUI slotUiPrefab;
 
     [Header("Data")]
-    [SerializeField] private MovementSettingsSO playerMovementSettings;
-    [SerializeField] private WeaponDataSO playerWeaponData;
     [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
     [SerializeField] public WaveTimelineSO currentTimeline;
 
@@ -70,7 +66,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
     private readonly List<AttackBeamEffect> attackBeams = new List<AttackBeamEffect>();
-    private readonly List<EngineParticle> engineParticles = new List<EngineParticle>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
@@ -217,23 +212,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         localizationService ??= new SpaceCombatLocalizationService();
         uiFactory ??= new SpaceCombatUiFactory();
         backgroundParallaxService ??= new BackgroundParallaxService();
-        combatService.SetDefaultWeaponData(playerWeaponData);
-
-        if (projectilePrefab != null)
-        {
-            poolService.InitializePool(projectilePrefab, 24);
-        }
-        if (playerWeaponData != null && playerWeaponData.projectilePrefab != null)
-        {
-            poolService.InitializePool(playerWeaponData.projectilePrefab, 24);
-        }
         if (beamPrefab != null)
         {
             poolService.InitializePool(beamPrefab, 16);
-        }
-        if (engineParticlePrefab != null)
-        {
-            poolService.InitializePool(engineParticlePrefab, 32);
         }
     }
 
@@ -288,17 +269,9 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ValidateSerializedReferences()
     {
-        if (projectilePrefab == null)
-        {
-            Debug.LogError("SpaceCombatSceneController: projectilePrefab is not assigned.", this);
-        }
         if (beamPrefab == null)
         {
             Debug.LogError("SpaceCombatSceneController: beamPrefab is not assigned.", this);
-        }
-        if (engineParticlePrefab == null)
-        {
-            Debug.LogError("SpaceCombatSceneController: engineParticlePrefab is not assigned.", this);
         }
 
         if (healthBar == null)
@@ -321,29 +294,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void EnsureDataAssets()
     {
-        if (playerMovementSettings == null)
-        {
-            playerMovementSettings = ScriptableObject.CreateInstance<MovementSettingsSO>();
-            playerMovementSettings.moveSpeed = 6.2f;
-            playerMovementSettings.rotationSpeed = 8f;
-            playerMovementSettings.stoppingDistance = 0.25f;
-        }
-
-        if (playerWeaponData == null)
-        {
-            playerWeaponData = ScriptableObject.CreateInstance<WeaponDataSO>();
-            playerWeaponData.damage = 28f;
-            playerWeaponData.fireRate = 0.45f;
-            playerWeaponData.projectileSpeed = 18f;
-            playerWeaponData.capacitorPerShot = 9f;
-            playerWeaponData.requiredClass = ShipClass.Light;
-            playerWeaponData.projectilePrefab = projectilePrefab;
-        }
-        else if (playerWeaponData.projectilePrefab == null)
-        {
-            playerWeaponData.projectilePrefab = projectilePrefab;
-        }
-
         availableShips ??= new List<ShipDataSO>();
         availableShips.RemoveAll(ship => ship == null);
         backgroundLayers ??= new List<BackgroundLayerConfig>();
@@ -690,8 +640,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             1f,
             1f,
             new Color(0.28f, 0.6f, 0.94f, 1f),
-            new Color(0.38f, 0.76f, 1f, 0.72f),
-            playerWeaponData));
+            new Color(0.38f, 0.76f, 1f, 0.72f)));
 
         availableShips.Add(CreateRuntimeShipData(
             "Bulwark",
@@ -714,8 +663,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             0.94f,
             1.22f,
             new Color(0.18f, 0.78f, 0.8f, 1f),
-            new Color(0.42f, 1f, 0.92f, 0.72f),
-            playerWeaponData));
+            new Color(0.42f, 1f, 0.92f, 0.72f)));
 
         availableShips.Add(CreateRuntimeShipData(
             "Raptor",
@@ -738,8 +686,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             1.2f,
             0.9f,
             new Color(1f, 0.58f, 0.18f, 1f),
-            new Color(1f, 0.75f, 0.36f, 0.72f),
-            playerWeaponData));
+            new Color(1f, 0.75f, 0.36f, 0.72f)));
     }
 
     private static ShipDataSO CreateRuntimeShipData(
@@ -763,8 +710,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         float damageMultiplier,
         float repairMultiplier,
         Color accentColor,
-        Color auraColor,
-        WeaponDataSO defaultWeapon)
+        Color auraColor)
     {
         ShipDataSO data = ScriptableObject.CreateInstance<ShipDataSO>();
         data.displayName = displayName;
@@ -792,7 +738,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         data.startingModules = new List<ModuleDataSO>();
         for (int i = 0; i < weaponSlotCount; i++)
         {
-            data.startingWeapons.Add(defaultWeapon);
+            data.startingWeapons.Add(null);
         }
         for (int i = 0; i < moduleSlotCount; i++)
         {
@@ -912,12 +858,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.Velocity = Vector2.zero;
         player.MoveCommandActive = false;
 
-        playerMovementSettings.moveSpeed = player.Speed;
-        playerMovementSettings.rotationSpeed = ship.rotationSpeed;
         ApplyShipVisualFromPrefab(ship);
 
-        CreateModules(ship.moduleSlotCount);
         ConfigureEquipment(ship);
+        CreateModules(ship.moduleSlotCount, ship);
 
         if (resetProgress)
         {
@@ -1287,22 +1231,44 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void CreateModules(int moduleSlotCount)
+    private static WeaponDataSO GetPrimaryWeapon(ShipDataSO ship)
+    {
+        if (ship == null || ship.startingWeapons == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < ship.startingWeapons.Count; i++)
+        {
+            if (ship.startingWeapons[i] != null)
+            {
+                return ship.startingWeapons[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void CreateModules(int moduleSlotCount, ShipDataSO ship)
     {
         modules.Clear();
         int supportedSlots = Mathf.Clamp(Mathf.Max(1, moduleSlotCount), 1, 4);
+        WeaponDataSO primaryWeapon = GetPrimaryWeapon(ship);
+        float capPerShot = primaryWeapon != null ? primaryWeapon.capacitorPerShot : 0f;
+        float rateOfFire = primaryWeapon != null ? primaryWeapon.fireRate : 1f;
+        float damage = primaryWeapon != null ? primaryWeapon.damage : 0f;
 
         modules.Add(new ModuleState
         {
             Name = "Weapon Group",
             KeyLabel = "1",
             Type = ModuleType.Weapon,
-            CapPerShot = playerWeaponData != null ? playerWeaponData.capacitorPerShot : 9f,
-            RateOfFire = playerWeaponData != null ? playerWeaponData.fireRate : 0.45f,
-            Damage = playerWeaponData != null ? playerWeaponData.damage : 28f,
+            CapPerShot = capPerShot,
+            RateOfFire = rateOfFire,
+            Damage = damage,
             OptimalRange = 5.1f,
             FalloffRange = 3.2f,
-            WeaponData = playerWeaponData
+            WeaponData = primaryWeapon
         });
 
         if (supportedSlots > 1)
@@ -1537,13 +1503,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         for (int i = 0; i < projectiles.Count; i++)
         {
-            if (projectiles[i].Transform != null)
+            if (projectiles[i].Transform != null && projectiles[i].Prefab != null)
             {
-                GameObject pooledPrefab = projectiles[i].Prefab != null ? projectiles[i].Prefab : projectilePrefab;
-                if (pooledPrefab != null)
-                {
-                    poolService.Return(pooledPrefab, projectiles[i].Transform.gameObject);
-                }
+                poolService.Return(projectiles[i].Prefab, projectiles[i].Transform.gameObject);
             }
         }
 
@@ -2336,7 +2298,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             pointerBlocked,
             pointerState,
             pointerWorldPosition);
-        movementService.UpdateMovement(player, movementContext, playerMovementSettings, deltaTime);
+        movementService.UpdateMovement(player, movementContext, deltaTime);
     }
 
     private void ToggleModule(int index)
@@ -2666,10 +2628,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             statusText.text = Localize("status_gameover");
         }
 
-        if (player.Velocity.magnitude > 0.65f)
-        {
-            SpawnEngineParticle(player.Transform.position - player.Transform.up * 0.42f, -player.Transform.up, player.BaseAuraColor);
-        }
     }
 
     private void UpdateCombat(float deltaTime)
@@ -2683,7 +2641,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             EquipmentState = equipmentState,
             TargetEnemy = targetEnemy,
             ProjectileRoot = projectileRoot,
-            ProjectilePrefab = projectilePrefab,
             PoolService = poolService,
             Wave = wave,
             Localize = Localize,
@@ -2981,26 +2938,6 @@ public class SpaceCombatSceneController : MonoBehaviour
                 attackBeams.RemoveAt(i);
             }
         }
-
-        for (int i = engineParticles.Count - 1; i >= 0; i--)
-        {
-            EngineParticle particle = engineParticles[i];
-            particle.Lifetime += deltaTime;
-            particle.Transform.position += particle.Velocity * deltaTime;
-            float t = particle.Lifetime / particle.Duration;
-            Color color = particle.BaseColor;
-            color.a = Mathf.Lerp(particle.BaseColor.a, 0f, t);
-            particle.Renderer.color = color;
-            particle.Transform.localScale = Vector3.one * Mathf.Lerp(0.14f, 0.04f, t);
-            if (particle.Lifetime >= particle.Duration)
-            {
-                if (engineParticlePrefab != null)
-                {
-                    poolService.Return(engineParticlePrefab, particle.Transform.gameObject);
-                }
-                engineParticles.RemoveAt(i);
-            }
-        }
     }
 
     private void CreateAttackBeam(Vector3 start, Vector3 end, Color color)
@@ -3035,47 +2972,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             Transform = beamObject.transform,
             Renderer = renderer,
             Duration = 0.16f
-        });
-    }
-
-    private void SpawnEngineParticle(Vector3 position, Vector3 direction, Color baseColor)
-    {
-        if (engineParticles.Count > 40)
-        {
-            return;
-        }
-
-        if (engineParticlePrefab == null)
-        {
-            return;
-        }
-
-        GameObject particleObject = poolService.Get(engineParticlePrefab, projectileRoot);
-        if (particleObject == null)
-        {
-            return;
-        }
-        particleObject.transform.position = position + direction.normalized * 0.08f;
-        particleObject.transform.localScale = Vector3.one * 0.12f;
-
-        SpriteRenderer renderer = particleObject.GetComponent<SpriteRenderer>();
-        if (renderer == null)
-        {
-            renderer = particleObject.AddComponent<SpriteRenderer>();
-        }
-        renderer.sprite = circleSprite;
-        renderer.sortingOrder = 2;
-        Color color = baseColor;
-        color.a = 0.38f;
-        renderer.color = color;
-
-        engineParticles.Add(new EngineParticle
-        {
-            Transform = particleObject.transform,
-            Renderer = renderer,
-            Velocity = direction.normalized * UnityEngine.Random.Range(1.8f, 2.8f) + (Vector3)(-player.Velocity * 0.15f),
-            Duration = UnityEngine.Random.Range(0.25f, 0.42f),
-            BaseColor = color
         });
     }
 

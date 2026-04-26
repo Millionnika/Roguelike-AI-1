@@ -946,32 +946,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f1c2e0d4a2740c0b4b0a7eb13dd9a11, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  projectilePrefab: {fileID: 8832061711697709692, guid: 5890286e163cd824eba25022cd8a85bf, type: 3}
   beamPrefab: {fileID: 8873356334776834656, guid: 2e5fe8a513aaf4141aba6ca3ebbf3a7a, type: 3}
-  engineParticlePrefab: {fileID: 6817067679862018438, guid: 56a628311e0c2ec40b490a7c0ee473cf, type: 3}
   healthBar: {fileID: 368274437}
   scoreText: {fileID: 1016877298}
   waveText: {fileID: 1973114523}
   equipmentUiController: {fileID: 1554557187}
   slotUiPrefab: {fileID: 0}
-  playerMovementSettings: {fileID: 0}
-  playerWeaponData: {fileID: 0}
   availableShips:
   - {fileID: 11400000, guid: 0ee6c6b9a0b1c644d8595ee8f3c68c16, type: 2}
   - {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
-  waveConfigs:
-  - {fileID: 11400000, guid: 1ef53575cbc74334481a4ad52882c567, type: 2}
-  - {fileID: 11400000, guid: be452253263efe541b38585626261fec, type: 2}
+  currentTimeline: {fileID: 11400000, guid: f377acad0504b83458ca04b67eed1de1, type: 2}
   backgroundLayers:
   - prefab: {fileID: 0}
     parallaxFactor: 0
     tileSize: 0
     gridRadius: 0
-  waveSettings:
-    enemiesPerWave: 5
-    initialWaveDelay: 3
-    timeBetweenWaves: 3
-    spawnOffscreenMargin: 2
+  offscreenViewportMargin: 0.1
+  timelinePhaseDuration: 30
+  timelineDifficultyPerPhase: 0.14
   shotBaseVolume: 0.85
   shotPitchRandomRange: 0.08
   shotVolumeRandomRange: 0.12

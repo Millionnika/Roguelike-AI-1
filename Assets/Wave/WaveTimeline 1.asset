@@ -12,4 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1dabec9a4313990498cf6e6e67667952, type: 3}
   m_Name: WaveTimeline 1
   m_EditorClassIdentifier: Assembly-CSharp::WaveTimelineSO
-  events: []
+  events:
+  - startTime: 0
+    duration: 0
+    pattern: 0
+    enemyData: {fileID: 0}
+    count: 0

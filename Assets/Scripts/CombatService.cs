@@ -12,7 +12,6 @@ internal sealed class CombatUpdateContext
     public ShipEquipmentState EquipmentState;
     public EnemyShip TargetEnemy;
     public Transform ProjectileRoot;
-    public GameObject ProjectilePrefab;
     public IPoolService PoolService;
     public int Wave;
     public Func<string, string> Localize;
@@ -37,7 +36,6 @@ internal readonly struct CombatUpdateResult
 internal sealed class CombatService : ICombatService
 {
     private bool levelUpRequested;
-    private WeaponDataSO defaultWeaponData;
 
     public CombatUpdateResult UpdateFrame(CombatUpdateContext context, float deltaTime)
     {
@@ -99,11 +97,6 @@ internal sealed class CombatService : ICombatService
         }
 
         return enemy.Hull <= 0f;
-    }
-
-    public void SetDefaultWeaponData(WeaponDataSO weaponData)
-    {
-        defaultWeaponData = weaponData;
     }
 
     private void UpdateEnemies(CombatUpdateContext context, float deltaTime)
@@ -296,9 +289,7 @@ internal sealed class CombatService : ICombatService
             return;
         }
 
-        GameObject projectilePrefab = weaponData != null && weaponData.projectilePrefab != null
-            ? weaponData.projectilePrefab
-            : context.ProjectilePrefab;
+        GameObject projectilePrefab = weaponData != null ? weaponData.projectilePrefab : null;
         if (projectilePrefab == null)
         {
             return;
@@ -347,7 +338,7 @@ internal sealed class CombatService : ICombatService
             Damage = weaponDamage * context.Player.DamageMultiplier
         });
 
-        context.PlayWeaponShot?.Invoke(weaponData != null ? weaponData : defaultWeaponData);
+        context.PlayWeaponShot?.Invoke(weaponData);
     }
 
     private void UpdateProjectiles(CombatUpdateContext context, float deltaTime)
@@ -357,7 +348,10 @@ internal sealed class CombatService : ICombatService
             Projectile projectile = context.Projectiles[i];
             if (projectile.Target == null || !projectile.Target.IsAlive())
             {
-                context.PoolService.Return(projectile.Prefab != null ? projectile.Prefab : context.ProjectilePrefab, projectile.Transform.gameObject);
+                if (projectile.Prefab != null)
+                {
+                    context.PoolService.Return(projectile.Prefab, projectile.Transform.gameObject);
+                }
                 context.Projectiles.RemoveAt(i);
                 continue;
             }
@@ -369,7 +363,10 @@ internal sealed class CombatService : ICombatService
                 bool destroyed = ApplyDamage(projectile.Target, projectile.Damage);
                 projectile.Target.HitFlashTimer = 1f;
                 context.LogMessage?.Invoke(context.Localize("log_hit") + projectile.Target.Id + context.Localize("log_for") + Mathf.RoundToInt(projectile.Damage), "hit");
-                context.PoolService.Return(projectile.Prefab != null ? projectile.Prefab : context.ProjectilePrefab, projectile.Transform.gameObject);
+                if (projectile.Prefab != null)
+                {
+                    context.PoolService.Return(projectile.Prefab, projectile.Transform.gameObject);
+                }
                 context.Projectiles.RemoveAt(i);
 
                 if (destroyed)

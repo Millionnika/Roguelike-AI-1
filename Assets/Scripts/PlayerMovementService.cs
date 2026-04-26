@@ -64,6 +64,7 @@ internal sealed class PlayerMovementService : IMovementService
 {
     private const float ClickThresholdSeconds = 0.16f;
     private const float ClickMaxTravel = 0.45f;
+    private const float ClickStopDistance = 0.25f;
 
     private Vector2 velocitySmoothRef;
     private bool wasPointerPressed;
@@ -72,9 +73,9 @@ internal sealed class PlayerMovementService : IMovementService
     private bool holdModeActive;
     private Vector3 holdWorldTarget;
 
-    public void UpdateMovement(PlayerShip player, MovementUpdateContext context, MovementSettingsSO settings, float deltaTime)
+    public void UpdateMovement(PlayerShip player, MovementUpdateContext context, float deltaTime)
     {
-        if (player == null || player.Transform == null || settings == null)
+        if (player == null || player.Transform == null)
         {
             return;
         }
@@ -94,22 +95,22 @@ internal sealed class PlayerMovementService : IMovementService
         }
         else if (holdModeActive)
         {
-            desiredDirection = GetHoldDirection(player, settings);
+            desiredDirection = GetHoldDirection(player);
         }
         else
         {
-            desiredDirection = GetClickDirection(player, settings);
+            desiredDirection = GetClickDirection(player);
         }
 
         float desiredSpeed = 0f;
         if (desiredDirection.sqrMagnitude > 0.001f)
         {
-            desiredSpeed = settings.moveSpeed * player.SpeedMultiplier;
+            desiredSpeed = player.Speed * player.SpeedMultiplier;
         }
 
         Vector2 desiredVelocity = desiredDirection * desiredSpeed;
         float smoothTime = Mathf.Clamp(1f / Mathf.Max(0.1f, player.Acceleration), 0.04f, 0.25f);
-        float maxSpeed = Mathf.Max(0.1f, settings.moveSpeed * Mathf.Max(0.1f, player.SpeedMultiplier));
+        float maxSpeed = Mathf.Max(0.1f, player.Speed * Mathf.Max(0.1f, player.SpeedMultiplier));
         player.Velocity = Vector2.SmoothDamp(player.Velocity, desiredVelocity, ref velocitySmoothRef, smoothTime, maxSpeed, deltaTime);
         player.Velocity = Vector2.Lerp(player.Velocity, Vector2.zero, Mathf.Clamp01(player.Drag * deltaTime));
         player.Transform.position += (Vector3)(player.Velocity * deltaTime);
@@ -121,7 +122,7 @@ internal sealed class PlayerMovementService : IMovementService
             player.Transform.rotation = Quaternion.Lerp(
                 player.Transform.rotation,
                 targetRotation,
-                settings.rotationSpeed * deltaTime);
+                player.RotationResponsiveness * deltaTime);
         }
     }
 
@@ -166,11 +167,11 @@ internal sealed class PlayerMovementService : IMovementService
         wasPointerPressed = pointerPressed;
     }
 
-    private Vector2 GetHoldDirection(PlayerShip player, MovementSettingsSO settings)
+    private Vector2 GetHoldDirection(PlayerShip player)
     {
         Vector2 toTarget = (Vector2)(holdWorldTarget - player.Transform.position);
         float distance = toTarget.magnitude;
-        if (distance <= settings.stoppingDistance * 0.5f)
+        if (distance <= ClickStopDistance * 0.5f)
         {
             return Vector2.zero;
         }
@@ -178,7 +179,7 @@ internal sealed class PlayerMovementService : IMovementService
         return distance > 0.001f ? toTarget / distance : Vector2.zero;
     }
 
-    private static Vector2 GetClickDirection(PlayerShip player, MovementSettingsSO settings)
+    private static Vector2 GetClickDirection(PlayerShip player)
     {
         if (!player.MoveCommandActive)
         {
@@ -188,7 +189,7 @@ internal sealed class PlayerMovementService : IMovementService
         Vector2 toTarget = (Vector2)(player.MoveCommandTarget - player.Transform.position);
         float distance = toTarget.magnitude;
 
-        if (distance <= settings.stoppingDistance && player.Velocity.magnitude <= 0.2f)
+        if (distance <= ClickStopDistance && player.Velocity.magnitude <= 0.2f)
         {
             player.MoveCommandActive = false;
             return Vector2.zero;

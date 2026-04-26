@@ -159,16 +159,6 @@ internal sealed class AttackBeamEffect
     public float Duration;
 }
 
-internal sealed class EngineParticle
-{
-    public Transform Transform;
-    public SpriteRenderer Renderer;
-    public Vector3 Velocity;
-    public float Lifetime;
-    public float Duration;
-    public Color BaseColor;
-}
-
 internal sealed class StarVisual
 {
     public Transform Transform;

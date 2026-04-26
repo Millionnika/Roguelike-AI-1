@@ -14,7 +14,6 @@ internal interface ICombatService
     CombatUpdateResult UpdateFrame(CombatUpdateContext context, float deltaTime);
     void ApplyDamage(SpaceFrontier.Player.PlayerStats stats, float amount);
     bool ApplyDamage(EnemyShip enemy, float amount);
-    void SetDefaultWeaponData(WeaponDataSO weaponData);
 }
 
 internal interface IInputService
@@ -24,7 +23,7 @@ internal interface IInputService
 
 internal interface IMovementService
 {
-    void UpdateMovement(SpaceFrontier.Player.PlayerShip player, MovementUpdateContext context, MovementSettingsSO settings, float deltaTime);
+    void UpdateMovement(SpaceFrontier.Player.PlayerShip player, MovementUpdateContext context, float deltaTime);
 }
 
 internal interface IPoolService

@@ -159,12 +159,6 @@ public static class CreateExamplePlayerShip
             ships.GetArrayElementAtIndex(ships.arraySize - 1).objectReferenceValue = shipData;
         }
 
-        SerializedProperty weaponProp = so.FindProperty("playerWeaponData");
-        if (weaponProp != null && weaponData != null)
-        {
-            weaponProp.objectReferenceValue = weaponData;
-        }
-
         so.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManager.MarkSceneDirty(controller.gameObject.scene);
     }

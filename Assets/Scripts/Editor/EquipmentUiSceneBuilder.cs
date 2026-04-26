@@ -241,12 +241,6 @@ public static class EquipmentUiSceneBuilder
                 ships.GetArrayElementAtIndex(ships.arraySize - 1).objectReferenceValue = shipData;
             }
 
-            SerializedProperty weaponProp = so.FindProperty("playerWeaponData");
-            if (weaponProp != null)
-            {
-                weaponProp.objectReferenceValue = weaponData;
-            }
-
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorSceneManager.MarkSceneDirty(controller.gameObject.scene);
         }
