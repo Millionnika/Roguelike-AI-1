@@ -25,19 +25,27 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private MovementSettingsSO playerMovementSettings;
     [SerializeField] private WeaponDataSO playerWeaponData;
     [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
-    [SerializeField] private List<EnemyDataSO> waveConfigs = new List<EnemyDataSO>();
+    [SerializeField] public WaveTimelineSO currentTimeline;
 
     [Header("Background Layers")]
     [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
 
-    [Header("Wave Settings")]
-    [SerializeField] private WaveSpawnSettings waveSettings = new WaveSpawnSettings();
+    [Header("Timeline Spawner")]
+    [SerializeField, Range(0.01f, 0.5f)] private float offscreenViewportMargin = 0.1f;
+    [SerializeField, Min(1f)] private float timelinePhaseDuration = 30f;
+    [SerializeField, Min(0f)] private float timelineDifficultyPerPhase = 0.14f;
 
     [Header("Audio")]
     [SerializeField, Range(0f, 1f)] private float shotBaseVolume = 0.85f;
     [SerializeField, Range(0f, 0.5f)] private float shotPitchRandomRange = 0.08f;
     [SerializeField, Range(0f, 0.5f)] private float shotVolumeRandomRange = 0.12f;
     [SerializeField, Min(1)] private int shotAudioVoices = 4;
+
+    private sealed class SpawnEventRuntimeState
+    {
+        public bool oneShotExecuted;
+        public float continuousAccumulator;
+    }
 
     private enum StartMenuPage
     {
@@ -157,12 +165,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Sprite diamondSprite;
 
     private int wave = 1;
-    private bool waitingForNextWave;
-    private bool firstWaveSpawned;
     private bool levelUpPending;
     private bool gameOver;
     private bool gameStarted;
-    private float nextWaveTimer;
+    private float gameTimer;
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
     private LanguageOption currentLanguage = LanguageOption.RU;
@@ -174,6 +180,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject runtimeNebulaLayerPrefab;
     private AudioSource[] shotAudioSources;
     private int nextShotAudioSourceIndex;
+    private int enemySpawnSequence;
+    private readonly List<SpawnEventRuntimeState> spawnEventStates = new List<SpawnEventRuntimeState>();
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
     public ShipEquipmentState CurrentEquipmentState => equipmentState;
@@ -305,6 +313,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Debug.LogError("SpaceCombatSceneController: waveText is not assigned.", this);
         }
+        if (currentTimeline == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: currentTimeline is not assigned.", this);
+        }
     }
 
     private void EnsureDataAssets()
@@ -334,24 +346,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         availableShips ??= new List<ShipDataSO>();
         availableShips.RemoveAll(ship => ship == null);
-
-        if (waveConfigs == null)
-        {
-            waveConfigs = new List<EnemyDataSO>();
-        }
-
-        if (waveConfigs.Count == 0)
-        {
-            EnemyDataSO fallbackEnemy = ScriptableObject.CreateInstance<EnemyDataSO>();
-            fallbackEnemy.name = "FallbackEnemyData";
-            fallbackEnemy.maxHealth = 100f;
-            fallbackEnemy.moveSpeed = 1.5f;
-            fallbackEnemy.scoreValue = 40;
-            fallbackEnemy.weaponData = playerWeaponData;
-            waveConfigs.Add(fallbackEnemy);
-        }
-
-        waveSettings ??= new WaveSpawnSettings();
         backgroundLayers ??= new List<BackgroundLayerConfig>();
     }
 
@@ -426,7 +420,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         HandleInput(deltaTime);
         UpdatePlayer(deltaTime);
         UpdateCombat(deltaTime);
-        UpdateWaveState(deltaTime);
+        UpdateTimelineSpawner(deltaTime);
         UpdateBackgroundParallax();
         UpdateEffects(deltaTime);
         UpdateVisuals();
@@ -1122,9 +1116,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameOver = false;
         levelUpPending = false;
         wave = 1;
-        waitingForNextWave = false;
-        nextWaveTimer = 0f;
-        firstWaveSpawned = false;
+        gameTimer = 0f;
+        enemySpawnSequence = 0;
         targetEnemy = null;
         activePerks.Clear();
         perkPanelObject.SetActive(false);
@@ -1139,11 +1132,25 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
         }
+        ResetTimelineRuntime();
         ResetModules();
         ApplyShipDefinition(availableShips[selectedShipIndex], true);
-        StartWaveCountdown(waveSettings != null ? waveSettings.initialWaveDelay : 3f, false);
         LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
+    }
+
+    private void ResetTimelineRuntime()
+    {
+        spawnEventStates.Clear();
+        if (currentTimeline == null || currentTimeline.events == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < currentTimeline.events.Count; i++)
+        {
+            spawnEventStates.Add(new SpawnEventRuntimeState());
+        }
     }
 
     private void ResetModules()
@@ -1337,46 +1344,109 @@ public class SpaceCombatSceneController : MonoBehaviour
         BindModuleSlots();
     }
 
-    private void SpawnWave()
+    private float GetTimelineLevelScale()
     {
-        ClearEnemies();
-        ClearProjectiles();
-        waitingForNextWave = false;
-        nextWaveTimer = 0f;
-        firstWaveSpawned = true;
+        return 1f + (wave - 1) * timelineDifficultyPerPhase;
+    }
 
-        if (gateTransform != null)
+    private string NextEnemyId()
+    {
+        enemySpawnSequence++;
+        return "E-" + enemySpawnSequence.ToString("0000");
+    }
+
+    private void SpawnEnemyFromTimeline(EnemyDataSO enemyData, Vector3 position)
+    {
+        if (enemyData == null || enemyData.prefab == null)
         {
-            gateTransform.gameObject.SetActive(false);
+            return;
         }
 
-        int baseCount = waveSettings != null ? Mathf.Max(1, waveSettings.enemiesPerWave) : 5;
-        int enemyCount = Mathf.Clamp(baseCount + (wave - 1), baseCount, 24);
-        EnemyDataSO[] configs = waveConfigs != null && waveConfigs.Count > 0
-            ? waveConfigs.ToArray()
-            : Array.Empty<EnemyDataSO>();
-
-        for (int i = 0; i < enemyCount; i++)
+        EnemyShip enemy = CreateEnemy(NextEnemyId(), enemyData, position, GetTimelineLevelScale());
+        if (enemy == null)
         {
-            float margin = waveSettings != null ? waveSettings.spawnOffscreenMargin : 2f;
-            Vector3 position = GetOffscreenSpawnPosition(margin);
-            EnemyDataSO enemyData = configs.Length > 0
-                ? configs[UnityEngine.Random.Range(0, configs.Length)]
-                : null;
-            EnemyShip enemy = CreateEnemy(
-                "E-" + (i + 1).ToString("00"),
-                enemyData,
-                position,
-                1f + (wave - 1) * 0.14f);
-            if (enemy != null)
-            {
-                enemies.Add(enemy);
-            }
+            return;
         }
 
-        targetEnemy = enemies.Count > 0 ? enemies[0] : null;
-        UpdateTargetState();
-        LogMessage(Localize("log_hostiles") + enemies.Count);
+        enemies.Add(enemy);
+        if (targetEnemy == null)
+        {
+            targetEnemy = enemy;
+        }
+    }
+
+    private void ExecuteOneShotPattern(SpawnEvent spawnEvent)
+    {
+        if (spawnEvent == null || spawnEvent.enemyData == null)
+        {
+            return;
+        }
+
+        int count = Mathf.Max(0, spawnEvent.count);
+        if (count <= 0)
+        {
+            return;
+        }
+
+        switch (spawnEvent.pattern)
+        {
+            case SpawnPatternType.Burst:
+                ExecuteBurstPattern(spawnEvent.enemyData, count);
+                break;
+            case SpawnPatternType.Ring:
+                ExecuteRingPattern(spawnEvent.enemyData, count);
+                break;
+            case SpawnPatternType.Wall:
+                ExecuteWallPattern(spawnEvent.enemyData, count);
+                break;
+            case SpawnPatternType.Continuous:
+            default:
+                break;
+        }
+    }
+
+    private void ExecuteBurstPattern(EnemyDataSO enemyData, int count)
+    {
+        Vector3 center = GetRandomOffscreenSpawnPosition();
+        const float scatterRadius = 1.1f;
+        for (int i = 0; i < count; i++)
+        {
+            Vector2 offset = UnityEngine.Random.insideUnitCircle * scatterRadius;
+            SpawnEnemyFromTimeline(enemyData, center + new Vector3(offset.x, offset.y, 0f));
+        }
+    }
+
+    private void ExecuteRingPattern(EnemyDataSO enemyData, int count)
+    {
+        Camera camera = mainCamera != null ? mainCamera : Camera.main;
+        if (camera == null || player == null || player.Transform == null)
+        {
+            return;
+        }
+
+        float depth = Mathf.Abs(camera.transform.position.z);
+        Vector3 min = camera.ViewportToWorldPoint(new Vector3(0f, 0f, depth));
+        Vector3 max = camera.ViewportToWorldPoint(new Vector3(1f, 1f, depth));
+        float radius = Vector2.Distance(min, max) * 0.55f;
+        Vector3 center = player.Transform.position;
+        float startAngle = UnityEngine.Random.value * Mathf.PI * 2f;
+
+        for (int i = 0; i < count; i++)
+        {
+            float angle = startAngle + ((Mathf.PI * 2f) * i / Mathf.Max(1, count));
+            Vector3 position = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius;
+            SpawnEnemyFromTimeline(enemyData, position);
+        }
+    }
+
+    private void ExecuteWallPattern(EnemyDataSO enemyData, int count)
+    {
+        int side = UnityEngine.Random.Range(0, 4);
+        for (int i = 0; i < count; i++)
+        {
+            float t = count <= 1 ? 0.5f : i / (float)(count - 1);
+            SpawnEnemyFromTimeline(enemyData, GetOffscreenSpawnPoint(side, t, offscreenViewportMargin));
+        }
     }
 
     private EnemyShip CreateEnemy(string id, EnemyDataSO enemyData, Vector3 position, float levelScale)
@@ -2498,7 +2568,33 @@ public class SpaceCombatSceneController : MonoBehaviour
         return runtimeNebulaLayerPrefab;
     }
 
-    private Vector3 GetOffscreenSpawnPosition(float margin)
+    private void EnsureSpawnEventRuntimeStates()
+    {
+        if (currentTimeline == null || currentTimeline.events == null)
+        {
+            spawnEventStates.Clear();
+            return;
+        }
+
+        while (spawnEventStates.Count < currentTimeline.events.Count)
+        {
+            spawnEventStates.Add(new SpawnEventRuntimeState());
+        }
+
+        while (spawnEventStates.Count > currentTimeline.events.Count)
+        {
+            spawnEventStates.RemoveAt(spawnEventStates.Count - 1);
+        }
+    }
+
+    private Vector3 GetRandomOffscreenSpawnPosition()
+    {
+        int side = UnityEngine.Random.Range(0, 4);
+        float t = UnityEngine.Random.value;
+        return GetOffscreenSpawnPoint(side, t, offscreenViewportMargin);
+    }
+
+    private Vector3 GetOffscreenSpawnPoint(int side, float edgeLerp, float viewportMargin)
     {
         Camera camera = mainCamera != null ? mainCamera : Camera.main;
         if (camera == null)
@@ -2506,23 +2602,35 @@ public class SpaceCombatSceneController : MonoBehaviour
             return player != null ? player.Transform.position : Vector3.zero;
         }
 
+        float margin = Mathf.Max(0.01f, viewportMargin);
+        float t = Mathf.Clamp01(edgeLerp);
         float depth = Mathf.Abs(camera.transform.position.z);
-        Vector3 min = camera.ViewportToWorldPoint(new Vector3(0f, 0f, depth));
-        Vector3 max = camera.ViewportToWorldPoint(new Vector3(1f, 1f, depth));
-        float extra = Mathf.Max(0f, margin);
 
-        int side = UnityEngine.Random.Range(0, 4);
-        switch (side)
+        float x;
+        float y;
+        switch (Mathf.Abs(side) % 4)
         {
-            case 0:
-                return new Vector3(UnityEngine.Random.Range(min.x, max.x), max.y + extra, 0f);
-            case 1:
-                return new Vector3(UnityEngine.Random.Range(min.x, max.x), min.y - extra, 0f);
-            case 2:
-                return new Vector3(min.x - extra, UnityEngine.Random.Range(min.y, max.y), 0f);
-            default:
-                return new Vector3(max.x + extra, UnityEngine.Random.Range(min.y, max.y), 0f);
+            case 0: // top
+                x = Mathf.Lerp(-margin, 1f + margin, t);
+                y = 1f + margin;
+                break;
+            case 1: // bottom
+                x = Mathf.Lerp(-margin, 1f + margin, t);
+                y = -margin;
+                break;
+            case 2: // left
+                x = -margin;
+                y = Mathf.Lerp(-margin, 1f + margin, t);
+                break;
+            default: // right
+                x = 1f + margin;
+                y = Mathf.Lerp(-margin, 1f + margin, t);
+                break;
         }
+
+        Vector3 world = camera.ViewportToWorldPoint(new Vector3(x, y, depth));
+        world.z = 0f;
+        return world;
     }
 
     private static SpriteRenderer FindChildSpriteRenderer(Transform root, string childName)
@@ -2685,75 +2793,172 @@ public class SpaceCombatSceneController : MonoBehaviour
         activePerks.Clear();
     }
 
-    private void UpdateWaveState(float deltaTime)
+    private void UpdateTimelineSpawner(float deltaTime)
     {
-        if (enemies.Count > 0)
+        float previousTime = gameTimer;
+        gameTimer += Mathf.Max(0f, deltaTime);
+        wave = Mathf.Max(1, 1 + Mathf.FloorToInt(gameTimer / Mathf.Max(1f, timelinePhaseDuration)));
+
+        EnsureSpawnEventRuntimeStates();
+        if (currentTimeline == null || currentTimeline.events == null || currentTimeline.events.Count == 0)
         {
-            waitingForNextWave = false;
-            nextWaveTimer = 0f;
-            if (gateTransform != null)
-            {
-                gateTransform.gameObject.SetActive(false);
-            }
             if (gateHintText != null)
             {
-                gateHintText.transform.parent.gameObject.SetActive(false);
+                gateHintText.transform.parent.gameObject.SetActive(true);
+                gateHintText.text = currentLanguage == LanguageOption.RU
+                    ? "Таймлайн волн не назначен."
+                    : "Wave timeline is not assigned.";
+            }
+            return;
+        }
+
+        int spawnedThisFrame = 0;
+        for (int i = 0; i < currentTimeline.events.Count; i++)
+        {
+            SpawnEvent spawnEvent = currentTimeline.events[i];
+            SpawnEventRuntimeState state = spawnEventStates[i];
+            if (spawnEvent == null || spawnEvent.enemyData == null || spawnEvent.enemyData.prefab == null)
+            {
+                continue;
             }
 
-            return;
+            float startTime = Mathf.Max(0f, spawnEvent.startTime);
+            int count = Mathf.Max(0, spawnEvent.count);
+            if (count <= 0)
+            {
+                continue;
+            }
+
+            if (spawnEvent.pattern == SpawnPatternType.Continuous)
+            {
+                float duration = Mathf.Max(0f, spawnEvent.duration);
+                if (duration <= 0f)
+                {
+                    continue;
+                }
+
+                float endTime = startTime + duration;
+                float activeStart = Mathf.Max(previousTime, startTime);
+                float activeEnd = Mathf.Min(gameTimer, endTime);
+                if (activeEnd <= activeStart)
+                {
+                    continue;
+                }
+
+                state.continuousAccumulator += (activeEnd - activeStart) * count;
+                int spawnCount = Mathf.FloorToInt(state.continuousAccumulator);
+                if (spawnCount <= 0)
+                {
+                    continue;
+                }
+
+                state.continuousAccumulator -= spawnCount;
+                for (int spawnIndex = 0; spawnIndex < spawnCount; spawnIndex++)
+                {
+                    SpawnEnemyFromTimeline(spawnEvent.enemyData, GetRandomOffscreenSpawnPosition());
+                    spawnedThisFrame++;
+                }
+
+                continue;
+            }
+
+            if (state.oneShotExecuted || gameTimer < startTime)
+            {
+                continue;
+            }
+
+            int enemyCountBefore = enemies.Count;
+            ExecuteOneShotPattern(spawnEvent);
+            state.oneShotExecuted = true;
+            int spawnedInPattern = enemies.Count - enemyCountBefore;
+            if (spawnedInPattern > 0)
+            {
+                spawnedThisFrame += spawnedInPattern;
+            }
         }
 
-        if (!waitingForNextWave)
+        if (spawnedThisFrame > 0)
         {
-            StartWaveCountdown(waveSettings != null ? waveSettings.timeBetweenWaves : 3f, true);
+            UpdateTargetState();
+            LogMessage(Localize("log_hostiles") + enemies.Count);
         }
 
-        nextWaveTimer = Mathf.Max(0f, nextWaveTimer - deltaTime);
-        if (gateHintText != null)
-        {
-            gateHintText.text = currentLanguage == LanguageOption.RU
-                ? "Следующая волна через " + nextWaveTimer.ToString("0.0") + "с"
-                : "Next wave in " + nextWaveTimer.ToString("0.0") + "s";
-        }
-
-        if (nextWaveTimer > 0f)
-        {
-            return;
-        }
-
-        waitingForNextWave = false;
-        if (firstWaveSpawned)
-        {
-            wave++;
-            player.Shield = player.MaxShield;
-            player.Armor = player.MaxArmor;
-            player.Hull = player.MaxHull;
-            player.Capacitor = player.MaxCapacitor;
-        }
-        if (gateHintText != null)
-        {
-            gateHintText.transform.parent.gameObject.SetActive(false);
-        }
-        if (firstWaveSpawned)
-        {
-            LogMessage(Localize("log_warp_sector") + wave, "critical");
-        }
-        SpawnWave();
-    }
-
-    private void StartWaveCountdown(float delaySeconds, bool logActivation)
-    {
-        waitingForNextWave = true;
-        nextWaveTimer = Mathf.Max(0f, delaySeconds);
         if (gateHintText != null)
         {
             gateHintText.transform.parent.gameObject.SetActive(true);
+            float nextEventTime = GetNextTimelineEventTime(gameTimer);
+            if (nextEventTime < 0f)
+            {
+                gateHintText.text = currentLanguage == LanguageOption.RU
+                    ? "Таймлайн завершён."
+                    : "Timeline complete.";
+            }
+            else
+            {
+                float timeLeft = Mathf.Max(0f, nextEventTime - gameTimer);
+                gateHintText.text = currentLanguage == LanguageOption.RU
+                    ? "Следующий эвент через " + timeLeft.ToString("0.0") + "с"
+                    : "Next event in " + timeLeft.ToString("0.0") + "s";
+            }
+        }
+    }
+
+    private float GetNextTimelineEventTime(float now)
+    {
+        if (currentTimeline == null || currentTimeline.events == null || currentTimeline.events.Count == 0)
+        {
+            return -1f;
         }
 
-        if (logActivation)
+        float nextTime = float.MaxValue;
+        for (int i = 0; i < currentTimeline.events.Count; i++)
         {
-            LogMessage(Localize("log_warp_active"), "warning");
+            SpawnEvent spawnEvent = currentTimeline.events[i];
+            if (spawnEvent == null)
+            {
+                continue;
+            }
+
+            float startTime = Mathf.Max(0f, spawnEvent.startTime);
+            if (spawnEvent.pattern == SpawnPatternType.Continuous)
+            {
+                float duration = Mathf.Max(0f, spawnEvent.duration);
+                if (duration <= 0f)
+                {
+                    continue;
+                }
+
+                float endTime = startTime + duration;
+                if (now <= endTime)
+                {
+                    if (now < startTime)
+                    {
+                        nextTime = Mathf.Min(nextTime, startTime);
+                    }
+                    else
+                    {
+                        return now;
+                    }
+                }
+                continue;
+            }
+
+            if (i < spawnEventStates.Count && spawnEventStates[i].oneShotExecuted)
+            {
+                continue;
+            }
+
+            if (now < startTime)
+            {
+                nextTime = Mathf.Min(nextTime, startTime);
+            }
+            else
+            {
+                return now;
+            }
         }
+
+        return nextTime == float.MaxValue ? -1f : nextTime;
     }
 
     private void UpdateEffects(float deltaTime)
@@ -2964,7 +3169,7 @@ public class SpaceCombatSceneController : MonoBehaviour
                     ? Localize("status_levelup")
                     : useVirtualJoystick ? Localize("status_play_mobile") : Localize("status_play_desktop");
 
-        if (!waitingForNextWave || !gameStarted)
+        if (!gameStarted)
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
         }

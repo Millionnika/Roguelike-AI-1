@@ -186,12 +186,3 @@ public sealed class BackgroundLayerConfig
     [Min(8f)] public float tileSize = 36f;
     [Range(1, 3)] public int gridRadius = 1;
 }
-
-[Serializable]
-public sealed class WaveSpawnSettings
-{
-    [Min(1)] public int enemiesPerWave = 5;
-    [Min(0f)] public float initialWaveDelay = 3f;
-    [Min(0f)] public float timeBetweenWaves = 3f;
-    [Min(0f)] public float spawnOffscreenMargin = 2f;
-}
