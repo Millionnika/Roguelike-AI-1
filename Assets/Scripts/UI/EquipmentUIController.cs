@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class EquipmentUIController : MonoBehaviour
 {
@@ -14,6 +15,30 @@ public sealed class EquipmentUIController : MonoBehaviour
     private readonly List<SlotUI> weaponSlots = new List<SlotUI>();
     private readonly List<SlotUI> moduleSlots = new List<SlotUI>();
     private bool subscribed;
+
+    public void Configure(
+        SpaceCombatSceneController controller,
+        SlotUI prefab,
+        Transform weaponContainer,
+        Transform moduleContainer)
+    {
+        if (prefab != null)
+        {
+            slotPrefab = prefab;
+        }
+
+        if (weaponContainer != null)
+        {
+            weaponSlotsContainer = weaponContainer;
+        }
+
+        if (moduleContainer != null)
+        {
+            moduleSlotsContainer = moduleContainer;
+        }
+
+        Bind(controller);
+    }
 
     private void OnEnable()
     {
@@ -111,9 +136,9 @@ public sealed class EquipmentUIController : MonoBehaviour
 
     private bool HasUiReferences()
     {
-        if (slotPrefab == null || weaponSlotsContainer == null || moduleSlotsContainer == null)
+        if (weaponSlotsContainer == null || moduleSlotsContainer == null)
         {
-            Debug.LogError("EquipmentUIController: assign SlotUI prefab and both containers in inspector.", this);
+            Debug.LogError("EquipmentUIController: assign both containers in inspector.", this);
             return false;
         }
 
@@ -135,9 +160,73 @@ public sealed class EquipmentUIController : MonoBehaviour
 
         while (slots.Count < targetCount)
         {
-            SlotUI slot = Instantiate(slotPrefab, container);
+            SlotUI slot = slotPrefab != null
+                ? Instantiate(slotPrefab, container)
+                : CreateRuntimeSlot(container, prefix + "_" + (slots.Count + 1));
             slot.name = prefix + "_" + (slots.Count + 1);
             slots.Add(slot);
         }
+    }
+
+    private static SlotUI CreateRuntimeSlot(Transform parent, string objectName)
+    {
+        GameObject root = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(LayoutElement), typeof(SlotUI));
+        root.transform.SetParent(parent, false);
+
+        RectTransform rootRect = root.GetComponent<RectTransform>();
+        rootRect.sizeDelta = new Vector2(72f, 72f);
+
+        Image background = root.GetComponent<Image>();
+        background.color = new Color(0.05f, 0.1f, 0.14f, 0.92f);
+
+        LayoutElement layout = root.GetComponent<LayoutElement>();
+        layout.preferredWidth = 72f;
+        layout.preferredHeight = 72f;
+        layout.minWidth = 72f;
+        layout.minHeight = 72f;
+
+        GameObject iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+        iconGo.transform.SetParent(root.transform, false);
+        RectTransform iconRect = iconGo.GetComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0.5f, 0.5f);
+        iconRect.anchorMax = new Vector2(0.5f, 0.5f);
+        iconRect.pivot = new Vector2(0.5f, 0.5f);
+        iconRect.sizeDelta = new Vector2(36f, 36f);
+        iconRect.anchoredPosition = new Vector2(0f, 4f);
+        Image iconImage = iconGo.GetComponent<Image>();
+        iconImage.color = new Color(1f, 1f, 1f, 0.25f);
+
+        GameObject keyGo = new GameObject("KeyBind", typeof(RectTransform), typeof(Text));
+        keyGo.transform.SetParent(root.transform, false);
+        RectTransform keyRect = keyGo.GetComponent<RectTransform>();
+        keyRect.anchorMin = new Vector2(0f, 1f);
+        keyRect.anchorMax = new Vector2(1f, 1f);
+        keyRect.pivot = new Vector2(0.5f, 1f);
+        keyRect.anchoredPosition = new Vector2(0f, -4f);
+        keyRect.sizeDelta = new Vector2(0f, 18f);
+        Text keyText = keyGo.GetComponent<Text>();
+        keyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        keyText.fontSize = 12;
+        keyText.alignment = TextAnchor.MiddleCenter;
+        keyText.color = Color.white;
+
+        GameObject cooldownGo = new GameObject("CooldownOverlay", typeof(RectTransform), typeof(Image));
+        cooldownGo.transform.SetParent(root.transform, false);
+        RectTransform cooldownRect = cooldownGo.GetComponent<RectTransform>();
+        cooldownRect.anchorMin = Vector2.zero;
+        cooldownRect.anchorMax = Vector2.one;
+        cooldownRect.offsetMin = Vector2.zero;
+        cooldownRect.offsetMax = Vector2.zero;
+        Image cooldownImage = cooldownGo.GetComponent<Image>();
+        cooldownImage.color = new Color(0f, 0f, 0f, 0.55f);
+        cooldownImage.type = Image.Type.Filled;
+        cooldownImage.fillMethod = Image.FillMethod.Vertical;
+        cooldownImage.fillOrigin = (int)Image.OriginVertical.Top;
+        cooldownImage.fillAmount = 0f;
+        cooldownGo.SetActive(false);
+
+        SlotUI slotUi = root.GetComponent<SlotUI>();
+        slotUi.AssignReferences(iconImage, keyText, cooldownImage, background);
+        return slotUi;
     }
 }

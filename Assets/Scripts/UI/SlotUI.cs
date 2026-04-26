@@ -13,6 +13,14 @@ public sealed class SlotUI : MonoBehaviour
     [SerializeField] private Color equippedBackgroundColor = new Color(0.09f, 0.19f, 0.28f, 0.95f);
     [SerializeField] private Color emptyBackgroundColor = new Color(0.05f, 0.1f, 0.14f, 0.55f);
 
+    public void AssignReferences(Image icon, Text keyBind, Image cooldown, Image background)
+    {
+        iconImage = icon;
+        keyBindText = keyBind;
+        cooldownOverlay = cooldown;
+        backgroundImage = background;
+    }
+
     public void Setup(Sprite icon, string keyBind)
     {
         bool hasItem = icon != null;

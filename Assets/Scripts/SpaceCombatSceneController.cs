@@ -19,6 +19,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text waveText;
     [SerializeField] private EquipmentUIController equipmentUiController;
+    [SerializeField] private SlotUI slotUiPrefab;
 
     [Header("Data")]
     [SerializeField] private MovementSettingsSO playerMovementSettings;
@@ -240,10 +241,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreateStarterShips();
         BuildWorld();
         SpawnPlayer();
-        if (equipmentUiController != null)
-        {
-            equipmentUiController.Bind(this);
-        }
         SelectShip(0);
         BuildHud();
         ApplyPerformanceSettings();
@@ -303,14 +300,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (waveText == null)
         {
             Debug.LogError("SpaceCombatSceneController: waveText is not assigned.", this);
-        }
-        if (equipmentUiController == null)
-        {
-            Debug.LogWarning("SpaceCombatSceneController: equipmentUiController is not assigned. Equipment panel will not update.", this);
-        }
-        if (availableShips == null || availableShips.Count == 0)
-        {
-            Debug.LogWarning("SpaceCombatSceneController: availableShips is empty. Runtime fallback ships will be used.", this);
         }
     }
 
@@ -1048,6 +1037,11 @@ public class SpaceCombatSceneController : MonoBehaviour
             modules[i].WeaponTimer = 0f;
             UpdateModuleVisual(modules[i]);
         }
+
+        if (equipmentUiController != null)
+        {
+            equipmentUiController.Refresh(equipmentState);
+        }
     }
 
     private void ShowStartMenu(bool show)
@@ -1360,6 +1354,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreateCombatLogPanel(canvasObject.transform);
         CreateGateHint(canvasObject.transform);
         CreatePlayerStatusHud(canvasObject.transform);
+        CreateEquipmentHud(canvasObject.transform);
         CreateModuleHud(canvasObject.transform);
         CreateStatusLabel(canvasObject.transform);
         CreatePerkPanel(canvasObject.transform);
@@ -1547,6 +1542,59 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         BindModuleSlots();
+    }
+
+    private void CreateEquipmentHud(Transform parent)
+    {
+        RectTransform panel = new GameObject("EquipmentPanelRuntime", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup)).GetComponent<RectTransform>();
+        panel.SetParent(parent, false);
+        panel.anchorMin = new Vector2(0.5f, 0f);
+        panel.anchorMax = new Vector2(0.5f, 0f);
+        panel.pivot = new Vector2(0.5f, 0f);
+        panel.anchoredPosition = new Vector2(-120f, 145f);
+        panel.sizeDelta = new Vector2(420f, 130f);
+
+        Image panelBackground = panel.GetComponent<Image>();
+        panelBackground.color = new Color(0.03f, 0.07f, 0.1f, 0.86f);
+        AddOutline(panelBackground.gameObject, new Color(0.15f, 0.32f, 0.44f, 1f));
+
+        VerticalLayoutGroup verticalLayout = panel.GetComponent<VerticalLayoutGroup>();
+        verticalLayout.padding = new RectOffset(10, 10, 8, 8);
+        verticalLayout.spacing = 8f;
+        verticalLayout.childControlWidth = true;
+        verticalLayout.childControlHeight = false;
+        verticalLayout.childForceExpandWidth = false;
+        verticalLayout.childForceExpandHeight = false;
+
+        RectTransform weaponsRow = CreateEquipmentRow(panel, "WeaponsRow");
+        RectTransform modulesRow = CreateEquipmentRow(panel, "ModulesRow");
+
+        EquipmentUIController runtimeController = panel.gameObject.AddComponent<EquipmentUIController>();
+        runtimeController.Configure(this, slotUiPrefab, weaponsRow, modulesRow);
+        equipmentUiController = runtimeController;
+    }
+
+    private static RectTransform CreateEquipmentRow(Transform parent, string objectName)
+    {
+        RectTransform row = new GameObject(objectName, typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter)).GetComponent<RectTransform>();
+        row.SetParent(parent, false);
+        row.anchorMin = new Vector2(0f, 0.5f);
+        row.anchorMax = new Vector2(1f, 0.5f);
+        row.pivot = new Vector2(0.5f, 0.5f);
+        row.sizeDelta = new Vector2(0f, 52f);
+
+        HorizontalLayoutGroup horizontalLayout = row.GetComponent<HorizontalLayoutGroup>();
+        horizontalLayout.spacing = 10f;
+        horizontalLayout.childAlignment = TextAnchor.MiddleLeft;
+        horizontalLayout.childControlWidth = true;
+        horizontalLayout.childControlHeight = true;
+        horizontalLayout.childForceExpandWidth = false;
+        horizontalLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = row.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        return row;
     }
 
     private void CreateVirtualJoystick(Transform parent)
