@@ -151,10 +151,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1554557186}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.5}
-  m_AnchorMax: {x: 1, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 52}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 10, y: -8}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &282660259
 MonoBehaviour:
@@ -953,12 +953,20 @@ MonoBehaviour:
   scoreText: {fileID: 1016877298}
   waveText: {fileID: 1973114523}
   equipmentUiController: {fileID: 1554557187}
+  slotUiPrefab: {fileID: 0}
   playerMovementSettings: {fileID: 0}
   playerWeaponData: {fileID: 0}
-  defaultInstalledModules: []
-  availableShips: []
-  waveConfigs: []
-  backgroundLayers: []
+  availableShips:
+  - {fileID: 11400000, guid: 0ee6c6b9a0b1c644d8595ee8f3c68c16, type: 2}
+  - {fileID: 11400000, guid: e6f2ec110fdd72d4d914e0abd46ba3be, type: 2}
+  waveConfigs:
+  - {fileID: 11400000, guid: 1ef53575cbc74334481a4ad52882c567, type: 2}
+  - {fileID: 11400000, guid: 9375ca53368a89b4a9adb18bd1a26452, type: 2}
+  backgroundLayers:
+  - prefab: {fileID: 0}
+    parallaxFactor: 0
+    tileSize: 0
+    gridRadius: 0
   waveSettings:
     enemiesPerWave: 5
     initialWaveDelay: 3
@@ -996,10 +1004,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1554557186}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.5}
-  m_AnchorMax: {x: 1, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 52}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 10, y: -16}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1937169386
 MonoBehaviour:

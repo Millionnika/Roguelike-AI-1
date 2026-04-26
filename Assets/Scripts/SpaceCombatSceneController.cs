@@ -24,7 +24,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Header("Data")]
     [SerializeField] private MovementSettingsSO playerMovementSettings;
     [SerializeField] private WeaponDataSO playerWeaponData;
-    [SerializeField] private List<ModuleDataSO> defaultInstalledModules = new List<ModuleDataSO>();
     [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
     [SerializeField] private List<EnemyDataSO> waveConfigs = new List<EnemyDataSO>();
 
@@ -33,6 +32,12 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     [Header("Wave Settings")]
     [SerializeField] private WaveSpawnSettings waveSettings = new WaveSpawnSettings();
+
+    [Header("Audio")]
+    [SerializeField, Range(0f, 1f)] private float shotBaseVolume = 0.85f;
+    [SerializeField, Range(0f, 0.5f)] private float shotPitchRandomRange = 0.08f;
+    [SerializeField, Range(0f, 0.5f)] private float shotVolumeRandomRange = 0.12f;
+    [SerializeField, Min(1)] private int shotAudioVoices = 4;
 
     private enum StartMenuPage
     {
@@ -80,6 +85,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Transform projectileRoot;
     private Transform gateTransform;
     private Transform weaponSlotsRoot;
+    private GameObject playerVisualInstance;
 
     private Canvas hudCanvas;
     private Text combatLogText;
@@ -164,9 +170,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool useVirtualJoystick;
     private bool joystickDragging;
     private Vector2 joystickVector;
-    private GameObject runtimeEnemyPrefab;
     private GameObject runtimeStarLayerPrefab;
     private GameObject runtimeNebulaLayerPrefab;
+    private AudioSource[] shotAudioSources;
+    private int nextShotAudioSourceIndex;
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
     public ShipEquipmentState CurrentEquipmentState => equipmentState;
@@ -237,11 +244,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         ConfigureCamera();
+        EnsureWeaponAudioSources();
         CreateSprites();
         CreateStarterShips();
         BuildWorld();
         SpawnPlayer();
-        SelectShip(0);
+        SelectShip(GetInitialShipIndex());
         BuildHud();
         ApplyPerformanceSettings();
         ShowStartMenu(true);
@@ -260,10 +268,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         backgroundParallaxService?.Dispose();
 
-        if (runtimeEnemyPrefab != null)
-        {
-            Destroy(runtimeEnemyPrefab);
-        }
         if (runtimeStarLayerPrefab != null)
         {
             Destroy(runtimeStarLayerPrefab);
@@ -329,7 +333,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         availableShips ??= new List<ShipDataSO>();
-        defaultInstalledModules ??= new List<ModuleDataSO>();
+        availableShips.RemoveAll(ship => ship == null);
 
         if (waveConfigs == null)
         {
@@ -349,6 +353,50 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         waveSettings ??= new WaveSpawnSettings();
         backgroundLayers ??= new List<BackgroundLayerConfig>();
+    }
+
+    private void EnsureWeaponAudioSources()
+    {
+        int voices = Mathf.Max(1, shotAudioVoices);
+        shotAudioSources = new AudioSource[voices];
+        nextShotAudioSourceIndex = 0;
+
+        Transform audioRoot = new GameObject("WeaponAudio").transform;
+        audioRoot.SetParent(transform, false);
+        audioRoot.localPosition = Vector3.zero;
+
+        for (int i = 0; i < voices; i++)
+        {
+            GameObject sourceObject = new GameObject("WeaponShotSource_" + i);
+            sourceObject.transform.SetParent(audioRoot, false);
+            AudioSource source = sourceObject.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.loop = false;
+            source.spatialBlend = 0f;
+            source.volume = 1f;
+            shotAudioSources[i] = source;
+        }
+    }
+
+    private void PlayWeaponShot(WeaponDataSO weaponData)
+    {
+        if (weaponData == null || weaponData.fireSound == null || shotAudioSources == null || shotAudioSources.Length == 0)
+        {
+            return;
+        }
+
+        AudioSource source = shotAudioSources[nextShotAudioSourceIndex];
+        nextShotAudioSourceIndex = (nextShotAudioSourceIndex + 1) % shotAudioSources.Length;
+        if (source == null)
+        {
+            return;
+        }
+
+        float randomPitch = 1f + UnityEngine.Random.Range(-shotPitchRandomRange, shotPitchRandomRange);
+        float randomVolume = 1f + UnityEngine.Random.Range(-shotVolumeRandomRange, shotVolumeRandomRange);
+        source.pitch = Mathf.Clamp(randomPitch, 0.5f, 2f);
+        float volumeScale = Mathf.Clamp01(shotBaseVolume * randomVolume);
+        source.PlayOneShot(weaponData.fireSound, volumeScale);
     }
 
     private void Update()
@@ -648,7 +696,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             1f,
             1f,
             new Color(0.28f, 0.6f, 0.94f, 1f),
-            new Color(0.38f, 0.76f, 1f, 0.72f)));
+            new Color(0.38f, 0.76f, 1f, 0.72f),
+            playerWeaponData));
 
         availableShips.Add(CreateRuntimeShipData(
             "Bulwark",
@@ -671,7 +720,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             0.94f,
             1.22f,
             new Color(0.18f, 0.78f, 0.8f, 1f),
-            new Color(0.42f, 1f, 0.92f, 0.72f)));
+            new Color(0.42f, 1f, 0.92f, 0.72f),
+            playerWeaponData));
 
         availableShips.Add(CreateRuntimeShipData(
             "Raptor",
@@ -694,7 +744,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             1.2f,
             0.9f,
             new Color(1f, 0.58f, 0.18f, 1f),
-            new Color(1f, 0.75f, 0.36f, 0.72f)));
+            new Color(1f, 0.75f, 0.36f, 0.72f),
+            playerWeaponData));
     }
 
     private static ShipDataSO CreateRuntimeShipData(
@@ -718,7 +769,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         float damageMultiplier,
         float repairMultiplier,
         Color accentColor,
-        Color auraColor)
+        Color auraColor,
+        WeaponDataSO defaultWeapon)
     {
         ShipDataSO data = ScriptableObject.CreateInstance<ShipDataSO>();
         data.displayName = displayName;
@@ -742,6 +794,16 @@ public class SpaceCombatSceneController : MonoBehaviour
         data.repairMultiplier = repairMultiplier;
         data.accentColor = accentColor;
         data.auraColor = auraColor;
+        data.startingWeapons = new List<WeaponDataSO>();
+        data.startingModules = new List<ModuleDataSO>();
+        for (int i = 0; i < weaponSlotCount; i++)
+        {
+            data.startingWeapons.Add(defaultWeapon);
+        }
+        for (int i = 0; i < moduleSlotCount; i++)
+        {
+            data.startingModules.Add(null);
+        }
         return data;
     }
 
@@ -792,37 +854,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         GameObject playerObject = new GameObject("PlayerShip");
         playerObject.transform.SetParent(worldRoot, false);
 
-        SpriteRenderer bodyRenderer = playerObject.AddComponent<SpriteRenderer>();
-        bodyRenderer.sprite = diamondSprite;
-        bodyRenderer.color = new Color(0.24f, 0.56f, 0.92f, 1f);
-        bodyRenderer.sortingOrder = 5;
-        playerObject.transform.localScale = new Vector3(0.4f, 0.55f, 1f);
-
-        GameObject aura = new GameObject("ShieldAura");
-        aura.transform.SetParent(playerObject.transform, false);
-        SpriteRenderer auraRenderer = aura.AddComponent<SpriteRenderer>();
-        auraRenderer.sprite = ringSprite;
-        auraRenderer.color = new Color(0.35f, 0.72f, 1f, 0.7f);
-        auraRenderer.sortingOrder = 4;
-        aura.transform.localScale = new Vector3(0.8f, 0.8f, 1f);
-
-        GameObject thruster = new GameObject("Thruster");
-        thruster.transform.SetParent(playerObject.transform, false);
-        thruster.transform.localPosition = new Vector3(0f, -0.55f, 0f);
-        SpriteRenderer thrusterRenderer = thruster.AddComponent<SpriteRenderer>();
-        thrusterRenderer.sprite = circleSprite;
-        thrusterRenderer.color = new Color(0.9f, 0.72f, 0.28f, 0.55f);
-        thrusterRenderer.sortingOrder = 3;
-        thruster.transform.localScale = new Vector3(0.35f, 0.7f, 1f);
-
         player = new PlayerShip
         {
-            Transform = playerObject.transform,
-            BodyRenderer = bodyRenderer,
-            AuraRenderer = auraRenderer,
-            ThrusterRenderer = thrusterRenderer,
-            BaseBodyColor = bodyRenderer.color,
-            BaseAuraColor = auraRenderer.color
+            Transform = playerObject.transform
         };
     }
 
@@ -836,6 +870,24 @@ public class SpaceCombatSceneController : MonoBehaviour
         selectedShipIndex = Mathf.Clamp(index, 0, availableShips.Count - 1);
         ApplyShipDefinition(availableShips[selectedShipIndex], false);
         UpdateStartMenuVisuals();
+    }
+
+    private int GetInitialShipIndex()
+    {
+        if (availableShips == null || availableShips.Count == 0)
+        {
+            return 0;
+        }
+
+        for (int i = 0; i < availableShips.Count; i++)
+        {
+            if (availableShips[i] != null && availableShips[i].shipPrefab != null)
+            {
+                return i;
+            }
+        }
+
+        return 0;
     }
 
     private void ApplyShipDefinition(ShipDataSO ship, bool resetProgress)
@@ -868,18 +920,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         playerMovementSettings.moveSpeed = player.Speed;
         playerMovementSettings.rotationSpeed = ship.rotationSpeed;
-
-        if (player.BodyRenderer != null)
-        {
-            player.BodyRenderer.color = ship.accentColor;
-            player.BaseBodyColor = ship.accentColor;
-        }
-
-        if (player.AuraRenderer != null)
-        {
-            player.AuraRenderer.color = ship.auraColor;
-            player.BaseAuraColor = ship.auraColor;
-        }
+        ApplyShipVisualFromPrefab(ship);
 
         CreateModules(ship.moduleSlotCount);
         ConfigureEquipment(ship);
@@ -903,29 +944,105 @@ public class SpaceCombatSceneController : MonoBehaviour
         equipmentState.ConfigureSlots(Mathf.Max(0, ship.weaponSlotCount), Mathf.Max(0, ship.moduleSlotCount));
         RebuildWeaponSlots(ship.weaponSlotCount);
 
-        bool canInstallDefaultWeapon = CanShipUseWeapon(ship.shipClass, playerWeaponData);
         for (int i = 0; i < equipmentState.InstalledWeapons.Count; i++)
         {
-            equipmentState.InstalledWeapons[i] = canInstallDefaultWeapon ? playerWeaponData : null;
+            WeaponDataSO configuredWeapon = ship.startingWeapons != null && i < ship.startingWeapons.Count
+                ? ship.startingWeapons[i]
+                : null;
+            if (configuredWeapon != null && !CanShipUseWeapon(ship.shipClass, configuredWeapon))
+            {
+                Debug.LogWarning(
+                    "SpaceCombatSceneController: weapon '" + configuredWeapon.name + "' in ship '" + ship.displayName +
+                    "' slot " + (i + 1) + " is not compatible with class " + ship.shipClass + ".");
+                configuredWeapon = null;
+            }
+
+            equipmentState.InstalledWeapons[i] = configuredWeapon;
             equipmentState.WeaponTimers[i] = 0f;
         }
 
         for (int i = 0; i < equipmentState.InstalledModules.Count; i++)
         {
-            ModuleDataSO moduleData = defaultInstalledModules != null && i < defaultInstalledModules.Count
-                ? defaultInstalledModules[i]
+            ModuleDataSO moduleData = ship.startingModules != null && i < ship.startingModules.Count
+                ? ship.startingModules[i]
                 : null;
             equipmentState.InstalledModules[i] = moduleData;
         }
 
-        if (!canInstallDefaultWeapon && playerWeaponData != null)
+        NotifyEquipmentStateChanged();
+    }
+
+    private void ApplyShipVisualFromPrefab(ShipDataSO ship)
+    {
+        if (player == null || player.Transform == null)
         {
-            Debug.LogWarning(
-                "SpaceCombatSceneController: playerWeaponData is not compatible with ship class " + ship.shipClass +
-                ". Configure WeaponDataSO.requiredClass or assign a compatible weapon.");
+            return;
         }
 
-        NotifyEquipmentStateChanged();
+        if (playerVisualInstance != null)
+        {
+            Destroy(playerVisualInstance);
+            playerVisualInstance = null;
+        }
+
+        player.BodyRenderer = null;
+        player.AuraRenderer = null;
+        player.ThrusterRenderer = null;
+
+        if (ship == null || ship.shipPrefab == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: Ship prefab is missing for ship '" + (ship != null ? ship.displayName : "null") + "'.");
+            return;
+        }
+
+        playerVisualInstance = Instantiate(ship.shipPrefab, player.Transform);
+        playerVisualInstance.name = "PlayerVisual";
+        playerVisualInstance.transform.localPosition = Vector3.zero;
+        playerVisualInstance.transform.localRotation = Quaternion.identity;
+        playerVisualInstance.transform.localScale = Vector3.one;
+
+        ResolvePlayerVisualRenderers(playerVisualInstance.transform, out SpriteRenderer body, out SpriteRenderer aura, out SpriteRenderer thruster);
+        player.BodyRenderer = body;
+        player.AuraRenderer = aura;
+        player.ThrusterRenderer = thruster;
+
+        player.BaseBodyColor = body != null ? body.color : ship.accentColor;
+        player.BaseAuraColor = aura != null ? aura.color : ship.auraColor;
+    }
+
+    private static void ResolvePlayerVisualRenderers(Transform visualRoot, out SpriteRenderer body, out SpriteRenderer aura, out SpriteRenderer thruster)
+    {
+        body = null;
+        aura = null;
+        thruster = null;
+
+        if (visualRoot == null)
+        {
+            return;
+        }
+
+        SpriteRenderer[] renderers = visualRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            string lowerName = renderers[i].name.ToLowerInvariant();
+            if (body == null && (lowerName.Contains("body") || lowerName.Contains("hull")))
+            {
+                body = renderers[i];
+            }
+            else if (aura == null && (lowerName.Contains("aura") || lowerName.Contains("shield")))
+            {
+                aura = renderers[i];
+            }
+            else if (thruster == null && (lowerName.Contains("thruster") || lowerName.Contains("engine")))
+            {
+                thruster = renderers[i];
+            }
+        }
+
+        if (body == null && renderers.Length > 0)
+        {
+            body = renderers[0];
+        }
     }
 
     private void RebuildWeaponSlots(int weaponSlotCount)
@@ -1070,12 +1187,24 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         ShipDataSO ship = availableShips[selectedShipIndex];
+        if (ship == null)
+        {
+            return;
+        }
         if (startMenuShipNameText != null)
         {
             startMenuShipNameText.text = ship.displayName;
-            startMenuRoleText.text = GetShipRoleText(ship);
-            startMenuDescriptionText.text = GetShipDescriptionText(ship);
-            startMenuStatsText.text =
+            if (startMenuRoleText != null)
+            {
+                startMenuRoleText.text = GetShipRoleText(ship);
+            }
+            if (startMenuDescriptionText != null)
+            {
+                startMenuDescriptionText.text = GetShipDescriptionText(ship);
+            }
+            if (startMenuStatsText != null)
+            {
+                startMenuStatsText.text =
                 (currentLanguage == LanguageOption.RU
                     ? "Скорость: " + ship.maxSpeed.ToString("0.0") +
                       "    Щит: " + Mathf.RoundToInt(ship.maxShield) +
@@ -1093,25 +1222,46 @@ public class SpaceCombatSceneController : MonoBehaviour
                       "    Recharge: " + ship.capacitorRechargeTime.ToString("0") + "s" +
                       "    Weapon slots: " + Mathf.Max(0, ship.weaponSlotCount) +
                       "    Module slots: " + Mathf.Max(0, ship.moduleSlotCount));
-            startMenuPreviewImage.color = ship.accentColor;
+            }
+            if (startMenuPreviewImage != null)
+            {
+                startMenuPreviewImage.sprite = ship.shipIcon;
+                startMenuPreviewImage.color = ship.shipIcon != null ? Color.white : ship.accentColor;
+            }
         }
 
         if (startButtonImage != null)
         {
             startButtonImage.color = Color.Lerp(new Color(0.12f, 0.3f, 0.42f, 1f), ship.accentColor, 0.45f);
-            startButtonText.text = Localize("start_operation") + " " + ship.displayName.ToUpperInvariant();
+            if (startButtonText != null)
+            {
+                startButtonText.text = Localize("start_operation") + " " + ship.displayName.ToUpperInvariant();
+            }
         }
 
-        for (int i = 0; i < shipCardViews.Count; i++)
+        int cardCount = Mathf.Min(shipCardViews.Count, availableShips.Count);
+        for (int i = 0; i < cardCount; i++)
         {
             ShipDataSO cardShip = availableShips[i];
+            if (cardShip == null)
+            {
+                continue;
+            }
             bool isSelected = i == selectedShipIndex;
-            shipCardViews[i].Background.color = isSelected
+            if (shipCardViews[i].Background != null)
+            {
+                shipCardViews[i].Background.color = isSelected
                 ? new Color(0.12f, 0.26f, 0.36f, 1f)
                 : new Color(0.06f, 0.12f, 0.17f, 0.96f);
-            shipCardViews[i].Title.text = cardShip.displayName + "\n<size=16>" + GetShipRoleText(cardShip) + "</size>";
-            shipCardViews[i].Title.color = isSelected ? cardShip.accentColor : Color.white;
-            shipCardViews[i].Stats.text =
+            }
+            if (shipCardViews[i].Title != null)
+            {
+                shipCardViews[i].Title.text = cardShip.displayName + "\n<size=16>" + GetShipRoleText(cardShip) + "</size>";
+                shipCardViews[i].Title.color = isSelected ? cardShip.accentColor : Color.white;
+            }
+            if (shipCardViews[i].Stats != null)
+            {
+                shipCardViews[i].Stats.text =
                 (currentLanguage == LanguageOption.RU
                     ? "Щит " + Mathf.RoundToInt(cardShip.maxShield) +
                       "  Броня " + Mathf.RoundToInt(cardShip.maxArmor) +
@@ -1121,6 +1271,7 @@ public class SpaceCombatSceneController : MonoBehaviour
                       "  Armor " + Mathf.RoundToInt(cardShip.maxArmor) +
                       "\nSpeed " + cardShip.maxSpeed.ToString("0.0") +
                       "  Guns " + Mathf.Max(0, cardShip.weaponSlotCount));
+            }
         }
 
         if (startMenuHintText != null)
@@ -1217,7 +1368,10 @@ public class SpaceCombatSceneController : MonoBehaviour
                 enemyData,
                 position,
                 1f + (wave - 1) * 0.14f);
-            enemies.Add(enemy);
+            if (enemy != null)
+            {
+                enemies.Add(enemy);
+            }
         }
 
         targetEnemy = enemies.Count > 0 ? enemies[0] : null;
@@ -1227,35 +1381,29 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private EnemyShip CreateEnemy(string id, EnemyDataSO enemyData, Vector3 position, float levelScale)
     {
-        string typeName = enemyData != null ? enemyData.name : "Raider";
-        GameObject enemyPrefab = enemyData != null && enemyData.prefab != null
-            ? enemyData.prefab
-            : GetRuntimeEnemyPrefab();
+        if (enemyData == null || enemyData.prefab == null)
+        {
+            Debug.LogError("SpaceCombatSceneController: EnemyDataSO or enemy prefab is missing for enemy " + id + ".");
+            return null;
+        }
+
+        string typeName = enemyData.name;
+        GameObject enemyPrefab = enemyData.prefab;
 
         GameObject enemyObject = poolService.Get(enemyPrefab, enemyRoot);
-        if (enemyObject == null)
-        {
-            enemyObject = new GameObject(id);
-            enemyObject.transform.SetParent(enemyRoot, false);
-        }
+        if (enemyObject == null) return null;
 
         enemyObject.name = id;
         enemyObject.transform.position = position;
-        enemyObject.transform.localScale = new Vector3(0.34f, 0.34f, 1f);
 
-        SpriteRenderer bodyRenderer = enemyObject.GetComponent<SpriteRenderer>();
-        if (bodyRenderer == null)
+        SpriteRenderer bodyRenderer = enemyObject.GetComponentInChildren<SpriteRenderer>(true);
+        SpriteRenderer shieldRenderer = FindChildSpriteRenderer(enemyObject.transform, "Shield");
+        SpriteRenderer targetRenderer = FindChildSpriteRenderer(enemyObject.transform, "TargetRing");
+        if (targetRenderer != null)
         {
-            bodyRenderer = enemyObject.AddComponent<SpriteRenderer>();
+            targetRenderer.gameObject.SetActive(false);
         }
-        bodyRenderer.sprite = circleSprite;
-        bodyRenderer.color = new Color(0.75f, 0.2f, 0.24f, 1f);
-        bodyRenderer.sortingOrder = 5;
-
-        SpriteRenderer shieldRenderer = EnsureChildRenderer(enemyObject.transform, "Shield", ringSprite, new Color(0.25f, 0.68f, 1f, 0.9f), 4, new Vector3(1.22f, 1.22f, 1f), Vector3.zero);
-        SpriteRenderer targetRenderer = EnsureChildRenderer(enemyObject.transform, "TargetRing", ringSprite, new Color(1f, 0.88f, 0.42f, 1f), 6, new Vector3(1.6f, 1.6f, 1f), Vector3.zero);
-        targetRenderer.gameObject.SetActive(false);
-        SpriteRenderer thrusterRenderer = EnsureChildRenderer(enemyObject.transform, "Thruster", circleSprite, new Color(1f, 0.36f, 0.22f, 0.34f), 3, new Vector3(0.36f, 0.7f, 1f), new Vector3(0f, -0.72f, 0f));
+        SpriteRenderer thrusterRenderer = FindChildSpriteRenderer(enemyObject.transform, "Thruster");
 
         float baseHealth = (enemyData != null ? enemyData.maxHealth : 100f) * levelScale;
         float shieldValue = Mathf.RoundToInt(baseHealth * 1.5f);
@@ -1290,8 +1438,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             Hull = hullValue,
             WeaponData = enemyWeapon,
             Prefab = enemyPrefab,
-            BaseBodyColor = bodyRenderer.color,
-            BaseShieldColor = shieldRenderer.color
+            BaseBodyColor = bodyRenderer != null ? bodyRenderer.color : Color.white,
+            BaseShieldColor = shieldRenderer != null ? shieldRenderer.color : Color.white
         };
     }
 
@@ -1774,7 +1922,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         previewRect.pivot = new Vector2(0f, 0.5f);
         previewRect.sizeDelta = new Vector2(150f, 150f);
         previewRect.anchoredPosition = new Vector2(28f, 0f);
-        startMenuPreviewImage.sprite = diamondSprite;
+        startMenuPreviewImage.sprite = null;
 
         startMenuShipNameText = CreateText("ShipName", infoPanel.transform, "-", 28, FontStyle.Bold, Color.white);
         SetAnchoredRect(startMenuShipNameText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(200f, -22f), new Vector2(-26f, -58f));
@@ -2350,23 +2498,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         return runtimeNebulaLayerPrefab;
     }
 
-    private GameObject GetRuntimeEnemyPrefab()
-    {
-        if (runtimeEnemyPrefab != null)
-        {
-            return runtimeEnemyPrefab;
-        }
-
-        runtimeEnemyPrefab = new GameObject("RuntimeEnemyPrefab");
-        runtimeEnemyPrefab.SetActive(false);
-        runtimeEnemyPrefab.hideFlags = HideFlags.DontSave;
-        SpriteRenderer renderer = runtimeEnemyPrefab.AddComponent<SpriteRenderer>();
-        renderer.sprite = circleSprite;
-        renderer.color = new Color(0.75f, 0.2f, 0.24f, 1f);
-        renderer.sortingOrder = 5;
-        return runtimeEnemyPrefab;
-    }
-
     private Vector3 GetOffscreenSpawnPosition(float margin)
     {
         Camera camera = mainCamera != null ? mainCamera : Camera.main;
@@ -2394,36 +2525,25 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private SpriteRenderer EnsureChildRenderer(
-        Transform parent,
-        string childName,
-        Sprite sprite,
-        Color color,
-        int sortingOrder,
-        Vector3 localScale,
-        Vector3 localPosition)
+    private static SpriteRenderer FindChildSpriteRenderer(Transform root, string childName)
     {
-        Transform child = parent.Find(childName);
-        if (child == null)
+        if (root == null)
         {
-            GameObject childObject = new GameObject(childName);
-            child = childObject.transform;
-            child.SetParent(parent, false);
+            return null;
         }
 
-        child.localPosition = localPosition;
-        child.localScale = localScale;
-
-        SpriteRenderer renderer = child.GetComponent<SpriteRenderer>();
-        if (renderer == null)
+        Transform[] children = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
         {
-            renderer = child.gameObject.AddComponent<SpriteRenderer>();
+            if (!string.Equals(children[i].name, childName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return children[i].GetComponent<SpriteRenderer>();
         }
 
-        renderer.sprite = sprite;
-        renderer.color = color;
-        renderer.sortingOrder = sortingOrder;
-        return renderer;
+        return null;
     }
 
     private void UpdatePlayer(float deltaTime)
@@ -2461,7 +2581,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             Localize = Localize,
             LogMessage = LogMessage,
             UpdateModuleVisual = UpdateModuleVisual,
-            CreateAttackBeam = CreateAttackBeam
+            CreateAttackBeam = CreateAttackBeam,
+            PlayWeaponShot = PlayWeaponShot
         };
 
         CombatUpdateResult result = combatService.UpdateFrame(context, deltaTime);

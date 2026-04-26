@@ -19,6 +19,7 @@ internal sealed class CombatUpdateContext
     public Action<string, string> LogMessage;
     public Action<ModuleState> UpdateModuleVisual;
     public Action<Vector3, Vector3, Color> CreateAttackBeam;
+    public Action<WeaponDataSO> PlayWeaponShot;
 }
 
 internal readonly struct CombatUpdateResult
@@ -345,6 +346,8 @@ internal sealed class CombatService : ICombatService
             Speed = Mathf.Max(0.5f, projectileSpeed),
             Damage = weaponDamage * context.Player.DamageMultiplier
         });
+
+        context.PlayWeaponShot?.Invoke(weaponData != null ? weaponData : defaultWeaponData);
     }
 
     private void UpdateProjectiles(CombatUpdateContext context, float deltaTime)
