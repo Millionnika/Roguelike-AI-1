@@ -18,5 +18,5 @@ MonoBehaviour:
   capacitorPerShot: 9
   requiredClass: 0
   icon: {fileID: 0}
-  projectilePrefab: {fileID: 0}
+  projectilePrefab: {fileID: 317976935477892410, guid: 5deb430b8c06bb249a9c58d0743a9084, type: 3}
   fireSound: {fileID: 8300000, guid: eb026bb0346990f40af63845de0f3f48, type: 3}

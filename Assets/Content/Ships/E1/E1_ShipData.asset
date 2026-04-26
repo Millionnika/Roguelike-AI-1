@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 4ba9b335aad7b47408e6553b105e0455, type: 3}
   m_Name: E1_ShipData
   m_EditorClassIdentifier: Assembly-CSharp::ShipDataSO
   displayName: E1
@@ -33,9 +33,9 @@ MonoBehaviour:
   moduleSlotCount: 4
   damageMultiplier: 1
   repairMultiplier: 1
-  shipPrefab: {fileID: 164973676254505660, guid: 00e5e4e2ff327ca4786c65b120efb84b, type: 3}
+  shipPrefab: {fileID: 709912602491719775, guid: 00e5e4e2ff327ca4786c65b120efb84b, type: 3}
   startingWeapons:
-  - {fileID: 0}
+  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
   - {fileID: 0}
   startingModules:
   - {fileID: 0}

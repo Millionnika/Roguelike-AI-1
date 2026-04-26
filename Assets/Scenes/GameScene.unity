@@ -958,10 +958,10 @@ MonoBehaviour:
   playerWeaponData: {fileID: 0}
   availableShips:
   - {fileID: 11400000, guid: 0ee6c6b9a0b1c644d8595ee8f3c68c16, type: 2}
-  - {fileID: 11400000, guid: e6f2ec110fdd72d4d914e0abd46ba3be, type: 2}
+  - {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
   waveConfigs:
   - {fileID: 11400000, guid: 1ef53575cbc74334481a4ad52882c567, type: 2}
-  - {fileID: 11400000, guid: 9375ca53368a89b4a9adb18bd1a26452, type: 2}
+  - {fileID: 11400000, guid: be452253263efe541b38585626261fec, type: 2}
   backgroundLayers:
   - prefab: {fileID: 0}
     parallaxFactor: 0
@@ -972,6 +972,10 @@ MonoBehaviour:
     initialWaveDelay: 3
     timeBetweenWaves: 3
     spawnOffscreenMargin: 2
+  shotBaseVolume: 0.85
+  shotPitchRandomRange: 0.08
+  shotVolumeRandomRange: 0.12
+  shotAudioVoices: 4
 --- !u!1 &1937169384
 GameObject:
   m_ObjectHideFlags: 0

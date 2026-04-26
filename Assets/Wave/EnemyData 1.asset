@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: f4f88ae054d1c8f45bc7b358611dd3ab, type: 3}
   m_Name: EnemyData 1
   m_EditorClassIdentifier: Assembly-CSharp::EnemyDataSO
   maxHealth: 100
