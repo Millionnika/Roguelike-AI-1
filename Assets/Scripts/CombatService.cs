@@ -7,7 +7,6 @@ internal sealed class CombatUpdateContext
 {
     public PlayerShip Player;
     public List<EnemyShip> Enemies;
-    public List<Projectile> Projectiles;
     public List<ModuleState> Modules;
     public ShipEquipmentState EquipmentState;
     public EnemyShip TargetEnemy;
@@ -17,7 +16,6 @@ internal sealed class CombatUpdateContext
     public Func<string, string> Localize;
     public Action<string, string> LogMessage;
     public Action<ModuleState> UpdateModuleVisual;
-    public Action<Vector3, Vector3, Color> CreateAttackBeam;
     public Action<WeaponDataSO> PlayWeaponShot;
 }
 
@@ -44,64 +42,57 @@ internal sealed class CombatService : ICombatService
         UpdateEnemies(context, deltaTime);
         UpdateModules(context, deltaTime);
         UpdateInstalledWeapons(context, deltaTime);
-        UpdateProjectiles(context, deltaTime);
+        CleanupDestroyedEnemies(context);
 
         return new CombatUpdateResult(context.TargetEnemy, levelUpRequested);
     }
 
     public void ApplyDamage(PlayerStats stats, float amount)
     {
-        float remaining = amount;
-
-        if (stats.Shield > 0f)
+        ShipDurabilityState state = new ShipDurabilityState
         {
-            float absorbed = Mathf.Min(stats.Shield, remaining);
-            stats.Shield -= absorbed;
-            remaining -= absorbed;
-        }
+            MaxShield = stats.MaxShield,
+            Shield = stats.Shield,
+            MaxArmor = stats.MaxArmor,
+            Armor = stats.Armor,
+            MaxHull = stats.MaxHull,
+            Hull = stats.Hull
+        };
 
-        if (remaining > 0f && stats.Armor > 0f)
-        {
-            float absorbed = Mathf.Min(stats.Armor, remaining);
-            stats.Armor -= absorbed;
-            remaining -= absorbed;
-        }
-
-        if (remaining > 0f)
-        {
-            stats.Hull = Mathf.Max(0f, stats.Hull - remaining);
-        }
+        DamageResolutionResult result = DamageService.ResolveDamage(state, amount);
+        stats.Shield = result.State.Shield;
+        stats.Armor = result.State.Armor;
+        stats.Hull = result.State.Hull;
     }
 
     public bool ApplyDamage(EnemyShip enemy, float amount)
     {
-        float remaining = amount;
-
-        if (enemy.Shield > 0f)
+        if (enemy == null)
         {
-            float absorbed = Mathf.Min(enemy.Shield, remaining);
-            enemy.Shield -= absorbed;
-            remaining -= absorbed;
+            return false;
         }
 
-        if (remaining > 0f && enemy.Armor > 0f)
+        ShipDurabilityState state = new ShipDurabilityState
         {
-            float absorbed = Mathf.Min(enemy.Armor, remaining);
-            enemy.Armor -= absorbed;
-            remaining -= absorbed;
-        }
+            MaxShield = enemy.MaxShield,
+            Shield = enemy.Shield,
+            MaxArmor = enemy.MaxArmor,
+            Armor = enemy.Armor,
+            MaxHull = enemy.MaxHull,
+            Hull = enemy.Hull
+        };
 
-        if (remaining > 0f)
-        {
-            enemy.Hull = Mathf.Max(0f, enemy.Hull - remaining);
-        }
-
-        return enemy.Hull <= 0f;
+        DamageResolutionResult result = DamageService.ResolveDamage(state, amount);
+        enemy.Shield = result.State.Shield;
+        enemy.Armor = result.State.Armor;
+        enemy.Hull = result.State.Hull;
+        return result.Destroyed;
     }
 
     private void UpdateEnemies(CombatUpdateContext context, float deltaTime)
     {
         Vector3 playerPosition = context.Player.Transform.position;
+
         for (int i = context.Enemies.Count - 1; i >= 0; i--)
         {
             EnemyShip enemy = context.Enemies[i];
@@ -133,16 +124,76 @@ internal sealed class CombatService : ICombatService
             enemy.AttackTimer += deltaTime;
             enemy.AttackFlashTimer = Mathf.Max(0f, enemy.AttackFlashTimer - deltaTime * 4f);
             enemy.HitFlashTimer = Mathf.Max(0f, enemy.HitFlashTimer - deltaTime * 4.5f);
+
+            bool fired = TryFireEnemyWeapons(context, enemy, playerPosition, deltaTime);
+            if (fired)
+            {
+                enemy.AttackFlashTimer = 1f;
+                enemy.AttackTimer = 0f;
+                continue;
+            }
+
             if (enemy.AttackTimer >= enemy.AttackCooldown && toPlayer.magnitude <= 3.8f)
             {
                 enemy.AttackTimer = 0f;
                 enemy.AttackFlashTimer = 1f;
-                ApplyDamage(context.Player.Stats, enemy.Damage);
-                context.Player.HitFlashTimer = 1f;
-                context.CreateAttackBeam?.Invoke(enemy.Transform.position, context.Player.Transform.position, new Color(1f, 0.32f, 0.24f, 0.95f));
-                context.LogMessage?.Invoke(enemy.Id + context.Localize("log_enemy_hits") + Mathf.RoundToInt(enemy.Damage), "hit");
+                DamageInfo fallbackDamage = BuildDamageInfo(
+                    amount: enemy.Damage,
+                    sourceFaction: CombatFaction.Enemy,
+                    sourceObject: enemy.Transform != null ? enemy.Transform.gameObject : null,
+                    weaponData: null,
+                    hitPoint: context.Player.Transform.position,
+                    direction: toPlayer.normalized);
+
+                ApplyDamageToPlayer(context, fallbackDamage, enemy.Id);
             }
         }
+    }
+
+    private bool TryFireEnemyWeapons(CombatUpdateContext context, EnemyShip enemy, Vector3 playerPosition, float deltaTime)
+    {
+        if (enemy.WeaponInstances == null || enemy.WeaponInstances.Count == 0)
+        {
+            return false;
+        }
+
+        bool firedAny = false;
+        for (int i = 0; i < enemy.WeaponInstances.Count; i++)
+        {
+            WeaponInstance weapon = enemy.WeaponInstances[i];
+            if (weapon == null)
+            {
+                continue;
+            }
+
+            weapon.Tick(deltaTime);
+            if (!weapon.CanFireAt(playerPosition))
+            {
+                continue;
+            }
+
+            if (!weapon.BeginFire())
+            {
+                continue;
+            }
+
+            Vector2 shotDirection = weapon.GetShotDirectionTo(playerPosition);
+            float shotDamage = weapon.Data != null
+                ? Mathf.Max(1f, weapon.Data.damage * Mathf.Max(0.1f, enemy.WeaponDamageMultiplier))
+                : Mathf.Max(1f, enemy.Damage);
+
+            bool fired = ExecuteWeaponFire(
+                context,
+                weapon,
+                shotDirection,
+                shotDamage,
+                playerPosition,
+                enemy.Id);
+
+            firedAny |= fired;
+        }
+
+        return firedAny;
     }
 
     private void UpdateModules(CombatUpdateContext context, float deltaTime)
@@ -200,63 +251,329 @@ internal sealed class CombatService : ICombatService
 
     private void UpdateInstalledWeapons(CombatUpdateContext context, float deltaTime)
     {
-        if (context.EquipmentState == null || context.EquipmentState.InstalledWeapons.Count == 0)
+        if (context.EquipmentState == null || context.EquipmentState.RuntimeWeapons.Count == 0)
         {
             return;
-        }
-
-        while (context.EquipmentState.WeaponTimers.Count < context.EquipmentState.InstalledWeapons.Count)
-        {
-            context.EquipmentState.WeaponTimers.Add(0f);
         }
 
         ModuleState weaponControlModule = GetWeaponControlModule(context.Modules);
-        if (weaponControlModule == null || !weaponControlModule.Active)
-        {
-            return;
-        }
+        bool weaponGroupActive = weaponControlModule != null && weaponControlModule.Active;
 
-        for (int slotIndex = 0; slotIndex < context.EquipmentState.InstalledWeapons.Count; slotIndex++)
+        for (int i = 0; i < context.EquipmentState.RuntimeWeapons.Count; i++)
         {
-            WeaponDataSO weaponData = context.EquipmentState.InstalledWeapons[slotIndex];
-            if (weaponData == null)
+            WeaponInstance weapon = context.EquipmentState.RuntimeWeapons[i];
+            if (weapon == null)
+            {
+                if (i < context.EquipmentState.WeaponTimers.Count)
+                {
+                    context.EquipmentState.WeaponTimers[i] = 0f;
+                }
+                continue;
+            }
+
+            weapon.Tick(deltaTime);
+            if (i < context.EquipmentState.WeaponTimers.Count)
+            {
+                context.EquipmentState.WeaponTimers[i] = weapon.CooldownRemaining;
+            }
+
+            if (!weaponGroupActive || context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
             {
                 continue;
             }
 
-            float fireRate = Mathf.Max(0.05f, weaponData.fireRate);
-            float timer = context.EquipmentState.WeaponTimers[slotIndex] + deltaTime;
-
-            while (timer >= fireRate)
+            if (!weapon.CanFireAt(context.TargetEnemy.Transform.position))
             {
-                timer -= fireRate;
-
-                if (context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
-                {
-                    break;
-                }
-
-                float capacitorPerShot = Mathf.Max(0f, weaponData.capacitorPerShot > 0f ? weaponData.capacitorPerShot : weaponControlModule.CapPerShot);
-                if (!context.Player.ConsumeCapacitor(capacitorPerShot))
-                {
-                    weaponControlModule.Active = false;
-                    context.UpdateModuleVisual?.Invoke(weaponControlModule);
-                    context.LogMessage?.Invoke(context.Localize("log_cap_dry") + weaponControlModule.Name + context.Localize("log_offline"), "critical");
-                    timer = 0f;
-                    break;
-                }
-
-                Vector3 muzzlePosition = context.Player.Transform.position;
-                if (slotIndex < context.EquipmentState.WeaponMuzzles.Count && context.EquipmentState.WeaponMuzzles[slotIndex] != null)
-                {
-                    muzzlePosition = context.EquipmentState.WeaponMuzzles[slotIndex].position;
-                }
-
-                FireWeapon(context, weaponControlModule, weaponData, muzzlePosition);
+                continue;
             }
 
-            context.EquipmentState.WeaponTimers[slotIndex] = timer;
+            float capacitorPerShot = Mathf.Max(0f, weapon.Data != null ? weapon.Data.capacitorPerShot : 0f);
+            if (capacitorPerShot > 0f && !context.Player.ConsumeCapacitor(capacitorPerShot))
+            {
+                weaponControlModule.Active = false;
+                context.UpdateModuleVisual?.Invoke(weaponControlModule);
+                context.LogMessage?.Invoke(context.Localize("log_cap_dry") + weaponControlModule.Name + context.Localize("log_offline"), "critical");
+                continue;
+            }
+
+            if (!weapon.BeginFire())
+            {
+                continue;
+            }
+
+            Vector2 shotDirection = weapon.GetShotDirectionTo(context.TargetEnemy.Transform.position);
+            float shotDamage = weapon.Data != null
+                ? Mathf.Max(1f, weapon.Data.damage * context.Player.DamageMultiplier)
+                : Mathf.Max(1f, weaponControlModule.Damage * context.Player.DamageMultiplier);
+
+            bool fired = ExecuteWeaponFire(
+                context,
+                weapon,
+                shotDirection,
+                shotDamage,
+                context.TargetEnemy.Transform.position,
+                null);
+
+            if (!fired)
+            {
+                context.EquipmentState.WeaponTimers[i] = 0f;
+            }
         }
+    }
+
+    private bool ExecuteWeaponFire(
+        CombatUpdateContext context,
+        WeaponInstance weapon,
+        Vector2 shotDirection,
+        float shotDamage,
+        Vector3 fallbackTargetPosition,
+        string sourceEnemyId)
+    {
+        if (weapon == null || weapon.Data == null)
+        {
+            return false;
+        }
+
+        FireMode mode = weapon.Data.fireMode;
+        bool useProjectile = mode == FireMode.Projectile || mode == FireMode.Missile;
+        bool fired;
+
+        if (useProjectile)
+        {
+            fired = SpawnProjectile(context, weapon, shotDirection, shotDamage);
+        }
+        else
+        {
+            fired = FireHitscan(context, weapon, shotDirection, shotDamage, fallbackTargetPosition, sourceEnemyId);
+        }
+
+        if (fired)
+        {
+            context.PlayWeaponShot?.Invoke(weapon.Data);
+        }
+
+        return fired;
+    }
+
+    private bool SpawnProjectile(CombatUpdateContext context, WeaponInstance weapon, Vector2 shotDirection, float shotDamage)
+    {
+        if (context.PoolService == null || context.ProjectileRoot == null)
+        {
+            return false;
+        }
+
+        GameObject projectilePrefab = weapon.Data.projectilePrefab;
+        if (projectilePrefab == null)
+        {
+            return false;
+        }
+
+        GameObject projectileObject = context.PoolService.Get(projectilePrefab, context.ProjectileRoot);
+        if (projectileObject == null)
+        {
+            return false;
+        }
+
+        Vector3 origin = weapon.GetMuzzlePosition();
+        origin.z = 0f;
+        projectileObject.transform.position = origin;
+        projectileObject.transform.rotation = Quaternion.FromToRotation(Vector3.up, shotDirection);
+
+        SpriteRenderer renderer = projectileObject.GetComponent<SpriteRenderer>();
+        if (renderer != null)
+        {
+            renderer.sortingOrder = 6;
+        }
+
+        ProjectileBehaviour behaviour = projectileObject.GetComponent<ProjectileBehaviour>();
+        if (behaviour == null)
+        {
+            behaviour = projectileObject.AddComponent<ProjectileBehaviour>();
+        }
+
+        float maxDistance = weapon.Data.projectileMaxDistance > 0f ? weapon.Data.projectileMaxDistance : weapon.EffectiveMaxRange;
+        float lifetime = weapon.Data.projectileLifetime;
+        if (lifetime <= 0f && maxDistance > 0f && weapon.Data.projectileSpeed > 0f)
+        {
+            lifetime = maxDistance / weapon.Data.projectileSpeed;
+        }
+
+        behaviour.Initialize(
+            runtimePoolService: context.PoolService,
+            sourcePrefab: projectilePrefab,
+            sourceOwner: weapon.OwnerObject,
+            sourceFaction: weapon.OwnerFaction,
+            sourceWeaponData: weapon.Data,
+            startDirection: shotDirection,
+            projectileDamage: shotDamage,
+            projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
+            projectileMaxDistance: maxDistance,
+            projectileLifetime: lifetime,
+            collisionMask: ResolveTargetMask(weapon.Data, weapon.OwnerFaction));
+
+        return true;
+    }
+
+    private bool FireHitscan(
+        CombatUpdateContext context,
+        WeaponInstance weapon,
+        Vector2 shotDirection,
+        float shotDamage,
+        Vector3 fallbackTargetPosition,
+        string sourceEnemyId)
+    {
+        Vector3 origin3 = weapon.GetMuzzlePosition();
+        origin3.z = 0f;
+        Vector2 origin = origin3;
+
+        float range = weapon.EffectiveMaxRange;
+        if (range <= 0f)
+        {
+            range = 100f;
+        }
+
+        LayerMask mask = ResolveTargetMask(weapon.Data, weapon.OwnerFaction);
+        RaycastHit2D[] hits = Physics2D.RaycastAll(origin, shotDirection, range, mask.value);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D collider = hits[i].collider;
+            if (collider == null)
+            {
+                continue;
+            }
+
+            if (weapon.OwnerObject != null && collider.transform.root == weapon.OwnerObject.transform.root)
+            {
+                continue;
+            }
+
+            TeamMember teamMember = collider.GetComponentInParent<TeamMember>();
+            if (teamMember != null && weapon.OwnerFaction != CombatFaction.Neutral && teamMember.Faction == weapon.OwnerFaction)
+            {
+                continue;
+            }
+
+            IDamageable damageable = collider.GetComponentInParent<IDamageable>();
+            if (damageable == null)
+            {
+                continue;
+            }
+
+            DamageInfo info = BuildDamageInfo(
+                amount: shotDamage,
+                sourceFaction: weapon.OwnerFaction,
+                sourceObject: weapon.OwnerObject,
+                weaponData: weapon.Data,
+                hitPoint: hits[i].point,
+                direction: shotDirection);
+
+            damageable.TakeDamage(info);
+
+            if (weapon.OwnerFaction == CombatFaction.Enemy)
+            {
+                context.Player.HitFlashTimer = 1f;
+                string sourceId = string.IsNullOrEmpty(sourceEnemyId) ? "Enemy" : sourceEnemyId;
+                context.LogMessage?.Invoke(sourceId + context.Localize("log_enemy_hits") + Mathf.RoundToInt(shotDamage), "hit");
+            }
+            else
+            {
+                EnemyShip hitEnemy = FindEnemyByTransformRoot(context.Enemies, collider.transform.root);
+                if (hitEnemy != null)
+                {
+                    hitEnemy.HitFlashTimer = 1f;
+                    context.LogMessage?.Invoke(context.Localize("log_hit") + hitEnemy.Id + context.Localize("log_for") + Mathf.RoundToInt(shotDamage), "hit");
+                }
+                else
+                {
+                    context.LogMessage?.Invoke(context.Localize("log_hit") + Mathf.RoundToInt(shotDamage), "hit");
+                }
+            }
+
+            return true;
+        }
+
+        if (weapon.OwnerFaction == CombatFaction.Enemy)
+        {
+            return false;
+        }
+
+        context.LogMessage?.Invoke(context.Localize("log_shot_missed"), "miss");
+        return false;
+    }
+
+    private static EnemyShip FindEnemyByTransformRoot(List<EnemyShip> enemies, Transform root)
+    {
+        if (enemies == null || root == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            EnemyShip enemy = enemies[i];
+            if (enemy != null && enemy.Transform != null && enemy.Transform.root == root)
+            {
+                return enemy;
+            }
+        }
+
+        return null;
+    }
+
+    private static LayerMask ResolveTargetMask(WeaponDataSO weaponData, CombatFaction ownerFaction)
+    {
+        if (weaponData != null && weaponData.targetMask.value != 0)
+        {
+            return weaponData.targetMask;
+        }
+
+        int opponentLayer = ownerFaction switch
+        {
+            CombatFaction.Player => LayerMask.NameToLayer("Enemy"),
+            CombatFaction.Enemy => LayerMask.NameToLayer("Player"),
+            _ => -1
+        };
+
+        if (opponentLayer >= 0)
+        {
+            return 1 << opponentLayer;
+        }
+
+        return Physics2D.DefaultRaycastLayers;
+    }
+
+    private static DamageInfo BuildDamageInfo(
+        float amount,
+        CombatFaction sourceFaction,
+        GameObject sourceObject,
+        WeaponDataSO weaponData,
+        Vector2 hitPoint,
+        Vector2 direction)
+    {
+        return new DamageInfo
+        {
+            Amount = Mathf.Max(0f, amount),
+            SourceFaction = sourceFaction,
+            Source = sourceObject,
+            WeaponData = weaponData,
+            HitPoint = hitPoint,
+            Direction = direction
+        };
+    }
+
+    private void ApplyDamageToPlayer(CombatUpdateContext context, DamageInfo info, string enemyId)
+    {
+        if (context.Player.DamageReceiver != null)
+        {
+            context.Player.DamageReceiver.TakeDamage(info);
+        }
+        else
+        {
+            ApplyDamage(context.Player.Stats, info.Amount);
+        }
+
+        context.Player.HitFlashTimer = 1f;
+        context.LogMessage?.Invoke(enemyId + context.Localize("log_enemy_hits") + Mathf.RoundToInt(info.Amount), "hit");
     }
 
     private static ModuleState GetWeaponControlModule(List<ModuleState> modules)
@@ -277,110 +594,17 @@ internal sealed class CombatService : ICombatService
         return null;
     }
 
-    private void FireWeapon(CombatUpdateContext context, ModuleState weaponControlModule, WeaponDataSO weaponData, Vector3 origin)
+    private void CleanupDestroyedEnemies(CombatUpdateContext context)
     {
-        if (context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
+        for (int i = context.Enemies.Count - 1; i >= 0; i--)
         {
-            return;
-        }
-
-        if (context.PoolService == null)
-        {
-            return;
-        }
-
-        GameObject projectilePrefab = weaponData != null ? weaponData.projectilePrefab : null;
-        if (projectilePrefab == null)
-        {
-            return;
-        }
-
-        float distance = Vector3.Distance(context.Player.Transform.position, context.TargetEnemy.Transform.position);
-        float hitChance = 1f;
-        if (distance > weaponControlModule.OptimalRange)
-        {
-            float exponent = Mathf.Pow((distance - weaponControlModule.OptimalRange) / Mathf.Max(0.5f, weaponControlModule.FalloffRange), 2f);
-            hitChance = Mathf.Pow(0.5f, exponent);
-        }
-
-        if (UnityEngine.Random.value > hitChance)
-        {
-            context.LogMessage?.Invoke(context.Localize("log_shot_missed") + context.TargetEnemy.Id, "miss");
-            return;
-        }
-
-        GameObject projectileObject = context.PoolService.Get(projectilePrefab, context.ProjectileRoot);
-        if (projectileObject == null)
-        {
-            return;
-        }
-        projectileObject.transform.position = origin;
-
-        SpriteRenderer renderer = projectileObject.GetComponent<SpriteRenderer>();
-        if (renderer == null)
-        {
-            renderer = projectileObject.AddComponent<SpriteRenderer>();
-        }
-        renderer.color = new Color(1f, 0.87f, 0.4f, 1f);
-        renderer.sortingOrder = 6;
-        projectileObject.transform.localScale = new Vector3(0.12f, 0.12f, 1f);
-
-        float projectileSpeed = weaponData != null ? weaponData.projectileSpeed : 18f;
-        float weaponDamage = weaponData != null ? weaponData.damage : weaponControlModule.Damage;
-
-        context.Projectiles.Add(new Projectile
-        {
-            Transform = projectileObject.transform,
-            Renderer = renderer,
-            Target = context.TargetEnemy,
-            Prefab = projectilePrefab,
-            Speed = Mathf.Max(0.5f, projectileSpeed),
-            Damage = weaponDamage * context.Player.DamageMultiplier
-        });
-
-        context.PlayWeaponShot?.Invoke(weaponData);
-    }
-
-    private void UpdateProjectiles(CombatUpdateContext context, float deltaTime)
-    {
-        for (int i = context.Projectiles.Count - 1; i >= 0; i--)
-        {
-            Projectile projectile = context.Projectiles[i];
-            if (projectile.Target == null || !projectile.Target.IsAlive())
+            EnemyShip enemy = context.Enemies[i];
+            if (enemy == null || enemy.IsAlive())
             {
-                if (projectile.Prefab != null)
-                {
-                    context.PoolService.Return(projectile.Prefab, projectile.Transform.gameObject);
-                }
-                context.Projectiles.RemoveAt(i);
                 continue;
             }
 
-            Vector3 toTarget = projectile.Target.Transform.position - projectile.Transform.position;
-            float moveDistance = projectile.Speed * deltaTime;
-            if (toTarget.magnitude <= moveDistance + 0.2f)
-            {
-                bool destroyed = ApplyDamage(projectile.Target, projectile.Damage);
-                projectile.Target.HitFlashTimer = 1f;
-                context.LogMessage?.Invoke(context.Localize("log_hit") + projectile.Target.Id + context.Localize("log_for") + Mathf.RoundToInt(projectile.Damage), "hit");
-                if (projectile.Prefab != null)
-                {
-                    context.PoolService.Return(projectile.Prefab, projectile.Transform.gameObject);
-                }
-                context.Projectiles.RemoveAt(i);
-
-                if (destroyed)
-                {
-                    HandleEnemyDestroyed(context, projectile.Target);
-                }
-
-                continue;
-            }
-
-            projectile.Lifetime += deltaTime;
-            float pulse = 1f + Mathf.Sin(projectile.Lifetime * 20f) * 0.15f;
-            projectile.Transform.localScale = new Vector3(0.12f * pulse, 0.12f * pulse, 1f);
-            projectile.Transform.position += toTarget.normalized * moveDistance;
+            HandleEnemyDestroyed(context, enemy);
         }
     }
 

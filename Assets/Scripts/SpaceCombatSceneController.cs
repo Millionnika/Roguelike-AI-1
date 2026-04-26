@@ -9,9 +9,6 @@ using UnityEngine.UI;
 
 public class SpaceCombatSceneController : MonoBehaviour
 {
-    [Header("Prefabs")]
-    [SerializeField] private GameObject beamPrefab;
-
     [Header("UI References")]
     [SerializeField] private Slider healthBar;
     [SerializeField] private TMP_Text scoreText;
@@ -57,7 +54,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     }
 
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
-    private readonly List<Projectile> projectiles = new List<Projectile>();
     private readonly List<ModuleState> modules = new List<ModuleState>();
     private readonly List<string> combatLog = new List<string>();
     private readonly List<EnemyRow> enemyRows = new List<EnemyRow>();
@@ -65,7 +61,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
-    private readonly List<AttackBeamEffect> attackBeams = new List<AttackBeamEffect>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
@@ -212,10 +207,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         localizationService ??= new SpaceCombatLocalizationService();
         uiFactory ??= new SpaceCombatUiFactory();
         backgroundParallaxService ??= new BackgroundParallaxService();
-        if (beamPrefab != null)
-        {
-            poolService.InitializePool(beamPrefab, 16);
-        }
     }
 
     private void Awake()
@@ -269,11 +260,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ValidateSerializedReferences()
     {
-        if (beamPrefab == null)
-        {
-            Debug.LogError("SpaceCombatSceneController: beamPrefab is not assigned.", this);
-        }
-
         if (healthBar == null)
         {
             Debug.LogError("SpaceCombatSceneController: healthBar is not assigned.", this);
@@ -728,6 +714,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         data.maxHull = maxHull;
         data.capacitor = capacitor;
         data.capacitorRechargeTime = capacitorRechargeTime;
+        data.scoreReward = 40;
         data.weaponSlotCount = weaponSlotCount;
         data.moduleSlotCount = moduleSlotCount;
         data.damageMultiplier = damageMultiplier;
@@ -793,10 +780,17 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         GameObject playerObject = new GameObject("PlayerShip");
         playerObject.transform.SetParent(worldRoot, false);
+        TeamMember playerTeam = playerObject.GetComponent<TeamMember>();
+        if (playerTeam == null)
+        {
+            playerTeam = playerObject.AddComponent<TeamMember>();
+        }
+        playerTeam.SetFaction(CombatFaction.Player);
 
         player = new PlayerShip
         {
-            Transform = playerObject.transform
+            Transform = playerObject.transform,
+            TeamMember = playerTeam
         };
     }
 
@@ -862,6 +856,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         ConfigureEquipment(ship);
         CreateModules(ship.moduleSlotCount, ship);
+        ConfigurePlayerDamageReceiver();
 
         if (resetProgress)
         {
@@ -897,6 +892,14 @@ public class SpaceCombatSceneController : MonoBehaviour
 
             equipmentState.InstalledWeapons[i] = configuredWeapon;
             equipmentState.WeaponTimers[i] = 0f;
+            equipmentState.RuntimeWeapons[i] = configuredWeapon != null
+                ? new WeaponInstance(
+                    configuredWeapon,
+                    player.Transform,
+                    i < equipmentState.WeaponMuzzles.Count ? equipmentState.WeaponMuzzles[i] : player.Transform,
+                    CombatFaction.Player,
+                    player.Transform.gameObject)
+                : null;
         }
 
         for (int i = 0; i < equipmentState.InstalledModules.Count; i++)
@@ -908,6 +911,63 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         NotifyEquipmentStateChanged();
+    }
+
+    private void ConfigurePlayerDamageReceiver()
+    {
+        if (player == null || player.Transform == null)
+        {
+            return;
+        }
+
+        ShipDamageReceiver receiver = player.Transform.GetComponent<ShipDamageReceiver>();
+        if (receiver == null)
+        {
+            receiver = player.Transform.gameObject.AddComponent<ShipDamageReceiver>();
+        }
+
+        receiver.Initialize(
+            CombatFaction.Player,
+            ReadPlayerDurability,
+            WritePlayerDurability);
+
+        TeamMember teamMember = player.Transform.GetComponent<TeamMember>();
+        if (teamMember == null)
+        {
+            teamMember = player.Transform.gameObject.AddComponent<TeamMember>();
+        }
+        teamMember.SetFaction(CombatFaction.Player);
+        int playerLayer = LayerMask.NameToLayer("Player");
+        if (playerLayer >= 0)
+        {
+            SetLayerRecursively(player.Transform, playerLayer);
+        }
+
+        player.DamageReceiver = receiver;
+        player.TeamMember = teamMember;
+    }
+
+    private ShipDurabilityState ReadPlayerDurability()
+    {
+        return new ShipDurabilityState
+        {
+            MaxShield = player.MaxShield,
+            Shield = player.Shield,
+            MaxArmor = player.MaxArmor,
+            Armor = player.Armor,
+            MaxHull = player.MaxHull,
+            Hull = player.Hull
+        };
+    }
+
+    private void WritePlayerDurability(ShipDurabilityState state)
+    {
+        player.MaxShield = state.MaxShield;
+        player.Shield = state.Shield;
+        player.MaxArmor = state.MaxArmor;
+        player.Armor = state.Armor;
+        player.MaxHull = state.MaxHull;
+        player.Hull = state.Hull;
     }
 
     private void ApplyShipVisualFromPrefab(ShipDataSO ship)
@@ -1255,7 +1315,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         int supportedSlots = Mathf.Clamp(Mathf.Max(1, moduleSlotCount), 1, 4);
         WeaponDataSO primaryWeapon = GetPrimaryWeapon(ship);
         float capPerShot = primaryWeapon != null ? primaryWeapon.capacitorPerShot : 0f;
-        float rateOfFire = primaryWeapon != null ? primaryWeapon.fireRate : 1f;
+        float rateOfFire = primaryWeapon != null
+            ? (primaryWeapon.cooldown > 0f ? primaryWeapon.cooldown : primaryWeapon.fireRate)
+            : 1f;
         float damage = primaryWeapon != null ? primaryWeapon.damage : 0f;
 
         modules.Add(new ModuleState
@@ -1321,14 +1383,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         return "E-" + enemySpawnSequence.ToString("0000");
     }
 
-    private void SpawnEnemyFromTimeline(EnemyDataSO enemyData, Vector3 position)
+    private void SpawnEnemyFromTimeline(ShipDataSO shipData, Vector3 position)
     {
-        if (enemyData == null || enemyData.prefab == null)
+        if (shipData == null || shipData.shipPrefab == null)
         {
             return;
         }
 
-        EnemyShip enemy = CreateEnemy(NextEnemyId(), enemyData, position, GetTimelineLevelScale());
+        EnemyShip enemy = CreateEnemy(NextEnemyId(), shipData, position, GetTimelineLevelScale());
         if (enemy == null)
         {
             return;
@@ -1343,7 +1405,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ExecuteOneShotPattern(SpawnEvent spawnEvent)
     {
-        if (spawnEvent == null || spawnEvent.enemyData == null)
+        if (spawnEvent == null || spawnEvent.shipData == null)
         {
             return;
         }
@@ -1357,13 +1419,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         switch (spawnEvent.pattern)
         {
             case SpawnPatternType.Burst:
-                ExecuteBurstPattern(spawnEvent.enemyData, count);
+                ExecuteBurstPattern(spawnEvent.shipData, count);
                 break;
             case SpawnPatternType.Ring:
-                ExecuteRingPattern(spawnEvent.enemyData, count);
+                ExecuteRingPattern(spawnEvent.shipData, count);
                 break;
             case SpawnPatternType.Wall:
-                ExecuteWallPattern(spawnEvent.enemyData, count);
+                ExecuteWallPattern(spawnEvent.shipData, count);
                 break;
             case SpawnPatternType.Continuous:
             default:
@@ -1371,18 +1433,18 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void ExecuteBurstPattern(EnemyDataSO enemyData, int count)
+    private void ExecuteBurstPattern(ShipDataSO shipData, int count)
     {
         Vector3 center = GetRandomOffscreenSpawnPosition();
         const float scatterRadius = 1.1f;
         for (int i = 0; i < count; i++)
         {
             Vector2 offset = UnityEngine.Random.insideUnitCircle * scatterRadius;
-            SpawnEnemyFromTimeline(enemyData, center + new Vector3(offset.x, offset.y, 0f));
+            SpawnEnemyFromTimeline(shipData, center + new Vector3(offset.x, offset.y, 0f));
         }
     }
 
-    private void ExecuteRingPattern(EnemyDataSO enemyData, int count)
+    private void ExecuteRingPattern(ShipDataSO shipData, int count)
     {
         Camera camera = mainCamera != null ? mainCamera : Camera.main;
         if (camera == null || player == null || player.Transform == null)
@@ -1401,36 +1463,40 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             float angle = startAngle + ((Mathf.PI * 2f) * i / Mathf.Max(1, count));
             Vector3 position = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius;
-            SpawnEnemyFromTimeline(enemyData, position);
+            SpawnEnemyFromTimeline(shipData, position);
         }
     }
 
-    private void ExecuteWallPattern(EnemyDataSO enemyData, int count)
+    private void ExecuteWallPattern(ShipDataSO shipData, int count)
     {
         int side = UnityEngine.Random.Range(0, 4);
         for (int i = 0; i < count; i++)
         {
             float t = count <= 1 ? 0.5f : i / (float)(count - 1);
-            SpawnEnemyFromTimeline(enemyData, GetOffscreenSpawnPoint(side, t, offscreenViewportMargin));
+            SpawnEnemyFromTimeline(shipData, GetOffscreenSpawnPoint(side, t, offscreenViewportMargin));
         }
     }
 
-    private EnemyShip CreateEnemy(string id, EnemyDataSO enemyData, Vector3 position, float levelScale)
+    private EnemyShip CreateEnemy(string id, ShipDataSO shipData, Vector3 position, float levelScale)
     {
-        if (enemyData == null || enemyData.prefab == null)
+        if (shipData == null || shipData.shipPrefab == null)
         {
-            Debug.LogError("SpaceCombatSceneController: EnemyDataSO or enemy prefab is missing for enemy " + id + ".");
+            Debug.LogError("SpaceCombatSceneController: ShipDataSO or ship prefab is missing for enemy " + id + ".");
             return null;
         }
 
-        string typeName = enemyData.name;
-        GameObject enemyPrefab = enemyData.prefab;
+        string typeName = string.IsNullOrEmpty(shipData.displayName) ? shipData.name : shipData.displayName;
+        GameObject enemyPrefab = shipData.shipPrefab;
 
         GameObject enemyObject = poolService.Get(enemyPrefab, enemyRoot);
-        if (enemyObject == null) return null;
+        if (enemyObject == null)
+        {
+            return null;
+        }
 
         enemyObject.name = id;
         enemyObject.transform.position = position;
+        AssignEnemyIdentity(enemyObject);
 
         SpriteRenderer bodyRenderer = enemyObject.GetComponentInChildren<SpriteRenderer>(true);
         SpriteRenderer shieldRenderer = FindChildSpriteRenderer(enemyObject.transform, "Shield");
@@ -1441,15 +1507,35 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
         SpriteRenderer thrusterRenderer = FindChildSpriteRenderer(enemyObject.transform, "Thruster");
 
-        float baseHealth = (enemyData != null ? enemyData.maxHealth : 100f) * levelScale;
-        float shieldValue = Mathf.RoundToInt(baseHealth * 1.5f);
-        float armorValue = Mathf.RoundToInt(baseHealth * 1.2f);
-        float hullValue = Mathf.RoundToInt(baseHealth);
-        float enemyMoveSpeed = enemyData != null ? enemyData.moveSpeed : 1.5f;
-        WeaponDataSO enemyWeapon = enemyData != null ? enemyData.weaponData : null;
-        float enemyDamage = enemyWeapon != null ? enemyWeapon.damage * levelScale : 10f * levelScale;
+        float shieldValue = Mathf.Max(1f, shipData.maxShield * levelScale);
+        float armorValue = Mathf.Max(1f, shipData.maxArmor * levelScale);
+        float hullValue = Mathf.Max(1f, shipData.maxHull * levelScale);
+        float enemyMoveSpeed = Mathf.Max(0.5f, shipData.maxSpeed * 0.22f) + levelScale * 0.2f;
+        List<WeaponDataSO> compatibleWeapons = new List<WeaponDataSO>();
+        if (shipData.startingWeapons != null)
+        {
+            for (int i = 0; i < shipData.startingWeapons.Count; i++)
+            {
+                WeaponDataSO slotWeapon = shipData.startingWeapons[i];
+                if (slotWeapon == null || !CanShipUseWeapon(shipData.shipClass, slotWeapon))
+                {
+                    continue;
+                }
 
-        return new EnemyShip
+                compatibleWeapons.Add(slotWeapon);
+            }
+        }
+
+        WeaponDataSO enemyWeapon = compatibleWeapons.Count > 0 ? compatibleWeapons[0] : GetPrimaryWeapon(shipData);
+        float enemyDamage = enemyWeapon != null
+            ? Mathf.Max(1f, enemyWeapon.damage * Mathf.Max(0.1f, shipData.damageMultiplier) * levelScale)
+            : Mathf.Max(6f, 10f * levelScale);
+
+        float weaponCooldown = enemyWeapon != null
+            ? Mathf.Max(0.05f, enemyWeapon.cooldown > 0f ? enemyWeapon.cooldown : enemyWeapon.fireRate)
+            : UnityEngine.Random.Range(1.15f, 1.8f);
+
+        EnemyShip enemy = new EnemyShip
         {
             Id = id,
             Type = typeName,
@@ -1461,22 +1547,142 @@ public class SpaceCombatSceneController : MonoBehaviour
             OrbitDistance = UnityEngine.Random.Range(2.4f, 4.2f),
             OrbitAngle = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
             OrbitSpeed = UnityEngine.Random.Range(0.4f, 0.95f),
-            AttackCooldown = UnityEngine.Random.Range(1.15f, 1.8f),
+            AttackCooldown = weaponCooldown,
             AttackTimer = UnityEngine.Random.Range(0f, 0.7f),
             Damage = enemyDamage,
-            ScoreValue = enemyData != null ? enemyData.scoreValue : 40,
-            DriftSpeed = enemyMoveSpeed + levelScale * 0.2f,
+            ScoreValue = shipData.scoreReward > 0 ? shipData.scoreReward : 40,
+            DriftSpeed = enemyMoveSpeed,
             MaxShield = shieldValue,
             Shield = shieldValue,
             MaxArmor = armorValue,
             Armor = armorValue,
             MaxHull = hullValue,
             Hull = hullValue,
-            WeaponData = enemyWeapon,
+            WeaponDamageMultiplier = Mathf.Max(0.1f, shipData.damageMultiplier) * levelScale,
             Prefab = enemyPrefab,
             BaseBodyColor = bodyRenderer != null ? bodyRenderer.color : Color.white,
             BaseShieldColor = shieldRenderer != null ? shieldRenderer.color : Color.white
         };
+
+        if (compatibleWeapons.Count == 0 && enemyWeapon != null)
+        {
+            compatibleWeapons.Add(enemyWeapon);
+        }
+
+        ShipDamageReceiver receiver = enemyObject.GetComponent<ShipDamageReceiver>();
+        if (receiver == null)
+        {
+            receiver = enemyObject.AddComponent<ShipDamageReceiver>();
+        }
+        receiver.Initialize(
+            CombatFaction.Enemy,
+            () => new ShipDurabilityState
+            {
+                MaxShield = enemy.MaxShield,
+                Shield = enemy.Shield,
+                MaxArmor = enemy.MaxArmor,
+                Armor = enemy.Armor,
+                MaxHull = enemy.MaxHull,
+                Hull = enemy.Hull
+            },
+            state =>
+            {
+                enemy.MaxShield = state.MaxShield;
+                enemy.Shield = state.Shield;
+                enemy.MaxArmor = state.MaxArmor;
+                enemy.Armor = state.Armor;
+                enemy.MaxHull = state.MaxHull;
+                enemy.Hull = state.Hull;
+            });
+        enemy.DamageReceiver = receiver;
+        enemy.TeamMember = enemyObject.GetComponent<TeamMember>();
+
+        Transform defaultMuzzle = FindWeaponMuzzle(enemyObject.transform);
+        for (int i = 0; i < compatibleWeapons.Count; i++)
+        {
+            WeaponDataSO weapon = compatibleWeapons[i];
+            if (weapon == null)
+            {
+                continue;
+            }
+
+            WeaponInstance instance = new WeaponInstance(
+                weapon,
+                enemyObject.transform,
+                defaultMuzzle,
+                CombatFaction.Enemy,
+                enemyObject);
+
+            if (instance.BeginFire())
+            {
+                // Warmup then reset to randomized readiness.
+                instance.Tick(UnityEngine.Random.Range(0f, instance.EffectiveCooldown));
+            }
+
+            enemy.WeaponInstances.Add(instance);
+        }
+
+        return enemy;
+    }
+
+    private static void AssignEnemyIdentity(GameObject enemyObject)
+    {
+        if (enemyObject == null)
+        {
+            return;
+        }
+
+        try
+        {
+            enemyObject.tag = "Enemy";
+        }
+        catch (UnityException)
+        {
+            // Enemy tag may be absent in project settings.
+        }
+
+        int enemyLayer = LayerMask.NameToLayer("Enemy");
+        if (enemyLayer < 0)
+        {
+            return;
+        }
+
+        SetLayerRecursively(enemyObject.transform, enemyLayer);
+    }
+
+    private static void SetLayerRecursively(Transform root, int layer)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        root.gameObject.layer = layer;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            SetLayerRecursively(root.GetChild(i), layer);
+        }
+    }
+
+    private static Transform FindWeaponMuzzle(Transform root)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        Transform[] children = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
+        {
+            string name = children[i].name;
+            if (name.IndexOf("muzzle", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("weaponslot", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return children[i];
+            }
+        }
+
+        return root;
     }
 
     private void ClearEnemies()
@@ -1501,15 +1707,29 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ClearProjectiles()
     {
-        for (int i = 0; i < projectiles.Count; i++)
+        if (projectileRoot == null)
         {
-            if (projectiles[i].Transform != null && projectiles[i].Prefab != null)
-            {
-                poolService.Return(projectiles[i].Prefab, projectiles[i].Transform.gameObject);
-            }
+            return;
         }
 
-        projectiles.Clear();
+        List<Transform> children = new List<Transform>();
+        for (int i = 0; i < projectileRoot.childCount; i++)
+        {
+            children.Add(projectileRoot.GetChild(i));
+        }
+
+        for (int i = 0; i < children.Count; i++)
+        {
+            ProjectileBehaviour projectile = children[i].GetComponent<ProjectileBehaviour>();
+            if (projectile != null)
+            {
+                projectile.ForceDespawn();
+            }
+            else
+            {
+                Destroy(children[i].gameObject);
+            }
+        }
     }
 
     private void BuildHud()
@@ -2636,7 +2856,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Player = player,
             Enemies = enemies,
-            Projectiles = projectiles,
             Modules = modules,
             EquipmentState = equipmentState,
             TargetEnemy = targetEnemy,
@@ -2646,7 +2865,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             Localize = Localize,
             LogMessage = LogMessage,
             UpdateModuleVisual = UpdateModuleVisual,
-            CreateAttackBeam = CreateAttackBeam,
             PlayWeaponShot = PlayWeaponShot
         };
 
@@ -2774,7 +2992,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             SpawnEvent spawnEvent = currentTimeline.events[i];
             SpawnEventRuntimeState state = spawnEventStates[i];
-            if (spawnEvent == null || spawnEvent.enemyData == null || spawnEvent.enemyData.prefab == null)
+            if (spawnEvent == null || spawnEvent.shipData == null || spawnEvent.shipData.shipPrefab == null)
             {
                 continue;
             }
@@ -2812,7 +3030,7 @@ public class SpaceCombatSceneController : MonoBehaviour
                 state.continuousAccumulator -= spawnCount;
                 for (int spawnIndex = 0; spawnIndex < spawnCount; spawnIndex++)
                 {
-                    SpawnEnemyFromTimeline(spawnEvent.enemyData, GetRandomOffscreenSpawnPosition());
+                    SpawnEnemyFromTimeline(spawnEvent.shipData, GetRandomOffscreenSpawnPosition());
                     spawnedThisFrame++;
                 }
 
@@ -2920,59 +3138,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateEffects(float deltaTime)
     {
-        for (int i = attackBeams.Count - 1; i >= 0; i--)
-        {
-            AttackBeamEffect beam = attackBeams[i];
-            beam.Lifetime += deltaTime;
-            float t = beam.Lifetime / beam.Duration;
-            Color color = beam.Renderer.color;
-            color.a = Mathf.Lerp(0.9f, 0f, t);
-            beam.Renderer.color = color;
-            beam.Transform.localScale = new Vector3(beam.Transform.localScale.x, Mathf.Lerp(0.18f, 0.05f, t), 1f);
-            if (beam.Lifetime >= beam.Duration)
-            {
-                if (beamPrefab != null)
-                {
-                    poolService.Return(beamPrefab, beam.Transform.gameObject);
-                }
-                attackBeams.RemoveAt(i);
-            }
-        }
-    }
-
-    private void CreateAttackBeam(Vector3 start, Vector3 end, Color color)
-    {
-        if (beamPrefab == null)
-        {
-            return;
-        }
-
-        GameObject beamObject = poolService.Get(beamPrefab, projectileRoot);
-        if (beamObject == null)
-        {
-            return;
-        }
-        Vector3 delta = end - start;
-        float length = Mathf.Max(0.2f, delta.magnitude);
-        beamObject.transform.position = (start + end) * 0.5f;
-        beamObject.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
-        beamObject.transform.localScale = new Vector3(length, 0.18f, 1f);
-
-        SpriteRenderer renderer = beamObject.GetComponent<SpriteRenderer>();
-        if (renderer == null)
-        {
-            renderer = beamObject.AddComponent<SpriteRenderer>();
-        }
-        renderer.sprite = squareSprite;
-        renderer.color = color;
-        renderer.sortingOrder = 7;
-
-        attackBeams.Add(new AttackBeamEffect
-        {
-            Transform = beamObject.transform,
-            Renderer = renderer,
-            Duration = 0.16f
-        });
+        // Reserved for future gameplay VFX updates.
     }
 
     private void UpdateVisuals()

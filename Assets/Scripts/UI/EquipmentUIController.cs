@@ -108,10 +108,14 @@ public sealed class EquipmentUIController : MonoBehaviour
             if (state != null && i < state.InstalledWeapons.Count && i < state.WeaponTimers.Count)
             {
                 WeaponDataSO weapon = state.InstalledWeapons[i];
-                if (weapon != null && weapon.fireRate > 0f)
+                if (weapon != null)
                 {
-                    float timer = Mathf.Clamp(state.WeaponTimers[i], 0f, weapon.fireRate);
-                    cooldown01 = 1f - timer / weapon.fireRate;
+                    float cooldownDuration = weapon.cooldown > 0f ? weapon.cooldown : weapon.fireRate;
+                    if (cooldownDuration > 0f)
+                    {
+                        float timer = Mathf.Clamp(state.WeaponTimers[i], 0f, cooldownDuration);
+                        cooldown01 = timer / cooldownDuration;
+                    }
                 }
             }
 

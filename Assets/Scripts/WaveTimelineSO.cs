@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public enum SpawnPatternType
 {
@@ -16,7 +17,7 @@ public sealed class SpawnEvent
     [Min(0f)] public float startTime;
     [Min(0f)] public float duration;
     public SpawnPatternType pattern = SpawnPatternType.Continuous;
-    public EnemyDataSO enemyData;
+    [FormerlySerializedAs("enemyData")] public ShipDataSO shipData;
     [Min(0)] public int count = 1;
 }
 

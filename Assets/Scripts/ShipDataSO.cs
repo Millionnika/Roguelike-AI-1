@@ -24,6 +24,7 @@ public sealed class ShipDataSO : ScriptableObject
     public float maxHull = 220f;
     public float capacitor = 1200f;
     public float capacitorRechargeTime = 92f;
+    [Min(0)] public int scoreReward = 40;
 
     [Header("Loadout")]
     public int weaponSlotCount = 2;

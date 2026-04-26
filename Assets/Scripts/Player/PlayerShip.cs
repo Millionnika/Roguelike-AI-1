@@ -18,6 +18,8 @@ namespace SpaceFrontier.Player
         public SpriteRenderer BodyRenderer { get; set; }
         public SpriteRenderer AuraRenderer { get; set; }
         public SpriteRenderer ThrusterRenderer { get; set; }
+        public ShipDamageReceiver DamageReceiver { get; set; }
+        public TeamMember TeamMember { get; set; }
         public Color BaseBodyColor { get; set; } = Color.white;
         public Color BaseAuraColor { get; set; } = Color.white;
         public float HitFlashTimer { get; set; }

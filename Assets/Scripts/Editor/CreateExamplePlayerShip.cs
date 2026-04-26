@@ -89,8 +89,15 @@ public static class CreateExamplePlayerShip
         }
 
         weapon.damage = 34f;
+        weapon.fireMode = FireMode.Projectile;
+        weapon.cooldown = 0.35f;
+        weapon.maxRange = 7f;
+        weapon.firingAngle = 360f;
+        weapon.spreadAngle = 0f;
         weapon.fireRate = 0.35f;
         weapon.projectileSpeed = 20f;
+        weapon.projectileMaxDistance = 8f;
+        weapon.projectileLifetime = 1.5f;
         weapon.capacitorPerShot = 8f;
         weapon.requiredClass = ShipClass.Light;
         EditorUtility.SetDirty(weapon);
@@ -121,6 +128,7 @@ public static class CreateExamplePlayerShip
         ship.maxHull = 240f;
         ship.capacitor = 1200f;
         ship.capacitorRechargeTime = 85f;
+        ship.scoreReward = 40;
         ship.weaponSlotCount = 3;
         ship.moduleSlotCount = 4;
         ship.damageMultiplier = 1f;

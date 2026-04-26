@@ -39,7 +39,10 @@ internal sealed class EnemyShip
     public float Armor;
     public float MaxHull;
     public float Hull;
-    public WeaponDataSO WeaponData;
+    public ShipDamageReceiver DamageReceiver;
+    public TeamMember TeamMember;
+    public float WeaponDamageMultiplier = 1f;
+    public readonly List<WeaponInstance> WeaponInstances = new List<WeaponInstance>();
     public GameObject Prefab;
 
     public float ShieldPercent => MaxShield <= 0f ? 0f : Shield / MaxShield;
@@ -51,17 +54,6 @@ internal sealed class EnemyShip
         return Hull > 0f;
     }
 
-}
-
-internal sealed class Projectile
-{
-    public Transform Transform;
-    public SpriteRenderer Renderer;
-    public EnemyShip Target;
-    public GameObject Prefab;
-    public float Damage;
-    public float Speed = 18f;
-    public float Lifetime;
 }
 
 internal sealed class ModuleState
@@ -92,6 +84,7 @@ public sealed class ShipEquipmentState
     public readonly List<WeaponDataSO> InstalledWeapons = new List<WeaponDataSO>();
     public readonly List<ModuleDataSO> InstalledModules = new List<ModuleDataSO>();
     public readonly List<Transform> WeaponMuzzles = new List<Transform>();
+    public readonly List<WeaponInstance> RuntimeWeapons = new List<WeaponInstance>();
     public readonly List<float> WeaponTimers = new List<float>();
 
     public void ConfigureSlots(int weaponSlotCount, int moduleSlotCount)
@@ -101,6 +94,7 @@ public sealed class ShipEquipmentState
 
         Resize(InstalledWeapons, sanitizedWeaponSlots);
         Resize(WeaponMuzzles, sanitizedWeaponSlots);
+        Resize(RuntimeWeapons, sanitizedWeaponSlots);
         Resize(WeaponTimers, sanitizedWeaponSlots);
         Resize(InstalledModules, sanitizedModuleSlots);
     }
@@ -149,14 +143,6 @@ internal sealed class UiButtonView
     public RectTransform Rect;
     public Image Background;
     public Text Label;
-}
-
-internal sealed class AttackBeamEffect
-{
-    public Transform Transform;
-    public SpriteRenderer Renderer;
-    public float Lifetime;
-    public float Duration;
 }
 
 internal sealed class StarVisual

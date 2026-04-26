@@ -946,7 +946,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f1c2e0d4a2740c0b4b0a7eb13dd9a11, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  beamPrefab: {fileID: 8873356334776834656, guid: 2e5fe8a513aaf4141aba6ca3ebbf3a7a, type: 3}
   healthBar: {fileID: 368274437}
   scoreText: {fileID: 1016877298}
   waveText: {fileID: 1973114523}

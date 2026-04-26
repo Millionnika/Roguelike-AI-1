@@ -187,8 +187,15 @@ public static class EquipmentUiSceneBuilder
             AssetDatabase.CreateAsset(weaponData, ExampleWeaponPath);
         }
         weaponData.damage = 34f;
+        weaponData.fireMode = FireMode.Projectile;
+        weaponData.cooldown = 0.35f;
+        weaponData.maxRange = 7f;
+        weaponData.firingAngle = 360f;
+        weaponData.spreadAngle = 0f;
         weaponData.fireRate = 0.35f;
         weaponData.projectileSpeed = 20f;
+        weaponData.projectileMaxDistance = 8f;
+        weaponData.projectileLifetime = 1.5f;
         weaponData.capacitorPerShot = 8f;
         weaponData.requiredClass = ShipClass.Light;
         EditorUtility.SetDirty(weaponData);
@@ -214,6 +221,7 @@ public static class EquipmentUiSceneBuilder
         shipData.maxHull = 240f;
         shipData.capacitor = 1200f;
         shipData.capacitorRechargeTime = 85f;
+        shipData.scoreReward = 40;
         shipData.weaponSlotCount = 3;
         shipData.moduleSlotCount = 4;
         shipData.damageMultiplier = 1f;
@@ -451,6 +459,7 @@ public static class EquipmentUiSceneBuilder
         shipData.shipClass = ShipClass.Light;
         shipData.shipPrefab = prefab;
         shipData.shipIcon = shipSprite;
+        shipData.scoreReward = shipData.scoreReward > 0 ? shipData.scoreReward : 40;
         shipData.weaponSlotCount = Mathf.Max(1, shipData.weaponSlotCount);
         shipData.moduleSlotCount = Mathf.Max(1, shipData.moduleSlotCount);
         shipData.startingWeapons ??= new List<WeaponDataSO>();
@@ -485,9 +494,15 @@ public static class EquipmentUiSceneBuilder
         weaponData.projectilePrefab = projectilePrefab;
         weaponData.icon = icon;
         weaponData.fireSound = fireSound;
+        weaponData.fireMode = FireMode.Projectile;
         weaponData.damage = Mathf.Max(0f, damage);
+        weaponData.cooldown = Mathf.Max(0.01f, fireRate);
         weaponData.fireRate = Mathf.Max(0.01f, fireRate);
+        weaponData.maxRange = Mathf.Max(0.5f, weaponData.maxRange > 0f ? weaponData.maxRange : 8f);
+        weaponData.firingAngle = Mathf.Clamp(weaponData.firingAngle <= 0f ? 360f : weaponData.firingAngle, 0f, 360f);
         weaponData.projectileSpeed = Mathf.Max(0.01f, projectileSpeed);
+        weaponData.projectileMaxDistance = Mathf.Max(0.1f, weaponData.projectileMaxDistance > 0f ? weaponData.projectileMaxDistance : weaponData.maxRange);
+        weaponData.projectileLifetime = Mathf.Max(0.1f, weaponData.projectileLifetime > 0f ? weaponData.projectileLifetime : weaponData.projectileMaxDistance / weaponData.projectileSpeed);
         weaponData.capacitorPerShot = Mathf.Max(0f, capacitorPerShot);
         EditorUtility.SetDirty(weaponData);
         return weaponData;
