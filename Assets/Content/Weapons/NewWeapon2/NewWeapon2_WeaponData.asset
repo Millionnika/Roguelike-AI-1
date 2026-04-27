@@ -18,9 +18,6 @@ MonoBehaviour:
   maxRange: 6
   firingAngle: 360
   spreadAngle: 0
-  targetMask:
-    serializedVersion: 2
-    m_Bits: 0
   projectilePrefab: {fileID: 0}
   projectileSpeed: 18
   projectileMaxDistance: 8
