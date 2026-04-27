@@ -10,7 +10,6 @@ public sealed class WeaponDataSO : ScriptableObject
     [Min(0f)] public float maxRange = 6f;
     [Range(0f, 360f)] public float firingAngle = 360f;
     [Range(0f, 45f)] public float spreadAngle = 0f;
-    public LayerMask targetMask;
 
     [Header("Projectile")]
     public GameObject projectilePrefab;

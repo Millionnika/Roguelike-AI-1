@@ -3,6 +3,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class ProjectileBehaviour : MonoBehaviour
 {
+    private const string WeaponDebugPrefix = "[WeaponDebug]";
     private Rigidbody2D body;
     private Collider2D projectileCollider;
     private IPoolService poolService;
@@ -10,7 +11,6 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private GameObject ownerObject;
     private CombatFaction ownerFaction;
     private WeaponDataSO weaponData;
-    private LayerMask targetMask;
     private Vector2 direction;
     private float damage;
     private float speed;
@@ -31,15 +31,13 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         float projectileDamage,
         float projectileSpeed,
         float projectileMaxDistance,
-        float projectileLifetime,
-        LayerMask collisionMask)
+        float projectileLifetime)
     {
         poolService = runtimePoolService;
         prefabKey = sourcePrefab;
         ownerObject = sourceOwner;
         ownerFaction = sourceFaction;
         weaponData = sourceWeaponData;
-        targetMask = collisionMask;
         direction = startDirection.sqrMagnitude > 0.0001f ? startDirection.normalized : Vector2.up;
         damage = Mathf.Max(0f, projectileDamage);
         speed = Mathf.Max(0.01f, projectileSpeed);
@@ -54,6 +52,8 @@ public sealed class ProjectileBehaviour : MonoBehaviour
 
         transform.rotation = Quaternion.FromToRotation(Vector3.up, direction);
         body.linearVelocity = direction * speed;
+        Debug.Log(
+            $"{WeaponDebugPrefix} Projectile init: projectile={name} owner={(ownerObject != null ? ownerObject.name : "None")} team={ownerFaction} damage={damage:0.##}");
     }
 
     public void ForceDespawn()
@@ -127,25 +127,30 @@ public sealed class ProjectileBehaviour : MonoBehaviour
             return;
         }
 
+        Debug.Log($"{WeaponDebugPrefix} Projectile hit candidate: {other.name}");
+
         if (ownerObject != null && other.transform.root == ownerObject.transform.root)
         {
             return;
         }
 
-        if (targetMask.value != 0 && ((1 << other.gameObject.layer) & targetMask.value) == 0)
-        {
-            return;
-        }
-
         TeamMember targetTeamMember = other.GetComponentInParent<TeamMember>();
-        if (targetTeamMember != null && ownerFaction != CombatFaction.Neutral && targetTeamMember.Faction == ownerFaction)
+        if (targetTeamMember == null)
         {
+            Debug.Log($"{WeaponDebugPrefix} Projectile ignored {other.name}: no TeamMember.");
             return;
         }
 
         IDamageable damageable = other.GetComponentInParent<IDamageable>();
         if (damageable == null)
         {
+            Debug.Log($"{WeaponDebugPrefix} Projectile ignored {other.name}: no IDamageable.");
+            return;
+        }
+
+        if (ownerFaction != CombatFaction.Neutral && targetTeamMember.Faction == ownerFaction)
+        {
+            Debug.Log($"{WeaponDebugPrefix} Projectile ignored {other.name}: same team {ownerFaction}.");
             return;
         }
 
@@ -161,6 +166,7 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         };
 
         damageable.TakeDamage(info);
+        Debug.Log($"{WeaponDebugPrefix} Projectile damage applied to {other.name}: {damage:0.##}");
         Despawn();
     }
 

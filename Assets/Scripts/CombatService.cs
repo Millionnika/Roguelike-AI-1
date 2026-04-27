@@ -33,6 +33,7 @@ internal readonly struct CombatUpdateResult
 
 internal sealed class CombatService : ICombatService
 {
+    private const string WeaponDebugPrefix = "[WeaponDebug]";
     private bool levelUpRequested;
 
     public CombatUpdateResult UpdateFrame(CombatUpdateContext context, float deltaTime)
@@ -334,17 +335,21 @@ internal sealed class CombatService : ICombatService
             return false;
         }
 
+        CombatFaction ownerFaction = ResolveOwnerFaction(weapon);
         FireMode mode = weapon.Data.fireMode;
         bool useProjectile = mode == FireMode.Projectile || mode == FireMode.Missile;
         bool fired;
 
+        Debug.Log(
+            $"{WeaponDebugPrefix} Fire request: owner={(weapon.OwnerObject != null ? weapon.OwnerObject.name : "None")} team={ownerFaction} weapon={weapon.Data.name} mode={mode}");
+
         if (useProjectile)
         {
-            fired = SpawnProjectile(context, weapon, shotDirection, shotDamage);
+            fired = SpawnProjectile(context, weapon, ownerFaction, shotDirection, shotDamage);
         }
         else
         {
-            fired = FireHitscan(context, weapon, shotDirection, shotDamage, fallbackTargetPosition, sourceEnemyId);
+            fired = FireHitscan(context, weapon, ownerFaction, shotDirection, shotDamage, fallbackTargetPosition, sourceEnemyId);
         }
 
         if (fired)
@@ -355,7 +360,12 @@ internal sealed class CombatService : ICombatService
         return fired;
     }
 
-    private bool SpawnProjectile(CombatUpdateContext context, WeaponInstance weapon, Vector2 shotDirection, float shotDamage)
+    private bool SpawnProjectile(
+        CombatUpdateContext context,
+        WeaponInstance weapon,
+        CombatFaction ownerFaction,
+        Vector2 shotDirection,
+        float shotDamage)
     {
         if (context.PoolService == null || context.ProjectileRoot == null)
         {
@@ -402,14 +412,13 @@ internal sealed class CombatService : ICombatService
             runtimePoolService: context.PoolService,
             sourcePrefab: projectilePrefab,
             sourceOwner: weapon.OwnerObject,
-            sourceFaction: weapon.OwnerFaction,
+            sourceFaction: ownerFaction,
             sourceWeaponData: weapon.Data,
             startDirection: shotDirection,
             projectileDamage: shotDamage,
             projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
             projectileMaxDistance: maxDistance,
-            projectileLifetime: lifetime,
-            collisionMask: ResolveTargetMask(weapon.Data, weapon.OwnerFaction));
+            projectileLifetime: lifetime);
 
         return true;
     }
@@ -417,6 +426,7 @@ internal sealed class CombatService : ICombatService
     private bool FireHitscan(
         CombatUpdateContext context,
         WeaponInstance weapon,
+        CombatFaction ownerFaction,
         Vector2 shotDirection,
         float shotDamage,
         Vector3 fallbackTargetPosition,
@@ -432,8 +442,7 @@ internal sealed class CombatService : ICombatService
             range = 100f;
         }
 
-        LayerMask mask = ResolveTargetMask(weapon.Data, weapon.OwnerFaction);
-        RaycastHit2D[] hits = Physics2D.RaycastAll(origin, shotDirection, range, mask.value);
+        RaycastHit2D[] hits = Physics2D.RaycastAll(origin, shotDirection, range, Physics2D.DefaultRaycastLayers);
         for (int i = 0; i < hits.Length; i++)
         {
             Collider2D collider = hits[i].collider;
@@ -448,28 +457,37 @@ internal sealed class CombatService : ICombatService
             }
 
             TeamMember teamMember = collider.GetComponentInParent<TeamMember>();
-            if (teamMember != null && weapon.OwnerFaction != CombatFaction.Neutral && teamMember.Faction == weapon.OwnerFaction)
+            if (teamMember == null)
             {
+                Debug.Log($"{WeaponDebugPrefix} Hitscan ignored {collider.name}: no TeamMember.");
+                continue;
+            }
+
+            if (ownerFaction != CombatFaction.Neutral && teamMember.Faction == ownerFaction)
+            {
+                Debug.Log($"{WeaponDebugPrefix} Hitscan ignored {collider.name}: same team {ownerFaction}.");
                 continue;
             }
 
             IDamageable damageable = collider.GetComponentInParent<IDamageable>();
             if (damageable == null)
             {
+                Debug.Log($"{WeaponDebugPrefix} Hitscan ignored {collider.name}: no IDamageable.");
                 continue;
             }
 
             DamageInfo info = BuildDamageInfo(
                 amount: shotDamage,
-                sourceFaction: weapon.OwnerFaction,
+                sourceFaction: ownerFaction,
                 sourceObject: weapon.OwnerObject,
                 weaponData: weapon.Data,
                 hitPoint: hits[i].point,
                 direction: shotDirection);
 
             damageable.TakeDamage(info);
+            Debug.Log($"{WeaponDebugPrefix} Hitscan damage applied to {collider.name}: {shotDamage:0.##}");
 
-            if (weapon.OwnerFaction == CombatFaction.Enemy)
+            if (ownerFaction == CombatFaction.Enemy)
             {
                 context.Player.HitFlashTimer = 1f;
                 string sourceId = string.IsNullOrEmpty(sourceEnemyId) ? "Enemy" : sourceEnemyId;
@@ -492,7 +510,7 @@ internal sealed class CombatService : ICombatService
             return true;
         }
 
-        if (weapon.OwnerFaction == CombatFaction.Enemy)
+        if (ownerFaction == CombatFaction.Enemy)
         {
             return false;
         }
@@ -518,28 +536,6 @@ internal sealed class CombatService : ICombatService
         }
 
         return null;
-    }
-
-    private static LayerMask ResolveTargetMask(WeaponDataSO weaponData, CombatFaction ownerFaction)
-    {
-        if (weaponData != null && weaponData.targetMask.value != 0)
-        {
-            return weaponData.targetMask;
-        }
-
-        int opponentLayer = ownerFaction switch
-        {
-            CombatFaction.Player => LayerMask.NameToLayer("Enemy"),
-            CombatFaction.Enemy => LayerMask.NameToLayer("Player"),
-            _ => -1
-        };
-
-        if (opponentLayer >= 0)
-        {
-            return 1 << opponentLayer;
-        }
-
-        return Physics2D.DefaultRaycastLayers;
     }
 
     private static DamageInfo BuildDamageInfo(
@@ -592,6 +588,20 @@ internal sealed class CombatService : ICombatService
         }
 
         return null;
+    }
+
+    private static CombatFaction ResolveOwnerFaction(WeaponInstance weapon)
+    {
+        if (weapon?.OwnerObject != null)
+        {
+            TeamMember member = weapon.OwnerObject.GetComponentInParent<TeamMember>();
+            if (member != null)
+            {
+                return member.Faction;
+            }
+        }
+
+        return weapon != null ? weapon.OwnerFaction : CombatFaction.Neutral;
     }
 
     private void CleanupDestroyedEnemies(CombatUpdateContext context)
