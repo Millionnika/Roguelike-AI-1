@@ -14,6 +14,7 @@ namespace SpaceFrontier.Player
         public float MaxCapacitor = 1000f;
         public float Capacitor = 1000f;
         public float CapacitorRechargeTime = 120f;
+        public float CapacitorRechargeRate = 1.2f;
 
         public int Level = 1;
         public int Experience;
@@ -37,7 +38,7 @@ namespace SpaceFrontier.Player
 
             float percent = Capacitor / MaxCapacitor;
             float rechargeCurve = Mathf.Max(0.25f, 3.2f * percent * (1f - percent));
-            float maxRechargePerSecond = (MaxCapacitor / CapacitorRechargeTime) * 2.55f;
+            float maxRechargePerSecond = (MaxCapacitor / CapacitorRechargeTime) * 2.55f * Mathf.Max(0.1f, CapacitorRechargeRate);
             Capacitor = Mathf.Min(MaxCapacitor, Capacitor + maxRechargePerSecond * rechargeCurve * deltaTime);
         }
 

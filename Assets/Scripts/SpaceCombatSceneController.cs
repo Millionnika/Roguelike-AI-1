@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using SpaceFrontier.Player;
@@ -27,6 +27,24 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField, Range(0.01f, 0.5f)] private float offscreenViewportMargin = 0.1f;
     [SerializeField, Min(1f)] private float timelinePhaseDuration = 30f;
     [SerializeField, Min(0f)] private float timelineDifficultyPerPhase = 0.14f;
+
+    [Header("Targeting Visuals")]
+    [SerializeField] private Sprite targetFrameSourceSprite;
+    [SerializeField] private Color targetFrameColor = new Color(0.45f, 0.75f, 1f, 0.95f);
+    [SerializeField] private Color targetLineColor = new Color(1f, 1f, 1f, 0.58f);
+    [SerializeField, Min(0f)] private float targetFramePadding = 0.35f;
+    [SerializeField, Min(0f)] private float targetWorldClickPadding = 0.25f;
+    [SerializeField, Min(0.01f)] private float targetLineWidth = 0.035f;
+    [SerializeField] private int targetLineSortingOrder = 1;
+
+    [Header("Camera")]
+    [SerializeField, Min(1f)] private float cameraDefaultOrthographicSize = 9f;
+    [SerializeField, Min(1f)] private float cameraMinOrthographicSize = 5f;
+    [SerializeField, Min(1f)] private float cameraMaxOrthographicSize = 16f;
+    [SerializeField, Min(0.1f)] private float cameraZoomStep = 1.2f;
+    [SerializeField, Min(0.1f)] private float cameraZoomSmoothing = 10f;
+    [SerializeField, Min(0.1f)] private float cameraFollowSmoothing = 6f;
+    [SerializeField, Range(0f, 1f)] private float cameraVelocityLookAhead = 0.15f;
 
     [Header("Audio")]
     [SerializeField, Range(0f, 1f)] private float shotBaseVolume = 0.85f;
@@ -84,38 +102,47 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Transform gateTransform;
     private Transform weaponSlotsRoot;
     private GameObject playerVisualInstance;
+    private GameObject targetFrameObject;
+    private SpriteRenderer targetFrameRenderer;
+    private Sprite runtimeTargetFrameSprite;
+    private LineRenderer targetLineRenderer;
+    private Material targetingMaterial;
 
     private Canvas hudCanvas;
-    private Text combatLogText;
-    private Text gateHintText;
-    private Text statusText;
-    private Text overviewTitleText;
-    private Text enemyHeaderText;
-    private Text combatLogTitleText;
-    private Text playerStatusTitleText;
-    private Text targetNameText;
-    private Text targetDistanceText;
-    private Text targetDisplayText;
-    private Text capacitorText;
-    private Text levelText;
-    private Text experienceText;
-    private Text shipText;
-    private Text perkTitleText;
-    private Text perkHintText;
-    private Text startMenuShipNameText;
-    private Text startMenuRoleText;
-    private Text startMenuDescriptionText;
-    private Text startMenuStatsText;
-    private Text startMenuHintText;
-    private Text hangarTitleText;
-    private Text hangarSubtitleText;
-    private Text mainMenuTitleText;
-    private Text mainMenuSubtitleText;
-    private Text settingsTitleText;
-    private Text settingsSubtitleText;
-    private Text settingsLanguageLabelText;
-    private Text settingsFpsLabelText;
-    private Text joystickHintText;
+    private TMP_Text combatLogText;
+    private ScrollRect combatLogScrollRect;
+    private RectTransform combatLogContentRect;
+    private TMP_Text gateHintText;
+    private TMP_Text statusText;
+    private TMP_Text overviewTitleText;
+    private TMP_Text enemyHeaderText;
+    private TMP_Text combatLogTitleText;
+    private TMP_Text playerStatusTitleText;
+    private TMP_Text targetNameText;
+    private TMP_Text targetDistanceText;
+    private TMP_Text targetDisplayText;
+    private TMP_Text capacitorText;
+    private TMP_Text levelText;
+    private TMP_Text experienceText;
+    private TMP_Text shipText;
+    private TMP_Text perkTitleText;
+    private TMP_Text perkHintText;
+    private readonly TMP_Text[] perkOptionTexts = new TMP_Text[3];
+    private readonly RectTransform[] perkOptionRects = new RectTransform[3];
+    private TMP_Text startMenuShipNameText;
+    private TMP_Text startMenuRoleText;
+    private TMP_Text startMenuDescriptionText;
+    private TMP_Text startMenuStatsText;
+    private TMP_Text startMenuHintText;
+    private TMP_Text hangarTitleText;
+    private TMP_Text hangarSubtitleText;
+    private TMP_Text mainMenuTitleText;
+    private TMP_Text mainMenuSubtitleText;
+    private TMP_Text settingsTitleText;
+    private TMP_Text settingsSubtitleText;
+    private TMP_Text settingsLanguageLabelText;
+    private TMP_Text settingsFpsLabelText;
+    private TMP_Text joystickHintText;
     private Image targetPanel;
     private Image targetShieldFill;
     private Image targetArmorFill;
@@ -123,8 +150,20 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Image playerShieldFill;
     private Image playerArmorFill;
     private Image playerHullFill;
+    private Image playerExperienceFill;
     private Image capacitorFill;
+    private TMP_Text targetShieldValueText;
+    private TMP_Text targetArmorValueText;
+    private TMP_Text targetHullValueText;
+    private TMP_Text playerShieldValueText;
+    private TMP_Text playerArmorValueText;
+    private TMP_Text playerHullValueText;
+    private TMP_Text playerExperienceValueText;
+    private TMP_Text playerLevelBadgeText;
+    private TMP_Text capacitorValueText;
     private GameObject perkPanelObject;
+    private GameObject gameOverPanelObject;
+    private GameObject pauseMenuObject;
     private GameObject startMenuObject;
     private GameObject mainMenuPanelObject;
     private GameObject hangarPanelObject;
@@ -132,9 +171,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject joystickRootObject;
     private Image startMenuPreviewImage;
     private Image startButtonImage;
-    private Text startButtonText;
+    private TMP_Text startButtonText;
     private RectTransform startButtonRect;
     private UiButtonView newGameButtonView;
+    private UiButtonView continueButtonView;
     private UiButtonView settingsMenuButtonView;
     private UiButtonView exitButtonView;
     private UiButtonView hangarBackButtonView;
@@ -142,6 +182,13 @@ public class SpaceCombatSceneController : MonoBehaviour
     private UiButtonView languageRuButtonView;
     private UiButtonView languageEngButtonView;
     private UiButtonView[] fpsButtonViews = new UiButtonView[4];
+    private UiButtonView retryButtonView;
+    private UiButtonView gameOverMenuButtonView;
+    private UiButtonView gameOverExitButtonView;
+    private UiButtonView pauseHudButtonView;
+    private UiButtonView pauseResumeButtonView;
+    private UiButtonView pauseSettingsButtonView;
+    private UiButtonView pauseMenuButtonView;
     private RectTransform overviewPanelRect;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
@@ -158,6 +205,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool levelUpPending;
     private bool gameOver;
     private bool gameStarted;
+    private bool gamePaused;
+    private bool combatLogShouldSnapToBottom;
     private float gameTimer;
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
@@ -166,11 +215,13 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool useVirtualJoystick;
     private bool joystickDragging;
     private Vector2 joystickVector;
+    private bool suppressPointerMovementUntilRelease;
     private GameObject runtimeStarLayerPrefab;
     private GameObject runtimeNebulaLayerPrefab;
     private AudioSource[] shotAudioSources;
     private int nextShotAudioSourceIndex;
     private int enemySpawnSequence;
+    private float targetCameraOrthographicSize;
     private readonly List<SpawnEventRuntimeState> spawnEventStates = new List<SpawnEventRuntimeState>();
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
@@ -256,10 +307,20 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Destroy(runtimeNebulaLayerPrefab);
         }
+        if (runtimeTargetFrameSprite != null)
+        {
+            Destroy(runtimeTargetFrameSprite);
+        }
+        if (targetingMaterial != null)
+        {
+            Destroy(targetingMaterial);
+        }
     }
 
     private void ValidateSerializedReferences()
     {
+        TryResolveLegacyHudReferences();
+
         if (healthBar == null)
         {
             Debug.LogError("SpaceCombatSceneController: healthBar is not assigned.", this);
@@ -278,11 +339,56 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
+    private void TryResolveLegacyHudReferences()
+    {
+        GameObject inspectorUi = FindSceneGameObject("InspectorUI");
+        if (inspectorUi == null)
+        {
+            return;
+        }
+
+        if (healthBar == null)
+        {
+            healthBar = FindComponentInChildrenByName<Slider>(inspectorUi.transform, "HealthBar");
+        }
+        if (scoreText == null)
+        {
+            scoreText = FindComponentInChildrenByName<TMP_Text>(inspectorUi.transform, "ScoreText");
+        }
+        if (waveText == null)
+        {
+            waveText = FindComponentInChildrenByName<TMP_Text>(inspectorUi.transform, "WaveText");
+        }
+    }
+
+    private static T FindComponentInChildrenByName<T>(Transform root, string objectName) where T : Component
+    {
+        if (root == null || string.IsNullOrEmpty(objectName))
+        {
+            return null;
+        }
+
+        T[] components = root.GetComponentsInChildren<T>(true);
+        for (int i = 0; i < components.Length; i++)
+        {
+            T component = components[i];
+            if (component != null && component.gameObject.name == objectName)
+            {
+                return component;
+            }
+        }
+
+        return null;
+    }
+
     private void EnsureDataAssets()
     {
         availableShips ??= new List<ShipDataSO>();
         availableShips.RemoveAll(ship => ship == null);
         backgroundLayers ??= new List<BackgroundLayerConfig>();
+        cameraMinOrthographicSize = Mathf.Max(1f, cameraMinOrthographicSize);
+        cameraMaxOrthographicSize = Mathf.Max(cameraMinOrthographicSize, cameraMaxOrthographicSize);
+        cameraDefaultOrthographicSize = Mathf.Clamp(cameraDefaultOrthographicSize, cameraMinOrthographicSize, cameraMaxOrthographicSize);
     }
 
     private void EnsureWeaponAudioSources()
@@ -331,6 +437,13 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void Update()
     {
+        if (gamePaused)
+        {
+            HandlePausedInput();
+            UpdateHud();
+            return;
+        }
+
         if (!gameStarted)
         {
             HandleStartMenuInput();
@@ -340,11 +453,20 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (gameOver)
         {
+            HandleGameOverInput();
             UpdateHud();
             return;
         }
 
         float deltaTime = Time.deltaTime;
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
+        {
+            SetPaused(true);
+            UpdateHud();
+            return;
+        }
 
         if (levelUpPending)
         {
@@ -406,6 +528,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             if (startMenuPage == StartMenuPage.Main)
             {
+                if (IsButtonClicked(continueButtonView, position))
+                {
+                    ResumeRun();
+                    return;
+                }
+
                 if (IsButtonClicked(newGameButtonView, position))
                 {
                     SetStartMenuPage(StartMenuPage.Hangar);
@@ -498,16 +626,17 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (player != null && player.Transform != null && mainCamera != null)
         {
             Vector3 current = player.Transform.position;
-            Vector3 lookAhead = new Vector3(player.Velocity.x, player.Velocity.y, 0f) * 0.15f;
+            Vector3 lookAhead = new Vector3(player.Velocity.x, player.Velocity.y, 0f) * cameraVelocityLookAhead;
             Vector3 targetPosition = new Vector3(current.x, current.y, -10f) + new Vector3(lookAhead.x, lookAhead.y, 0f);
-            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, targetPosition, 6f * Time.deltaTime);
+            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, targetPosition, cameraFollowSmoothing * Time.deltaTime);
         }
     }
 
     private void ConfigureCamera()
     {
         mainCamera.orthographic = true;
-        mainCamera.orthographicSize = 5.8f;
+        targetCameraOrthographicSize = Mathf.Clamp(cameraDefaultOrthographicSize, cameraMinOrthographicSize, cameraMaxOrthographicSize);
+        mainCamera.orthographicSize = targetCameraOrthographicSize;
         mainCamera.clearFlags = CameraClearFlags.SolidColor;
         mainCamera.backgroundColor = new Color(0.01f, 0.03f, 0.05f);
     }
@@ -621,6 +750,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             220f,
             1200f,
             92f,
+            1.2f,
             2,
             4,
             1f,
@@ -644,6 +774,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             290f,
             1450f,
             88f,
+            1.15f,
             3,
             4,
             0.94f,
@@ -667,6 +798,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             170f,
             1050f,
             72f,
+            1.3f,
             2,
             3,
             1.2f,
@@ -691,6 +823,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         float maxHull,
         float capacitor,
         float capacitorRechargeTime,
+        float capacitorRechargeRate,
         int weaponSlotCount,
         int moduleSlotCount,
         float damageMultiplier,
@@ -714,6 +847,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         data.maxHull = maxHull;
         data.capacitor = capacitor;
         data.capacitorRechargeTime = capacitorRechargeTime;
+        data.capacitorRechargeRate = capacitorRechargeRate;
         data.scoreReward = 40;
         data.weaponSlotCount = weaponSlotCount;
         data.moduleSlotCount = moduleSlotCount;
@@ -847,6 +981,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.MaxCapacitor = Mathf.Max(1f, ship.capacitor);
         player.Capacitor = player.MaxCapacitor;
         player.CapacitorRechargeTime = Mathf.Max(1f, ship.capacitorRechargeTime);
+        player.CapacitorRechargeRate = Mathf.Max(0.1f, ship.capacitorRechargeRate);
         player.Transform.position = Vector3.zero;
         player.Transform.rotation = Quaternion.identity;
         player.Velocity = Vector2.zero;
@@ -902,6 +1037,8 @@ public class SpaceCombatSceneController : MonoBehaviour
                 : null;
         }
 
+        RefreshWeaponVisuals(equipmentState.InstalledWeapons, equipmentState.WeaponMuzzles);
+
         for (int i = 0; i < equipmentState.InstalledModules.Count; i++)
         {
             ModuleDataSO moduleData = ship.startingModules != null && i < ship.startingModules.Count
@@ -937,11 +1074,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             teamMember = player.Transform.gameObject.AddComponent<TeamMember>();
         }
         teamMember.SetFaction(CombatFaction.Player);
-        int playerLayer = LayerMask.NameToLayer("Player");
-        if (playerLayer >= 0)
-        {
-            SetLayerRecursively(player.Transform, playerLayer);
-        }
+        CombatLayerUtility.ApplyShipLayer(player.Transform.gameObject, CombatFaction.Player);
 
         player.DamageReceiver = receiver;
         player.TeamMember = teamMember;
@@ -986,6 +1119,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.BodyRenderer = null;
         player.AuraRenderer = null;
         player.ThrusterRenderer = null;
+        player.ThrusterEffect = null;
 
         if (ship == null || ship.shipPrefab == null)
         {
@@ -1003,9 +1137,26 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.BodyRenderer = body;
         player.AuraRenderer = aura;
         player.ThrusterRenderer = thruster;
+        player.ThrusterEffect = EnsureThrusterEffect(playerVisualInstance);
 
         player.BaseBodyColor = body != null ? body.color : ship.accentColor;
         player.BaseAuraColor = aura != null ? aura.color : ship.auraColor;
+    }
+
+    private static ShipThrusterEffect EnsureThrusterEffect(GameObject shipObject)
+    {
+        if (shipObject == null)
+        {
+            return null;
+        }
+
+        ShipThrusterEffect effect = shipObject.GetComponent<ShipThrusterEffect>();
+        if (effect == null)
+        {
+            effect = shipObject.AddComponent<ShipThrusterEffect>();
+        }
+
+        return effect;
     }
 
     private static void ResolvePlayerVisualRenderers(Transform visualRoot, out SpriteRenderer body, out SpriteRenderer aura, out SpriteRenderer thruster)
@@ -1046,34 +1197,80 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void RebuildWeaponSlots(int weaponSlotCount)
     {
         int slotCount = Mathf.Max(0, weaponSlotCount);
+        Transform prefabSlotsRoot = playerVisualInstance != null ? FindDirectChild(playerVisualInstance.transform, "WeaponSlots") : null;
 
-        if (weaponSlotsRoot == null)
+        if (prefabSlotsRoot != null)
+        {
+            weaponSlotsRoot = prefabSlotsRoot;
+            for (int i = 0; i < slotCount; i++)
+            {
+                Transform prefabSlot = FindWeaponMuzzle(prefabSlotsRoot, i);
+                if (i < equipmentState.WeaponMuzzles.Count)
+                {
+                    equipmentState.WeaponMuzzles[i] = prefabSlot != null ? prefabSlot : player.Transform;
+                }
+            }
+
+            return;
+        }
+
+        if (weaponSlotsRoot == null || weaponSlotsRoot == prefabSlotsRoot)
         {
             weaponSlotsRoot = new GameObject("WeaponSlots").transform;
             weaponSlotsRoot.SetParent(player.Transform, false);
         }
 
-        for (int i = weaponSlotsRoot.childCount - 1; i >= 0; i--)
-        {
-            Destroy(weaponSlotsRoot.GetChild(i).gameObject);
-        }
-
         for (int i = 0; i < slotCount; i++)
         {
-            GameObject slotObject = new GameObject("WeaponSlot_" + (i + 1));
-            slotObject.transform.SetParent(weaponSlotsRoot, false);
+            Transform slotTransform = FindDirectChild(weaponSlotsRoot, "WeaponSlot_" + (i + 1));
+            if (slotTransform == null)
+            {
+                GameObject slotObject = new GameObject("WeaponSlot_" + (i + 1));
+                slotObject.transform.SetParent(weaponSlotsRoot, false);
+                slotTransform = slotObject.transform;
+            }
 
             float lerp = slotCount <= 1 ? 0.5f : i / (float)(slotCount - 1);
             float x = Mathf.Lerp(-0.38f, 0.38f, lerp);
             float y = Mathf.Lerp(0.58f, 0.66f, 1f - Mathf.Abs(lerp - 0.5f) * 2f);
-            slotObject.transform.localPosition = new Vector3(x, y, 0f);
-            slotObject.transform.localRotation = Quaternion.identity;
+            slotTransform.localPosition = new Vector3(x, y, 0f);
+            slotTransform.localRotation = Quaternion.identity;
+            Transform muzzleTransform = EnsureWeaponMount(slotTransform, i);
 
             if (i < equipmentState.WeaponMuzzles.Count)
             {
-                equipmentState.WeaponMuzzles[i] = slotObject.transform;
+                equipmentState.WeaponMuzzles[i] = muzzleTransform != null ? muzzleTransform : slotTransform;
             }
         }
+    }
+
+    private static Transform EnsureWeaponMount(Transform slotTransform, int index)
+    {
+        if (slotTransform == null)
+        {
+            return null;
+        }
+
+        string mountName = "WeaponMount_" + (index + 1);
+        Transform mountTransform = FindDirectChild(slotTransform, mountName);
+        if (mountTransform == null)
+        {
+            GameObject mountObject = new GameObject(mountName);
+            mountObject.transform.SetParent(slotTransform, false);
+            mountTransform = mountObject.transform;
+        }
+
+        Transform muzzleTransform = FindDirectChild(mountTransform, "Muzzle");
+        if (muzzleTransform == null)
+        {
+            GameObject muzzleObject = new GameObject("Muzzle");
+            muzzleObject.transform.SetParent(mountTransform, false);
+            muzzleTransform = muzzleObject.transform;
+        }
+
+        muzzleTransform.localPosition = Vector3.zero;
+        muzzleTransform.localRotation = Quaternion.identity;
+        return muzzleTransform;
     }
 
     private static bool CanShipUseWeapon(ShipClass shipClass, WeaponDataSO weaponData)
@@ -1118,6 +1315,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         ShowStartMenu(false);
         gameStarted = true;
         gameOver = false;
+        gamePaused = false;
         levelUpPending = false;
         wave = 1;
         gameTimer = 0f;
@@ -1125,6 +1323,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         targetEnemy = null;
         activePerks.Clear();
         perkPanelObject.SetActive(false);
+        ShowGameOverPanel(false);
         combatLog.Clear();
         ClearEnemies();
         ClearProjectiles();
@@ -1141,6 +1340,32 @@ public class SpaceCombatSceneController : MonoBehaviour
         ApplyShipDefinition(availableShips[selectedShipIndex], true);
         LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
+    }
+
+    private void ResumeRun()
+    {
+        if (!gameStarted || gameOver)
+        {
+            return;
+        }
+
+        SetPaused(false);
+        ShowStartMenu(false);
+    }
+
+    private void SetPaused(bool paused)
+    {
+        if (!gameStarted || gameOver)
+        {
+            paused = false;
+        }
+
+        gamePaused = paused;
+        ShowPauseMenu(paused);
+        if (paused)
+        {
+            ShowStartMenu(false);
+        }
     }
 
     private void ResetTimelineRuntime()
@@ -1506,6 +1731,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             targetRenderer.gameObject.SetActive(false);
         }
         SpriteRenderer thrusterRenderer = FindChildSpriteRenderer(enemyObject.transform, "Thruster");
+        ShipThrusterEffect thrusterEffect = EnsureThrusterEffect(enemyObject);
 
         float shieldValue = Mathf.Max(1f, shipData.maxShield * levelScale);
         float armorValue = Mathf.Max(1f, shipData.maxArmor * levelScale);
@@ -1534,6 +1760,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         float weaponCooldown = enemyWeapon != null
             ? Mathf.Max(0.05f, enemyWeapon.cooldown > 0f ? enemyWeapon.cooldown : enemyWeapon.fireRate)
             : UnityEngine.Random.Range(1.15f, 1.8f);
+        float weaponRange = enemyWeapon != null
+            ? Mathf.Max(enemyWeapon.maxRange, enemyWeapon.projectileMaxDistance)
+            : 5.2f;
+        weaponRange = Mathf.Max(4.5f, weaponRange);
+        float preferredDistance = Mathf.Clamp(weaponRange * UnityEngine.Random.Range(0.68f, 0.82f), 3.9f, 7.5f);
+        float retreatDistance = Mathf.Max(2.8f, preferredDistance * 0.72f);
+        float reengageDistance = Mathf.Max(retreatDistance + 0.6f, preferredDistance * 0.94f);
 
         EnemyShip enemy = new EnemyShip
         {
@@ -1544,9 +1777,14 @@ public class SpaceCombatSceneController : MonoBehaviour
             ShieldRenderer = shieldRenderer,
             TargetRenderer = targetRenderer,
             ThrusterRenderer = thrusterRenderer,
-            OrbitDistance = UnityEngine.Random.Range(2.4f, 4.2f),
+            ThrusterEffect = thrusterEffect,
+            OrbitDistance = preferredDistance,
             OrbitAngle = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
             OrbitSpeed = UnityEngine.Random.Range(0.4f, 0.95f),
+            RetreatDistance = retreatDistance,
+            ReengageDistance = reengageDistance,
+            DistanceResponsiveness = UnityEngine.Random.Range(1.25f, 1.75f),
+            RetreatSpeedMultiplier = UnityEngine.Random.Range(1.8f, 2.35f),
             AttackCooldown = weaponCooldown,
             AttackTimer = UnityEngine.Random.Range(0f, 0.7f),
             Damage = enemyDamage,
@@ -1597,7 +1835,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         enemy.DamageReceiver = receiver;
         enemy.TeamMember = enemyObject.GetComponent<TeamMember>();
 
-        Transform defaultMuzzle = FindWeaponMuzzle(enemyObject.transform);
         for (int i = 0; i < compatibleWeapons.Count; i++)
         {
             WeaponDataSO weapon = compatibleWeapons[i];
@@ -1609,7 +1846,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             WeaponInstance instance = new WeaponInstance(
                 weapon,
                 enemyObject.transform,
-                defaultMuzzle,
+                FindWeaponMuzzle(enemyObject.transform, i),
                 CombatFaction.Enemy,
                 enemyObject);
 
@@ -1620,9 +1857,80 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
 
             enemy.WeaponInstances.Add(instance);
+            AttachWeaponVisual(weapon, instance.MuzzleTransform);
         }
 
         return enemy;
+    }
+
+    private static void RefreshWeaponVisuals(List<WeaponDataSO> weapons, List<Transform> muzzles)
+    {
+        if (muzzles == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < muzzles.Count; i++)
+        {
+            WeaponDataSO weapon = weapons != null && i < weapons.Count ? weapons[i] : null;
+            AttachWeaponVisual(weapon, muzzles[i]);
+        }
+    }
+
+    private static void AttachWeaponVisual(WeaponDataSO weapon, Transform muzzleTransform)
+    {
+        Transform mountTransform = GetWeaponMountTransform(muzzleTransform);
+        if (mountTransform == null)
+        {
+            return;
+        }
+
+        GameObject existingVisual = FindExistingWeaponVisual(mountTransform);
+        if (existingVisual != null)
+        {
+            existingVisual.SetActive(weapon != null);
+            return;
+        }
+
+        if (weapon == null || weapon.visualPrefab == null)
+        {
+            return;
+        }
+
+        GameObject visual = Instantiate(weapon.visualPrefab, mountTransform);
+        visual.name = "WeaponVisualInstance";
+        visual.transform.localPosition = Vector3.zero;
+        visual.transform.localRotation = weapon.visualPrefab.transform.localRotation;
+        visual.transform.localScale = Vector3.one;
+    }
+
+    private static Transform GetWeaponMountTransform(Transform muzzleTransform)
+    {
+        if (muzzleTransform == null)
+        {
+            return null;
+        }
+
+        return muzzleTransform.parent != null ? muzzleTransform.parent : muzzleTransform;
+    }
+
+    private static GameObject FindExistingWeaponVisual(Transform mountTransform)
+    {
+        if (mountTransform == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < mountTransform.childCount; i++)
+        {
+            Transform child = mountTransform.GetChild(i);
+            if (string.Equals(child.name, "WeaponVisualInstance", StringComparison.OrdinalIgnoreCase))
+            {
+                return child.gameObject;
+            }
+        }
+
+        return null;
     }
 
     private static void AssignEnemyIdentity(GameObject enemyObject)
@@ -1641,34 +1949,34 @@ public class SpaceCombatSceneController : MonoBehaviour
             // Enemy tag may be absent in project settings.
         }
 
-        int enemyLayer = LayerMask.NameToLayer("Enemy");
-        if (enemyLayer < 0)
+        TeamMember teamMember = enemyObject.GetComponent<TeamMember>();
+        if (teamMember == null)
         {
-            return;
+            teamMember = enemyObject.AddComponent<TeamMember>();
         }
+        teamMember.SetFaction(CombatFaction.Enemy);
 
-        SetLayerRecursively(enemyObject.transform, enemyLayer);
+        CombatLayerUtility.ApplyShipLayer(enemyObject, CombatFaction.Enemy);
     }
 
-    private static void SetLayerRecursively(Transform root, int layer)
-    {
-        if (root == null)
-        {
-            return;
-        }
-
-        root.gameObject.layer = layer;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            SetLayerRecursively(root.GetChild(i), layer);
-        }
-    }
-
-    private static Transform FindWeaponMuzzle(Transform root)
+    private static Transform FindWeaponMuzzle(Transform root, int index)
     {
         if (root == null)
         {
             return null;
+        }
+
+        Transform slotsRoot = FindDirectChild(root, "WeaponSlots");
+        if (slotsRoot == null)
+        {
+            slotsRoot = root;
+        }
+
+        Transform indexedSlot = FindDirectChild(slotsRoot, "WeaponSlot_" + (index + 1));
+        if (indexedSlot != null)
+        {
+            Transform muzzle = FindMuzzleTransform(indexedSlot, index);
+            return muzzle != null ? muzzle : indexedSlot;
         }
 
         Transform[] children = root.GetComponentsInChildren<Transform>(true);
@@ -1683,6 +1991,64 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         return root;
+    }
+
+    private static Transform FindMuzzleTransform(Transform slot, int index)
+    {
+        if (slot == null)
+        {
+            return null;
+        }
+
+        string indexedMountName = "WeaponMount_" + (index + 1);
+        Transform indexedMount = FindDirectChild(slot, indexedMountName);
+        if (indexedMount != null)
+        {
+            Transform indexedMountMuzzle = FindDirectChild(indexedMount, "Muzzle");
+            if (indexedMountMuzzle != null)
+            {
+                return indexedMountMuzzle;
+            }
+        }
+
+        Transform directMuzzle = FindDirectChild(slot, "Muzzle");
+        if (directMuzzle != null)
+        {
+            return directMuzzle;
+        }
+
+        Transform[] children = slot.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
+        {
+            string childName = children[i].name;
+            if (childName.IndexOf("muzzle", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                childName.IndexOf("firepoint", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                childName.IndexOf("projectileorigin", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return children[i];
+            }
+        }
+
+        return null;
+    }
+
+    private static Transform FindDirectChild(Transform parent, string childName)
+    {
+        if (parent == null || string.IsNullOrEmpty(childName))
+        {
+            return null;
+        }
+
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform child = parent.GetChild(i);
+            if (string.Equals(child.name, childName, StringComparison.OrdinalIgnoreCase))
+            {
+                return child;
+            }
+        }
+
+        return null;
     }
 
     private void ClearEnemies()
@@ -1734,35 +2100,584 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void BuildHud()
     {
-        GameObject canvasObject = new GameObject("HUD", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        Transform uiRoot = ResolveInspectorUiRoot();
+        GameObject canvasObject = uiRoot.gameObject;
         hudCanvas = canvasObject.GetComponent<Canvas>();
+        if (hudCanvas == null)
+        {
+            hudCanvas = canvasObject.AddComponent<Canvas>();
+        }
         hudCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
 
         CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+        if (scaler == null)
+        {
+            scaler = canvasObject.AddComponent<CanvasScaler>();
+        }
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1400f, 900f);
         scaler.matchWidthOrHeight = 0.6f;
 
-        Image rootBackground = CreateImage("Frame", canvasObject.transform, new Color(0.01f, 0.015f, 0.02f, 0f));
+        if (canvasObject.GetComponent<GraphicRaycaster>() == null)
+        {
+            canvasObject.AddComponent<GraphicRaycaster>();
+        }
+
+        if (HasAuthoredInspectorHud(uiRoot))
+        {
+            BindAuthoredInspectorHud(uiRoot);
+            return;
+        }
+
+        Image rootBackground = CreateImage("Frame", uiRoot, new Color(0.01f, 0.015f, 0.02f, 0f));
         RectTransform rootRect = rootBackground.rectTransform;
         rootRect.anchorMin = Vector2.zero;
         rootRect.anchorMax = Vector2.one;
         rootRect.offsetMin = Vector2.zero;
         rootRect.offsetMax = Vector2.zero;
 
-        CreateRightOverviewPanel(canvasObject.transform);
-        CreateCombatLogPanel(canvasObject.transform);
-        CreateGateHint(canvasObject.transform);
-        CreatePlayerStatusHud(canvasObject.transform);
-        CreateEquipmentHud(canvasObject.transform);
-        CreateModuleHud(canvasObject.transform);
-        CreateStatusLabel(canvasObject.transform);
-        CreatePerkPanel(canvasObject.transform);
-        CreateStartMenu(canvasObject.transform);
+        CreateRightOverviewPanel(uiRoot);
+        CreateCombatLogPanel(uiRoot);
+        CreateGateHint(uiRoot);
+        CreatePlayerStatusHud(uiRoot);
+        if (uiRoot.Find("EquipmentPanel") == null)
+        {
+            CreateEquipmentHud(uiRoot);
+        }
+        CreateModuleHud(uiRoot);
+        CreatePauseHudButton(uiRoot);
+        CreateStatusLabel(uiRoot);
+        CreatePerkPanel(uiRoot);
+        CreateGameOverPanel(uiRoot);
+        CreatePauseMenu(uiRoot);
+        CreateStartMenu(uiRoot);
         if (useVirtualJoystick)
         {
-            CreateVirtualJoystick(canvasObject.transform);
+            CreateVirtualJoystick(uiRoot);
         }
+    }
+
+    private Transform ResolveInspectorUiRoot()
+    {
+        GameObject inspectorUi = FindSceneGameObject("InspectorUI");
+        if (inspectorUi != null)
+        {
+            inspectorUi.SetActive(true);
+            return inspectorUi.transform;
+        }
+
+        GameObject canvasObject = new GameObject("InspectorUI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        return canvasObject.transform;
+    }
+
+    private static GameObject FindSceneGameObject(string objectName)
+    {
+        GameObject activeObject = GameObject.Find(objectName);
+        if (activeObject != null)
+        {
+            return activeObject;
+        }
+
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < allObjects.Length; i++)
+        {
+            GameObject candidate = allObjects[i];
+            if (candidate == null || candidate.name != objectName || !candidate.scene.IsValid())
+            {
+                continue;
+            }
+
+            return candidate;
+        }
+
+        return null;
+    }
+
+    private static bool HasAuthoredInspectorHud(Transform uiRoot)
+    {
+        return uiRoot != null &&
+               (uiRoot.Find("OverviewPanel") != null ||
+                uiRoot.Find("StartMenu") != null ||
+                uiRoot.Find("PlayerStatus") != null);
+    }
+
+    private void BindAuthoredInspectorHud(Transform uiRoot)
+    {
+        BindOverviewPanel(uiRoot);
+        BindCombatLogPanel(uiRoot);
+        BindGateHint(uiRoot);
+        BindPlayerStatusPanel(uiRoot);
+        BindEquipmentPanel(uiRoot);
+        BindModulePanel(uiRoot);
+        pauseHudButtonView = BindMenuButton(uiRoot.Find("PauseButton"), "PauseButton");
+        statusText = FindText(uiRoot, "StatusLabel");
+        BindPerkPanel(uiRoot);
+        BindGameOverPanel(uiRoot);
+        BindPauseMenu(uiRoot);
+        BindStartMenu(uiRoot);
+        BindVirtualJoystick(uiRoot);
+    }
+
+    private void BindOverviewPanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("OverviewPanel");
+        if (panel == null)
+        {
+            return;
+        }
+
+        overviewPanelRect = panel.GetComponent<RectTransform>();
+        overviewTitleText = FindText(panel, "Title");
+        targetPanel = FindImage(panel, "TargetPanel");
+        Transform target = panel.Find("TargetPanel");
+        targetNameText = FindText(target, "TargetName");
+        targetDistanceText = FindText(target, "TargetDistance");
+        targetShieldFill = FindIndexedFill(target, "BarBackground", 0);
+        targetArmorFill = FindIndexedFill(target, "BarBackground", 1);
+        targetHullFill = FindIndexedFill(target, "BarBackground", 2);
+        targetShieldValueText = FindIndexedText(target, "Value", 0);
+        targetArmorValueText = FindIndexedText(target, "Value", 1);
+        targetHullValueText = FindIndexedText(target, "Value", 2);
+        enemyHeaderText = FindText(panel, "EnemyHeader");
+        capacitorText = FindText(panel, "CapText");
+        targetDisplayText = FindText(panel, "TargetDisplay");
+        shipText = FindText(panel, "ShipText");
+        levelText = FindText(panel, "LevelText");
+        experienceText = FindText(panel, "ExperienceText");
+
+        enemyRows.Clear();
+        Transform rowsRoot = panel.Find("EnemyRows");
+        if (rowsRoot == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < 9; i++)
+        {
+            Transform rowTransform = rowsRoot.Find("EnemyRow_" + i);
+            if (rowTransform == null)
+            {
+                continue;
+            }
+
+            enemyRows.Add(new EnemyRow
+            {
+                RootTransform = rowTransform.GetComponent<RectTransform>(),
+                RootText = FindText(rowTransform, "RowText"),
+                ShieldFill = FindIndexedFill(rowTransform, "BarBg", 0),
+                ArmorFill = FindIndexedFill(rowTransform, "BarBg", 1),
+                HullFill = FindIndexedFill(rowTransform, "BarBg", 2)
+            });
+        }
+    }
+
+    private void BindCombatLogPanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("CombatLog");
+        if (panel == null)
+        {
+            return;
+        }
+
+        combatLogTitleText = FindText(panel, "Label");
+        combatLogText = FindText(panel, "Viewport/Content/Text");
+        Transform content = panel.Find("Viewport/Content");
+        combatLogContentRect = content != null ? content.GetComponent<RectTransform>() : null;
+        combatLogScrollRect = panel.GetComponent<ScrollRect>();
+        if (combatLogScrollRect == null)
+        {
+            combatLogScrollRect = panel.gameObject.AddComponent<ScrollRect>();
+        }
+
+        Transform viewport = panel.Find("Viewport");
+        combatLogScrollRect.viewport = viewport != null ? viewport.GetComponent<RectTransform>() : null;
+        combatLogScrollRect.content = combatLogContentRect;
+        combatLogScrollRect.horizontal = false;
+        combatLogScrollRect.vertical = true;
+        combatLogScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        combatLogScrollRect.scrollSensitivity = 24f;
+    }
+
+    private void BindGateHint(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("GateHint");
+        gateHintText = FindText(panel, "Text");
+    }
+
+    private void BindPlayerStatusPanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("PlayerStatus");
+        if (panel == null)
+        {
+            return;
+        }
+
+        playerStatusTitleText = FindText(panel, "Label");
+        playerLevelBadgeText = FindText(panel, "LevelBadge");
+        playerShieldFill = FindImage(panel, "ShieldBg/ShieldFill");
+        playerArmorFill = FindImage(panel, "ArmorBg/ArmorFill");
+        playerHullFill = FindImage(panel, "HullBg/HullFill");
+        playerExperienceFill = FindImage(panel, "XPBg/XPFill");
+        playerShieldValueText = FindText(panel, "ShieldBg/Value");
+        playerArmorValueText = FindText(panel, "ArmorBg/Value");
+        playerHullValueText = FindText(panel, "HullBg/Value");
+        playerExperienceValueText = FindText(panel, "XPBg/Value");
+        capacitorFill = FindImage(panel, "CapacitorFill");
+        capacitorValueText = FindText(panel, "CapValue");
+    }
+
+    private void BindEquipmentPanel(Transform uiRoot)
+    {
+        Transform authoredPanel = uiRoot.Find("EquipmentPanel");
+        Transform runtimePanel = uiRoot.Find("EquipmentPanelRuntime");
+        Transform panel = authoredPanel;
+        if (panel == null)
+        {
+            if (runtimePanel != null)
+            {
+                runtimePanel.gameObject.SetActive(false);
+            }
+            return;
+        }
+
+        panel.gameObject.SetActive(true);
+        if (runtimePanel != null)
+        {
+            runtimePanel.gameObject.SetActive(false);
+        }
+
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        bool panelHadInvertedAnchors = NormalizeAuthoredRect(panelRect);
+        AlignEquipmentPanelToModulePanelIfNeeded(uiRoot, panelRect, panelHadInvertedAnchors);
+
+        DisableDuplicateEquipmentPanels(uiRoot, panel);
+
+        EquipmentUIController runtimeController = panel.GetComponent<EquipmentUIController>();
+        if (runtimeController == null)
+        {
+            runtimeController = panel.gameObject.AddComponent<EquipmentUIController>();
+        }
+        else
+        {
+            runtimeController.enabled = true;
+        }
+
+        Transform weaponsRow = panel.Find("WeaponsRow");
+        Transform modulesRow = panel.Find("ModulesRow");
+        runtimeController.Configure(
+            this,
+            slotUiPrefab,
+            weaponsRow != null ? weaponsRow.GetComponent<RectTransform>() : null,
+            modulesRow != null ? modulesRow.GetComponent<RectTransform>() : null);
+        equipmentUiController = runtimeController;
+    }
+
+    private static void DisableDuplicateEquipmentPanels(Transform uiRoot, Transform activePanel)
+    {
+        EquipmentUIController[] controllers = uiRoot.GetComponentsInChildren<EquipmentUIController>(true);
+        for (int i = 0; i < controllers.Length; i++)
+        {
+            EquipmentUIController controller = controllers[i];
+            if (controller == null || controller.transform == activePanel)
+            {
+                continue;
+            }
+
+            controller.enabled = false;
+            controller.gameObject.SetActive(false);
+        }
+    }
+
+    private void BindModulePanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("ModulePanel");
+        modulePanelRect = panel != null ? panel.GetComponent<RectTransform>() : null;
+        BindModuleSlots();
+    }
+
+    private void BindPerkPanel(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("PerkPanel");
+        perkPanelObject = root != null ? root.gameObject : null;
+        Transform content = root != null ? root.Find("Content") : null;
+        perkTitleText = FindText(content, "Title");
+        perkHintText = FindText(content, "Choices");
+        for (int i = 0; i < perkOptionTexts.Length; i++)
+        {
+            Transform option = content != null ? content.Find("PerkOption_" + i) : null;
+            perkOptionRects[i] = option != null ? option.GetComponent<RectTransform>() : null;
+            perkOptionTexts[i] = FindText(option, "Label");
+            EnsureButton(option);
+        }
+        if (perkPanelObject != null)
+        {
+            perkPanelObject.SetActive(false);
+        }
+    }
+
+    private void BindGameOverPanel(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("GameOverPanel");
+        gameOverPanelObject = root != null ? root.gameObject : null;
+        Transform content = root != null ? root.Find("Content") : null;
+        retryButtonView = BindMenuButton(content != null ? content.Find("gameover_retry") : null, "gameover_retry");
+        gameOverMenuButtonView = BindMenuButton(content != null ? content.Find("gameover_menu") : null, "gameover_menu");
+        gameOverExitButtonView = BindMenuButton(content != null ? content.Find("gameover_exit") : null, "gameover_exit");
+        if (gameOverPanelObject != null)
+        {
+            gameOverPanelObject.SetActive(false);
+        }
+    }
+
+    private void BindPauseMenu(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("PauseMenu");
+        pauseMenuObject = root != null ? root.gameObject : null;
+        Transform panel = root != null ? root.Find("Panel") : null;
+        pauseResumeButtonView = BindMenuButton(panel != null ? panel.Find("pause_resume") : null, "pause_resume");
+        pauseSettingsButtonView = BindMenuButton(panel != null ? panel.Find("pause_settings") : null, "pause_settings");
+        pauseMenuButtonView = BindMenuButton(panel != null ? panel.Find("pause_menu") : null, "pause_menu");
+        if (pauseMenuObject != null)
+        {
+            pauseMenuObject.SetActive(false);
+        }
+    }
+
+    private void BindStartMenu(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("StartMenu");
+        startMenuObject = root != null ? root.gameObject : null;
+        Transform panel = root != null ? root.Find("Panel") : null;
+        Transform main = panel != null ? panel.Find("MainMenuPanel") : null;
+        Transform hangar = panel != null ? panel.Find("HangarPanel") : null;
+        Transform settings = panel != null ? panel.Find("SettingsPanel") : null;
+
+        mainMenuPanelObject = main != null ? main.gameObject : null;
+        hangarPanelObject = hangar != null ? hangar.gameObject : null;
+        settingsPanelObject = settings != null ? settings.gameObject : null;
+
+        mainMenuTitleText = FindText(main, "Title");
+        mainMenuSubtitleText = FindText(main, "Subtitle");
+        continueButtonView = BindMenuButton(main != null ? main.Find("main_continue") : null, "main_continue");
+        newGameButtonView = BindMenuButton(main != null ? main.Find("main_new_game") : null, "main_new_game");
+        settingsMenuButtonView = BindMenuButton(main != null ? main.Find("main_settings") : null, "main_settings");
+        exitButtonView = BindMenuButton(main != null ? main.Find("main_exit") : null, "main_exit");
+
+        hangarTitleText = FindText(hangar, "Title");
+        hangarSubtitleText = FindText(hangar, "Subtitle");
+        BindShipCards(hangar);
+        Transform infoPanel = hangar != null ? hangar.Find("InfoPanel") : null;
+        startMenuPreviewImage = FindImage(infoPanel, "Preview");
+        startMenuShipNameText = FindText(infoPanel, "ShipName");
+        startMenuRoleText = FindText(infoPanel, "Role");
+        startMenuDescriptionText = FindText(infoPanel, "Description");
+        startMenuStatsText = FindText(infoPanel, "Stats");
+        startMenuHintText = FindText(hangar, "Hint");
+        startButtonImage = FindImage(hangar, "StartButton");
+        startButtonRect = startButtonImage != null ? startButtonImage.rectTransform : null;
+        startButtonText = FindText(hangar, "StartButton/Label");
+        EnsureButton(startButtonImage != null ? startButtonImage.transform : null);
+        hangarBackButtonView = BindMenuButton(hangar != null ? hangar.Find("hangar_back") : null, "hangar_back");
+
+        settingsTitleText = FindText(settings, "Title");
+        settingsSubtitleText = FindText(settings, "Subtitle");
+        Transform settingsBox = settings != null ? settings.Find("SettingsBox") : null;
+        settingsLanguageLabelText = FindText(settingsBox, "LanguageLabel");
+        languageRuButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_ru") : null, "lang_ru");
+        languageEngButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_eng") : null, "lang_eng");
+        settingsFpsLabelText = FindText(settingsBox, "FpsLabel");
+        for (int i = 0; i < fpsOptions.Length; i++)
+        {
+            fpsButtonViews[i] = BindMenuButton(settingsBox != null ? settingsBox.Find("fps_" + fpsOptions[i]) : null, "fps_" + fpsOptions[i]);
+        }
+        settingsBackButtonView = BindMenuButton(settings != null ? settings.Find("settings_back") : null, "settings_back");
+        SetStartMenuPage(StartMenuPage.Main);
+    }
+
+    private void BindShipCards(Transform hangar)
+    {
+        shipCardViews.Clear();
+        Transform cardsRoot = hangar != null ? hangar.Find("Cards") : null;
+        int shipCount = availableShips != null ? availableShips.Count : 0;
+        for (int i = 0; i < shipCount; i++)
+        {
+            Transform card = cardsRoot != null ? cardsRoot.Find("ShipCard_" + i) : null;
+            if (card == null)
+            {
+                continue;
+            }
+
+            EnsureButton(card);
+            shipCardViews.Add(new ShipCardView
+            {
+                Rect = card.GetComponent<RectTransform>(),
+                Background = card.GetComponent<Image>(),
+                Title = FindText(card, "Title"),
+                Stats = FindText(card, "Stats")
+            });
+        }
+    }
+
+    private void BindVirtualJoystick(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("VirtualJoystick");
+        joystickRootObject = root != null ? root.gameObject : null;
+        Transform baseTransform = root != null ? root.Find("Base") : null;
+        joystickAreaRect = baseTransform != null ? baseTransform.GetComponent<RectTransform>() : null;
+        joystickBaseImage = baseTransform != null ? baseTransform.GetComponent<Image>() : null;
+        joystickKnobImage = FindImage(baseTransform, "Knob");
+        joystickHintText = FindText(baseTransform, "Hint");
+    }
+
+    private UiButtonView BindMenuButton(Transform buttonTransform, string id)
+    {
+        if (buttonTransform == null)
+        {
+            return null;
+        }
+
+        EnsureButton(buttonTransform);
+        RectTransform buttonRect = buttonTransform.GetComponent<RectTransform>();
+        NormalizeAuthoredRect(buttonRect);
+        return new UiButtonView
+        {
+            Id = id,
+            Rect = buttonRect,
+            Background = buttonTransform.GetComponent<Image>(),
+            Label = FindText(buttonTransform, "Label")
+        };
+    }
+
+    private static void EnsureButton(Transform target)
+    {
+        if (target != null && target.GetComponent<Button>() == null)
+        {
+            target.gameObject.AddComponent<Button>();
+        }
+    }
+
+    private static bool NormalizeAuthoredRect(RectTransform rect)
+    {
+        if (rect == null)
+        {
+            return false;
+        }
+
+        Vector2 anchorMin = rect.anchorMin;
+        Vector2 anchorMax = rect.anchorMax;
+        bool changed = false;
+
+        if (anchorMin.x > anchorMax.x)
+        {
+            float temp = anchorMin.x;
+            anchorMin.x = anchorMax.x;
+            anchorMax.x = temp;
+            changed = true;
+        }
+
+        if (anchorMin.y > anchorMax.y)
+        {
+            float temp = anchorMin.y;
+            anchorMin.y = anchorMax.y;
+            anchorMax.y = temp;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+        }
+
+        return changed;
+    }
+
+    private static void AlignEquipmentPanelToModulePanelIfNeeded(Transform uiRoot, RectTransform equipmentPanelRect, bool forceAlign)
+    {
+        if (uiRoot == null || equipmentPanelRect == null)
+        {
+            return;
+        }
+
+        Transform modulePanelTransform = uiRoot.Find("ModulePanel");
+        RectTransform modulePanelRect = modulePanelTransform != null ? modulePanelTransform.GetComponent<RectTransform>() : null;
+        if (modulePanelRect == null)
+        {
+            return;
+        }
+
+        bool hasInvalidAnchors =
+            equipmentPanelRect.anchorMin.x > equipmentPanelRect.anchorMax.x ||
+            equipmentPanelRect.anchorMin.y > equipmentPanelRect.anchorMax.y;
+
+        bool hasInvalidSize = equipmentPanelRect.sizeDelta.x <= 0f || equipmentPanelRect.sizeDelta.y <= 0f;
+        bool shouldAutoAlign = forceAlign || hasInvalidAnchors || hasInvalidSize;
+        if (!shouldAutoAlign)
+        {
+            return;
+        }
+
+        equipmentPanelRect.anchorMin = modulePanelRect.anchorMin;
+        equipmentPanelRect.anchorMax = modulePanelRect.anchorMax;
+        equipmentPanelRect.pivot = modulePanelRect.pivot;
+
+        float moduleWidth = Mathf.Max(200f, modulePanelRect.sizeDelta.x);
+        float moduleHeight = Mathf.Max(48f, modulePanelRect.sizeDelta.y);
+        equipmentPanelRect.sizeDelta = new Vector2(moduleWidth * 1.95f, moduleHeight * 1.9f);
+        equipmentPanelRect.anchoredPosition = new Vector2(
+            modulePanelRect.anchoredPosition.x + moduleWidth + 26f,
+            modulePanelRect.anchoredPosition.y);
+    }
+
+    private static Image FindImage(Transform root, string path)
+    {
+        Transform child = root != null ? root.Find(path) : null;
+        return child != null ? child.GetComponent<Image>() : null;
+    }
+
+    private static TMP_Text FindText(Transform root, string path)
+    {
+        Transform child = root != null ? root.Find(path) : null;
+        return child != null ? child.GetComponent<TMP_Text>() : null;
+    }
+
+    private static Image FindIndexedFill(Transform root, string backgroundName, int index)
+    {
+        Transform background = FindIndexedChild(root, backgroundName, index);
+        Transform fill = background != null ? background.Find("Fill") : null;
+        return fill != null ? fill.GetComponent<Image>() : null;
+    }
+
+    private static TMP_Text FindIndexedText(Transform root, string childName, int index)
+    {
+        Transform child = FindIndexedChild(root, childName, index);
+        return child != null ? child.GetComponent<TMP_Text>() : null;
+    }
+
+    private static Transform FindIndexedChild(Transform root, string childName, int index)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        int matchIndex = 0;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            if (child.name != childName)
+            {
+                continue;
+            }
+
+            if (matchIndex == index)
+            {
+                return child;
+            }
+            matchIndex++;
+        }
+
+        return null;
     }
 
     private void CreateRightOverviewPanel(Transform parent)
@@ -1803,6 +2718,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         targetShieldFill = CreateBar(targetPanel.transform, new Vector2(8f, -62f), new Color(0.23f, 0.62f, 1f));
         targetArmorFill = CreateBar(targetPanel.transform, new Vector2(8f, -78f), new Color(0.72f, 0.72f, 0.75f));
         targetHullFill = CreateBar(targetPanel.transform, new Vector2(8f, -94f), new Color(0.86f, 0.31f, 0.31f));
+        targetShieldValueText = CreateBarValueText(targetShieldFill, 252f);
+        targetArmorValueText = CreateBarValueText(targetArmorFill, 252f);
+        targetHullValueText = CreateBarValueText(targetHullFill, 252f);
 
         enemyHeaderText = CreateText("EnemyHeader", panel.transform, "ID          TYPE        DIST       STATUS", 12, FontStyle.Bold, new Color(0.52f, 0.68f, 0.8f));
         SetAnchoredRect(enemyHeaderText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(10f, -176f), new Vector2(-10f, -196f));
@@ -1823,18 +2741,23 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         capacitorText = CreateText("CapText", panel.transform, "Capacitor: 100%", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(capacitorText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 78f), new Vector2(-10f, 102f));
+        capacitorText.gameObject.SetActive(false);
 
         targetDisplayText = CreateText("TargetDisplay", panel.transform, "Target: none", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(targetDisplayText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 52f), new Vector2(-10f, 76f));
+        targetDisplayText.gameObject.SetActive(false);
 
         shipText = CreateText("ShipText", panel.transform, "Ship: none", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(shipText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 26f), new Vector2(-10f, 50f));
+        shipText.gameObject.SetActive(false);
 
         levelText = CreateText("LevelText", panel.transform, "Level: 1", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(levelText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 0f), new Vector2(-10f, 24f));
+        levelText.gameObject.SetActive(false);
 
         experienceText = CreateText("ExperienceText", panel.transform, "XP: 0 / 100", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(experienceText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -24f), new Vector2(-10f, 0f));
+        experienceText.gameObject.SetActive(false);
     }
 
     private void CreateCombatLogPanel(Transform parent)
@@ -1851,11 +2774,37 @@ public class SpaceCombatSceneController : MonoBehaviour
         combatLogTitleText = CreateText("Label", panel.transform, "COMBAT LOG", 16, FontStyle.Bold, new Color(0.52f, 0.8f, 1f));
         SetAnchoredRect(combatLogTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(10f, -8f), new Vector2(-10f, -30f));
 
-        combatLogText = CreateText("Text", panel.transform, string.Empty, 13, FontStyle.Normal, new Color(0.74f, 0.86f, 1f));
-        combatLogText.alignment = TextAnchor.UpperLeft;
-        combatLogText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        combatLogText.verticalOverflow = VerticalWrapMode.Overflow;
-        SetAnchoredRect(combatLogText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(10f, 10f), new Vector2(-10f, -36f));
+        GameObject viewportObject = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        viewportObject.transform.SetParent(panel.transform, false);
+        Image viewportImage = viewportObject.GetComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0.01f);
+        viewportImage.raycastTarget = true;
+        Mask viewportMask = viewportObject.GetComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+        RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
+        SetAnchoredRect(viewportRect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(10f, 10f), new Vector2(-10f, -36f));
+
+        combatLogContentRect = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+        combatLogContentRect.SetParent(viewportRect, false);
+        combatLogContentRect.anchorMin = new Vector2(0f, 1f);
+        combatLogContentRect.anchorMax = new Vector2(1f, 1f);
+        combatLogContentRect.pivot = new Vector2(0f, 1f);
+        combatLogContentRect.anchoredPosition = Vector2.zero;
+        combatLogContentRect.sizeDelta = new Vector2(0f, 160f);
+
+        combatLogText = CreateText("Text", combatLogContentRect, string.Empty, 13, FontStyle.Normal, new Color(0.74f, 0.86f, 1f));
+        combatLogText.alignment = TextAlignmentOptions.TopLeft;
+        combatLogText.textWrappingMode = TextWrappingModes.Normal;
+        combatLogText.overflowMode = TextOverflowModes.Overflow;
+        SetAnchoredRect(combatLogText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, -160f));
+
+        combatLogScrollRect = panel.gameObject.AddComponent<ScrollRect>();
+        combatLogScrollRect.viewport = viewportRect;
+        combatLogScrollRect.content = combatLogContentRect;
+        combatLogScrollRect.horizontal = false;
+        combatLogScrollRect.vertical = true;
+        combatLogScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        combatLogScrollRect.scrollSensitivity = 24f;
     }
 
     private void CreateGateHint(Transform parent)
@@ -1881,18 +2830,26 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 0f);
         rect.anchorMax = new Vector2(0.5f, 0f);
         rect.pivot = new Vector2(0.5f, 0f);
-        rect.sizeDelta = new Vector2(320f, 118f);
+        rect.sizeDelta = new Vector2(320f, 142f);
         rect.anchoredPosition = new Vector2(-120f, 16f);
         AddOutline(panel.gameObject, new Color(0.15f, 0.32f, 0.44f, 1f));
 
         playerStatusTitleText = CreateText("Label", panel.transform, "SHIP STATUS", 16, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
         SetAnchoredRect(playerStatusTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -8f), new Vector2(-12f, -28f));
+        playerLevelBadgeText = CreateText("LevelBadge", panel.transform, "LVL 1", 13, FontStyle.Bold, new Color(1f, 0.9f, 0.42f));
+        playerLevelBadgeText.alignment = TextAlignmentOptions.Right;
+        SetAnchoredRect(playerLevelBadgeText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-94f, -8f), new Vector2(-12f, -28f));
 
         playerShieldFill = CreateLabeledBar(panel.transform, "Shield", new Vector2(12f, -40f), new Color(0.23f, 0.62f, 1f));
         playerArmorFill = CreateLabeledBar(panel.transform, "Armor", new Vector2(12f, -64f), new Color(0.72f, 0.72f, 0.75f));
         playerHullFill = CreateLabeledBar(panel.transform, "Hull", new Vector2(12f, -88f), new Color(0.86f, 0.31f, 0.31f));
+        playerExperienceFill = CreateLabeledBar(panel.transform, "XP", new Vector2(12f, -112f), new Color(0.58f, 0.42f, 1f));
+        playerShieldValueText = CreateBarValueText(playerShieldFill, 180f);
+        playerArmorValueText = CreateBarValueText(playerArmorFill, 180f);
+        playerHullValueText = CreateBarValueText(playerHullFill, 180f);
+        playerExperienceValueText = CreateBarValueText(playerExperienceFill, 180f);
 
-        Text capacitorLabel = CreateText("CapLabel", panel.transform, "Cap", 13, FontStyle.Bold, new Color(0.95f, 0.9f, 0.6f));
+        TMP_Text capacitorLabel = CreateText("CapLabel", panel.transform, "Cap", 13, FontStyle.Bold, new Color(0.95f, 0.9f, 0.6f));
         SetAnchoredRect(capacitorLabel.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-86f, 18f), new Vector2(-50f, 34f));
         capacitorFill = CreateImage("CapacitorFill", panel.transform, new Color(0.95f, 0.85f, 0.35f, 1f));
         RectTransform capRect = capacitorFill.rectTransform;
@@ -1902,6 +2859,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         capRect.sizeDelta = new Vector2(30f, 60f);
         capRect.anchoredPosition = new Vector2(-44f, 46f);
         AddOutline(capacitorFill.gameObject, new Color(0.96f, 0.82f, 0.32f, 1f));
+
+        capacitorValueText = CreateText("CapValue", panel.transform, string.Empty, 10, FontStyle.Bold, new Color(1f, 0.95f, 0.68f));
+        capacitorValueText.alignment = TextAlignmentOptions.Center;
+        capacitorValueText.textWrappingMode = TextWrappingModes.NoWrap;
+        SetAnchoredRect(capacitorValueText.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-94f, 0f), new Vector2(-10f, 16f));
     }
 
     private void CreateModuleHud(Transform parent)
@@ -1925,12 +2887,13 @@ public class SpaceCombatSceneController : MonoBehaviour
             slotRect.sizeDelta = new Vector2(78f, 78f);
             slotRect.anchoredPosition = new Vector2(i * 88f, 10f);
             AddOutline(slot.gameObject, new Color(0.19f, 0.36f, 0.48f, 1f));
+            slot.gameObject.AddComponent<Button>();
 
-            Text key = CreateText("Key", slot.transform, string.Empty, 14, FontStyle.Bold, Color.white);
+            TMP_Text key = CreateText("Key", slot.transform, string.Empty, 14, FontStyle.Bold, Color.white);
             SetAnchoredRect(key.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -8f), new Vector2(0f, -28f));
 
-            Text label = CreateText("Label", slot.transform, string.Empty, 11, FontStyle.Bold, new Color(0.84f, 0.92f, 1f));
-            label.alignment = TextAnchor.MiddleCenter;
+            TMP_Text label = CreateText("Label", slot.transform, string.Empty, 11, FontStyle.Bold, new Color(0.84f, 0.92f, 1f));
+            label.alignment = TextAlignmentOptions.Center;
             SetAnchoredRect(label.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(6f, 24f), new Vector2(-6f, -24f));
 
             if (i < modules.Count)
@@ -1944,9 +2907,16 @@ public class SpaceCombatSceneController : MonoBehaviour
         BindModuleSlots();
     }
 
+    private void CreatePauseHudButton(Transform parent)
+    {
+        pauseHudButtonView = CreateMenuButton(parent, "PauseButton", new Vector2(0f, 1f), new Vector2(46f, -34f), new Vector2(76f, 38f));
+        pauseHudButtonView.Label.text = "MENU";
+        pauseHudButtonView.Label.fontSize = 14f;
+    }
+
     private void CreateEquipmentHud(Transform parent)
     {
-        RectTransform panel = new GameObject("EquipmentPanelRuntime", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup)).GetComponent<RectTransform>();
+        RectTransform panel = new GameObject("EquipmentPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup)).GetComponent<RectTransform>();
         panel.SetParent(parent, false);
         panel.anchorMin = new Vector2(0.5f, 0f);
         panel.anchorMax = new Vector2(0.5f, 0f);
@@ -2026,7 +2996,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         knobRect.anchoredPosition = Vector2.zero;
 
         joystickHintText = CreateText("Hint", baseImage.transform, Localize("joystick_hint"), 15, FontStyle.Bold, new Color(0.9f, 0.97f, 1f));
-        joystickHintText.alignment = TextAnchor.MiddleCenter;
+        joystickHintText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(joystickHintText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -26f), new Vector2(0f, -46f));
     }
 
@@ -2039,6 +3009,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.pivot = new Vector2(0.5f, 1f);
         rect.sizeDelta = new Vector2(700f, 28f);
         rect.anchoredPosition = new Vector2(-150f, -10f);
+        statusText.gameObject.SetActive(false);
     }
 
     private void CreatePerkPanel(Transform parent)
@@ -2070,10 +3041,96 @@ public class SpaceCombatSceneController : MonoBehaviour
         SetAnchoredRect(perkTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(18f, -18f), new Vector2(-18f, -56f));
 
         perkHintText = CreateText("Choices", panel.transform, string.Empty, 18, FontStyle.Bold, new Color(0.88f, 0.94f, 1f));
-        perkHintText.alignment = TextAnchor.UpperLeft;
-        SetAnchoredRect(perkHintText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(24f, 28f), new Vector2(-24f, -72f));
+        perkHintText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(perkHintText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(24f, 18f), new Vector2(-24f, 44f));
+
+        for (int i = 0; i < perkOptionTexts.Length; i++)
+        {
+            Image option = CreateImage("PerkOption_" + i, panel.transform, new Color(0.08f, 0.16f, 0.22f, 0.96f));
+            option.gameObject.AddComponent<Button>();
+            RectTransform optionRect = option.rectTransform;
+            optionRect.anchorMin = new Vector2(0f, 1f);
+            optionRect.anchorMax = new Vector2(1f, 1f);
+            optionRect.pivot = new Vector2(0.5f, 1f);
+            optionRect.sizeDelta = new Vector2(-48f, 42f);
+            optionRect.anchoredPosition = new Vector2(0f, -72f - i * 50f);
+            AddOutline(option.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
+
+            TMP_Text optionText = CreateText("Label", option.transform, string.Empty, 17, FontStyle.Bold, Color.white);
+            optionText.alignment = TextAlignmentOptions.Center;
+            SetAnchoredRect(optionText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            perkOptionRects[i] = optionRect;
+            perkOptionTexts[i] = optionText;
+        }
 
         perkPanelObject.SetActive(false);
+    }
+
+    private void CreateGameOverPanel(Transform parent)
+    {
+        gameOverPanelObject = new GameObject("GameOverPanel", typeof(RectTransform));
+        gameOverPanelObject.transform.SetParent(parent, false);
+        RectTransform rootRect = gameOverPanelObject.GetComponent<RectTransform>();
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
+
+        Image dim = CreateImage("Dimmer", gameOverPanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        RectTransform dimRect = dim.rectTransform;
+        dimRect.anchorMin = Vector2.zero;
+        dimRect.anchorMax = Vector2.one;
+        dimRect.offsetMin = Vector2.zero;
+        dimRect.offsetMax = Vector2.zero;
+
+        Image panel = CreateImage("Content", gameOverPanelObject.transform, new Color(0.06f, 0.1f, 0.14f, 0.98f));
+        RectTransform panelRect = panel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(420f, 300f);
+        AddOutline(panel.gameObject, new Color(0.55f, 0.18f, 0.18f, 1f));
+
+        TMP_Text title = CreateText("Title", panel.transform, currentLanguage == LanguageOption.RU ? "КОРАБЛЬ УНИЧТОЖЕН" : "SHIP DESTROYED", 28, FontStyle.Bold, new Color(1f, 0.42f, 0.36f));
+        title.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -24f), new Vector2(-20f, -64f));
+
+        retryButtonView = CreateMenuButton(panel.transform, "gameover_retry", new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(260f, 52f));
+        gameOverMenuButtonView = CreateMenuButton(panel.transform, "gameover_menu", new Vector2(0.5f, 0.5f), new Vector2(0f, -24f), new Vector2(260f, 52f));
+        gameOverExitButtonView = CreateMenuButton(panel.transform, "gameover_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -88f), new Vector2(260f, 52f));
+
+        gameOverPanelObject.SetActive(false);
+    }
+
+    private void CreatePauseMenu(Transform parent)
+    {
+        pauseMenuObject = new GameObject("PauseMenu", typeof(RectTransform));
+        pauseMenuObject.transform.SetParent(parent, false);
+        RectTransform rootRect = pauseMenuObject.GetComponent<RectTransform>();
+        StretchToParent(rootRect);
+
+        Image dim = CreateImage("Dimmer", pauseMenuObject.transform, new Color(0f, 0f, 0f, 0.42f));
+        RectTransform dimRect = dim.rectTransform;
+        StretchToParent(dimRect);
+
+        Image panel = CreateImage("Panel", pauseMenuObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.97f));
+        RectTransform panelRect = panel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(360f, 270f);
+        AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
+
+        TMP_Text title = CreateText("Title", panel.transform, "PAUSE", 28, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
+        title.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(18f, -22f), new Vector2(-18f, -62f));
+
+        pauseResumeButtonView = CreateMenuButton(panel.transform, "pause_resume", new Vector2(0.5f, 0.5f), new Vector2(0f, 38f), new Vector2(260f, 52f));
+        pauseSettingsButtonView = CreateMenuButton(panel.transform, "pause_settings", new Vector2(0.5f, 0.5f), new Vector2(0f, -24f), new Vector2(260f, 52f));
+        pauseMenuButtonView = CreateMenuButton(panel.transform, "pause_menu", new Vector2(0.5f, 0.5f), new Vector2(0f, -86f), new Vector2(260f, 52f));
+
+        pauseMenuObject.SetActive(false);
     }
 
     private void CreateStartMenu(Transform parent)
@@ -2121,26 +3178,27 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void CreateMainMenuPanel(Transform parent)
     {
         mainMenuTitleText = CreateText("Title", parent, string.Empty, 42, FontStyle.Bold, new Color(0.88f, 0.95f, 1f));
-        mainMenuTitleText.alignment = TextAnchor.MiddleCenter;
+        mainMenuTitleText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(mainMenuTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(40f, -80f), new Vector2(-40f, -130f));
 
         mainMenuSubtitleText = CreateText("Subtitle", parent, string.Empty, 20, FontStyle.Normal, new Color(0.62f, 0.82f, 0.98f));
-        mainMenuSubtitleText.alignment = TextAnchor.MiddleCenter;
+        mainMenuSubtitleText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(mainMenuSubtitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(60f, -132f), new Vector2(-60f, -170f));
 
-        newGameButtonView = CreateMenuButton(parent, "main_new_game", new Vector2(0.5f, 0.5f), new Vector2(0f, 110f), new Vector2(280f, 62f));
-        settingsMenuButtonView = CreateMenuButton(parent, "main_settings", new Vector2(0.5f, 0.5f), new Vector2(0f, 26f), new Vector2(280f, 62f));
-        exitButtonView = CreateMenuButton(parent, "main_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -58f), new Vector2(280f, 62f));
+        continueButtonView = CreateMenuButton(parent, "main_continue", new Vector2(0.5f, 0.5f), new Vector2(0f, 146f), new Vector2(280f, 56f));
+        newGameButtonView = CreateMenuButton(parent, "main_new_game", new Vector2(0.5f, 0.5f), new Vector2(0f, 72f), new Vector2(280f, 56f));
+        settingsMenuButtonView = CreateMenuButton(parent, "main_settings", new Vector2(0.5f, 0.5f), new Vector2(0f, -2f), new Vector2(280f, 56f));
+        exitButtonView = CreateMenuButton(parent, "main_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -76f), new Vector2(280f, 56f));
     }
 
     private void CreateHangarPanel(Transform parent)
     {
         hangarTitleText = CreateText("Title", parent, string.Empty, 34, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        hangarTitleText.alignment = TextAnchor.MiddleCenter;
+        hangarTitleText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(hangarTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -24f), new Vector2(-26f, -64f));
 
         hangarSubtitleText = CreateText("Subtitle", parent, string.Empty, 18, FontStyle.Normal, new Color(0.58f, 0.8f, 0.96f));
-        hangarSubtitleText.alignment = TextAnchor.MiddleCenter;
+        hangarSubtitleText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(hangarSubtitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -68f), new Vector2(-26f, -98f));
 
         RectTransform cardsRoot = new GameObject("Cards", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -2183,17 +3241,17 @@ public class SpaceCombatSceneController : MonoBehaviour
         SetAnchoredRect(startMenuRoleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(200f, -58f), new Vector2(-26f, -90f));
 
         startMenuDescriptionText = CreateText("Description", infoPanel.transform, "-", 16, FontStyle.Normal, new Color(0.86f, 0.92f, 1f));
-        startMenuDescriptionText.alignment = TextAnchor.UpperLeft;
-        startMenuDescriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        startMenuDescriptionText.verticalOverflow = VerticalWrapMode.Overflow;
+        startMenuDescriptionText.alignment = TextAlignmentOptions.TopLeft;
+        startMenuDescriptionText.textWrappingMode = TextWrappingModes.Normal;
+        startMenuDescriptionText.overflowMode = TextOverflowModes.Overflow;
         SetAnchoredRect(startMenuDescriptionText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(200f, -96f), new Vector2(-26f, -156f));
 
         startMenuStatsText = CreateText("Stats", infoPanel.transform, "-", 15, FontStyle.Normal, new Color(0.92f, 0.95f, 1f));
-        startMenuStatsText.alignment = TextAnchor.UpperLeft;
+        startMenuStatsText.alignment = TextAlignmentOptions.TopLeft;
         SetAnchoredRect(startMenuStatsText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(200f, 24f), new Vector2(-26f, 84f));
 
         startMenuHintText = CreateText("Hint", parent, string.Empty, 16, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        startMenuHintText.alignment = TextAnchor.MiddleCenter;
+        startMenuHintText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(startMenuHintText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(26f, 74f), new Vector2(-26f, 102f));
 
         startButtonImage = CreateImage("StartButton", parent, new Color(0.12f, 0.3f, 0.42f, 1f));
@@ -2204,9 +3262,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         startButtonRect.sizeDelta = new Vector2(260f, 54f);
         startButtonRect.anchoredPosition = new Vector2(130f, 18f);
         AddOutline(startButtonImage.gameObject, new Color(0.52f, 0.82f, 1f, 1f));
+        startButtonImage.gameObject.AddComponent<Button>();
 
         startButtonText = CreateText("Label", startButtonImage.transform, string.Empty, 20, FontStyle.Bold, Color.white);
-        startButtonText.alignment = TextAnchor.MiddleCenter;
+        startButtonText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(startButtonText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(0f, 0f));
 
         hangarBackButtonView = CreateMenuButton(parent, "hangar_back", new Vector2(0.5f, 0f), new Vector2(-130f, 18f), new Vector2(220f, 54f));
@@ -2215,11 +3274,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void CreateSettingsPanel(Transform parent)
     {
         settingsTitleText = CreateText("Title", parent, string.Empty, 34, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        settingsTitleText.alignment = TextAnchor.MiddleCenter;
+        settingsTitleText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(settingsTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -36f), new Vector2(-26f, -76f));
 
         settingsSubtitleText = CreateText("Subtitle", parent, string.Empty, 18, FontStyle.Normal, new Color(0.58f, 0.8f, 0.96f));
-        settingsSubtitleText.alignment = TextAnchor.MiddleCenter;
+        settingsSubtitleText.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(settingsSubtitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -84f), new Vector2(-26f, -116f));
 
         Image settingsBox = CreateImage("SettingsBox", parent, new Color(0.05f, 0.11f, 0.16f, 0.98f));
@@ -2258,6 +3317,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private UiButtonView CreateMenuButton(Transform parent, string id, Vector2 anchor, Vector2 anchoredPosition, Vector2 size)
     {
         Image buttonImage = CreateImage(id, parent, new Color(0.08f, 0.16f, 0.22f, 0.98f));
+        buttonImage.gameObject.AddComponent<Button>();
         RectTransform rect = buttonImage.rectTransform;
         rect.anchorMin = anchor;
         rect.anchorMax = anchor;
@@ -2266,8 +3326,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.anchoredPosition = anchoredPosition;
         AddOutline(buttonImage.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
 
-        Text label = CreateText("Label", buttonImage.transform, id, 20, FontStyle.Bold, Color.white);
-        label.alignment = TextAnchor.MiddleCenter;
+        TMP_Text label = CreateText("Label", buttonImage.transform, id, 20, FontStyle.Bold, Color.white);
+        label.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(label.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), Vector2.zero, Vector2.zero);
 
         return new UiButtonView
@@ -2292,6 +3352,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         if (mainMenuTitleText != null) mainMenuTitleText.text = Localize("main_title");
         if (mainMenuSubtitleText != null) mainMenuSubtitleText.text = Localize("main_subtitle");
+        if (continueButtonView != null)
+        {
+            continueButtonView.Label.text = Localize("menu_continue");
+            continueButtonView.Rect.gameObject.SetActive(gameStarted && !gameOver);
+        }
         if (newGameButtonView != null) newGameButtonView.Label.text = Localize("menu_new_game");
         if (settingsMenuButtonView != null) settingsMenuButtonView.Label.text = Localize("menu_settings");
         if (exitButtonView != null) exitButtonView.Label.text = Localize("menu_exit");
@@ -2312,6 +3377,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (settingsBackButtonView != null) settingsBackButtonView.Label.text = Localize("back");
         if (languageRuButtonView != null) languageRuButtonView.Label.text = Localize("lang_ru");
         if (languageEngButtonView != null) languageEngButtonView.Label.text = Localize("lang_eng");
+        if (retryButtonView != null) retryButtonView.Label.text = currentLanguage == LanguageOption.RU ? "Повторить" : "Retry";
+        if (gameOverMenuButtonView != null) gameOverMenuButtonView.Label.text = currentLanguage == LanguageOption.RU ? "В меню" : "Main menu";
+        if (gameOverExitButtonView != null) gameOverExitButtonView.Label.text = currentLanguage == LanguageOption.RU ? "Выйти" : "Exit";
+        if (pauseResumeButtonView != null) pauseResumeButtonView.Label.text = Localize("menu_continue");
+        if (pauseSettingsButtonView != null) pauseSettingsButtonView.Label.text = Localize("menu_settings");
+        if (pauseMenuButtonView != null) pauseMenuButtonView.Label.text = Localize("pause_to_menu");
+        if (pauseHudButtonView != null) pauseHudButtonView.Label.text = currentLanguage == LanguageOption.RU ? "МЕНЮ" : "MENU";
         for (int i = 0; i < fpsButtonViews.Length; i++)
         {
             if (fpsButtonViews[i] != null)
@@ -2347,6 +3419,103 @@ public class SpaceCombatSceneController : MonoBehaviour
         return button != null && RectTransformUtility.RectangleContainsScreenPoint(button.Rect, screenPosition, null);
     }
 
+    private void HandlePausedInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
+        {
+            ResumeRun();
+            return;
+        }
+
+        HandleStartMenuInput();
+
+        Vector2 pointerPosition;
+        if (!TryGetPrimaryPointerDown(out pointerPosition))
+        {
+            return;
+        }
+
+        if (IsButtonClicked(pauseResumeButtonView, pointerPosition))
+        {
+            ResumeRun();
+            return;
+        }
+
+        if (IsButtonClicked(pauseSettingsButtonView, pointerPosition))
+        {
+            ShowPauseMenu(false);
+            ShowStartMenu(true);
+            SetStartMenuPage(StartMenuPage.Settings);
+            return;
+        }
+
+        if (IsButtonClicked(pauseMenuButtonView, pointerPosition))
+        {
+            ShowPauseMenu(false);
+            ShowStartMenu(true);
+            SetStartMenuPage(StartMenuPage.Main);
+        }
+    }
+
+    private void HandleGameOverInput()
+    {
+        Vector2 pointerPosition;
+        if (!TryGetPrimaryPointerDown(out pointerPosition))
+        {
+            return;
+        }
+
+        if (IsButtonClicked(retryButtonView, pointerPosition))
+        {
+            StartRun();
+            return;
+        }
+
+        if (IsButtonClicked(gameOverMenuButtonView, pointerPosition))
+        {
+            ReturnToMainMenu();
+            return;
+        }
+
+        if (IsButtonClicked(gameOverExitButtonView, pointerPosition))
+        {
+            ExitGame();
+        }
+    }
+
+    private void ReturnToMainMenu()
+    {
+        gameStarted = false;
+        gameOver = false;
+        gamePaused = false;
+        levelUpPending = false;
+        activePerks.Clear();
+        ClearEnemies();
+        ClearProjectiles();
+        ShowPauseMenu(false);
+        ShowGameOverPanel(false);
+        ShowStartMenu(true);
+        SetStartMenuPage(StartMenuPage.Main);
+        UpdateHud();
+    }
+
+    private void ShowGameOverPanel(bool show)
+    {
+        if (gameOverPanelObject != null)
+        {
+            gameOverPanelObject.SetActive(show);
+        }
+    }
+
+    private void ShowPauseMenu(bool show)
+    {
+        if (pauseMenuObject != null)
+        {
+            pauseMenuObject.SetActive(show);
+        }
+    }
+
     private void ExitGame()
     {
 #if UNITY_EDITOR
@@ -2374,14 +3543,15 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.sizeDelta = new Vector2(280f, 170f);
         rect.anchoredPosition = new Vector2(index * 292f, 0f);
         AddOutline(background.gameObject, new Color(0.14f, 0.28f, 0.38f, 1f));
+        background.gameObject.AddComponent<Button>();
 
-        Text title = CreateText("Title", background.transform, "-", 22, FontStyle.Bold, Color.white);
+        TMP_Text title = CreateText("Title", background.transform, "-", 22, FontStyle.Bold, Color.white);
         SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -18f), new Vector2(-14f, -54f));
 
-        Text stats = CreateText("Stats", background.transform, "-", 15, FontStyle.Normal, new Color(0.8f, 0.9f, 1f));
-        stats.alignment = TextAnchor.UpperLeft;
-        stats.horizontalOverflow = HorizontalWrapMode.Wrap;
-        stats.verticalOverflow = VerticalWrapMode.Overflow;
+        TMP_Text stats = CreateText("Stats", background.transform, "-", 15, FontStyle.Normal, new Color(0.8f, 0.9f, 1f));
+        stats.alignment = TextAlignmentOptions.TopLeft;
+        stats.textWrappingMode = TextWrappingModes.Normal;
+        stats.overflowMode = TextOverflowModes.Overflow;
         SetAnchoredRect(stats.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -58f), new Vector2(-14f, -148f));
 
         return new ShipCardView
@@ -2409,8 +3579,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
 
             Image slotImage = slotTransform.GetComponent<Image>();
-            Text slotKey = slotTransform.Find("Key") != null ? slotTransform.Find("Key").GetComponent<Text>() : null;
-            Text slotTitle = slotTransform.Find("Label") != null ? slotTransform.Find("Label").GetComponent<Text>() : null;
+            TMP_Text slotKey = slotTransform.Find("Key") != null ? slotTransform.Find("Key").GetComponent<TMP_Text>() : null;
+            TMP_Text slotTitle = slotTransform.Find("Label") != null ? slotTransform.Find("Label").GetComponent<TMP_Text>() : null;
 
             if (i < modules.Count)
             {
@@ -2442,7 +3612,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         rowRect.anchoredPosition = new Vector2(0f, -index * 52f);
         AddOutline(rowBackground.gameObject, new Color(0.12f, 0.24f, 0.34f, 1f));
 
-        Text text = CreateText("RowText", rowBackground.transform, string.Empty, 12, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
+        TMP_Text text = CreateText("RowText", rowBackground.transform, string.Empty, 12, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
         SetAnchoredRect(text.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -4f), new Vector2(-8f, -18f));
 
         Image shieldFill = CreateMiniBar(rowBackground.transform, new Vector2(132f, -24f), new Color(0.23f, 0.62f, 1f));
@@ -2483,6 +3653,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Keyboard keyboard = Keyboard.current;
         UpdateVirtualJoystick();
+        HandleCameraZoom(deltaTime);
 
         Vector2 moveInput = GetMovementVector(keyboard);
         if (moveInput.sqrMagnitude > 0.01f)
@@ -2493,8 +3664,25 @@ public class SpaceCombatSceneController : MonoBehaviour
         Vector2 pointerPosition;
         if (TryGetPrimaryPointerDown(out pointerPosition))
         {
+            if (IsButtonClicked(pauseHudButtonView, pointerPosition))
+            {
+                SetPaused(true);
+                return;
+            }
+
+            if (TryToggleModuleFromHud(pointerPosition))
+            {
+                return;
+            }
+
             if (TrySelectEnemyFromOverview(pointerPosition))
             {
+                return;
+            }
+
+            if (!IsGameplayHudBlocked(pointerPosition) && TrySelectEnemyFromWorld(pointerPosition))
+            {
+                suppressPointerMovementUntilRelease = true;
                 return;
             }
         }
@@ -2508,7 +3696,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         PointerInputState pointerState = inputService.ReadPointerState();
-        bool pointerBlocked = pointerState.HasPointer && IsGameplayHudBlocked(pointerState.ScreenPosition);
+        if (suppressPointerMovementUntilRelease && (!pointerState.HasPointer || !pointerState.PrimaryPressed))
+        {
+            suppressPointerMovementUntilRelease = false;
+        }
+
+        bool pointerBlocked = pointerState.HasPointer &&
+                              (IsGameplayHudBlocked(pointerState.ScreenPosition) || suppressPointerMovementUntilRelease);
         Vector3 pointerWorldPosition = pointerState.HasPointer
             ? ScreenToWorldPosition(pointerState.ScreenPosition)
             : player.Transform.position;
@@ -2519,6 +3713,26 @@ public class SpaceCombatSceneController : MonoBehaviour
             pointerState,
             pointerWorldPosition);
         movementService.UpdateMovement(player, movementContext, deltaTime);
+    }
+
+    private void HandleCameraZoom(float deltaTime)
+    {
+        if (mainCamera == null)
+        {
+            return;
+        }
+
+        float scrollY = Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
+        if (Mathf.Abs(scrollY) > 0.01f)
+        {
+            targetCameraOrthographicSize -= Mathf.Sign(scrollY) * cameraZoomStep;
+            targetCameraOrthographicSize = Mathf.Clamp(targetCameraOrthographicSize, cameraMinOrthographicSize, cameraMaxOrthographicSize);
+        }
+
+        mainCamera.orthographicSize = Mathf.Lerp(
+            mainCamera.orthographicSize,
+            targetCameraOrthographicSize,
+            cameraZoomSmoothing * deltaTime);
     }
 
     private void ToggleModule(int index)
@@ -2538,6 +3752,27 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         UpdateModuleVisual(module);
         LogMessage(module.Name + (module.Active ? Localize("log_module_on") : Localize("log_module_off")));
+    }
+
+    private bool TryToggleModuleFromHud(Vector2 screenPosition)
+    {
+        if (modulePanelRect == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < modules.Count; i++)
+        {
+            Transform slotTransform = modulePanelRect.Find("ModuleSlot_" + i);
+            RectTransform slotRect = slotTransform != null ? slotTransform.GetComponent<RectTransform>() : null;
+            if (slotRect != null && RectTransformUtility.RectangleContainsScreenPoint(slotRect, screenPosition, null))
+            {
+                ToggleModule(i);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private Vector2 GetMovementVector(Keyboard keyboard)
@@ -2569,15 +3804,68 @@ public class SpaceCombatSceneController : MonoBehaviour
                 EnemyShip enemy = row.Enemy;
                 if (enemy != null && enemy.IsAlive())
                 {
-                    targetEnemy = enemy;
-                    UpdateTargetState();
-                    LogMessage(Localize("log_target_locked") + enemy.Id);
+                    SelectTargetEnemy(enemy);
                     return true;
                 }
             }
         }
 
         return false;
+    }
+
+    private bool TrySelectEnemyFromWorld(Vector2 screenPosition)
+    {
+        Vector3 worldPosition = ScreenToWorldPosition(screenPosition);
+        EnemyShip selectedEnemy = null;
+        float bestDistanceSqr = float.MaxValue;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            EnemyShip enemy = enemies[i];
+            if (enemy == null || !enemy.IsAlive())
+            {
+                continue;
+            }
+
+            Bounds bounds;
+            if (!TryCalculateTargetBounds(enemy, out bounds))
+            {
+                continue;
+            }
+
+            bounds.Expand(new Vector3(targetWorldClickPadding, targetWorldClickPadding, 0f));
+            if (!bounds.Contains(worldPosition))
+            {
+                continue;
+            }
+
+            float distanceSqr = ((Vector2)bounds.center - (Vector2)worldPosition).sqrMagnitude;
+            if (distanceSqr < bestDistanceSqr)
+            {
+                bestDistanceSqr = distanceSqr;
+                selectedEnemy = enemy;
+            }
+        }
+
+        if (selectedEnemy == null)
+        {
+            return false;
+        }
+
+        SelectTargetEnemy(selectedEnemy);
+        return true;
+    }
+
+    private void SelectTargetEnemy(EnemyShip enemy)
+    {
+        if (enemy == null || !enemy.IsAlive())
+        {
+            return;
+        }
+
+        targetEnemy = enemy;
+        UpdateTargetState();
+        LogMessage(Localize("log_target_locked") + enemy.Id);
     }
 
     private bool IsGameplayHudBlocked(Vector2 screenPosition)
@@ -2844,6 +4132,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (!player.IsAlive())
         {
             gameOver = true;
+            ShowGameOverPanel(true);
             LogMessage(Localize("log_hull_breach"), "critical");
             statusText.text = Localize("status_gameover");
         }
@@ -2926,32 +4215,58 @@ public class SpaceCombatSceneController : MonoBehaviour
             pool.RemoveAt(index);
         }
 
-        sharedBuilder.Length = 0;
         for (int i = 0; i < activePerks.Count; i++)
         {
-            sharedBuilder.Append(i + 1);
-            sharedBuilder.Append(". ");
-            sharedBuilder.Append(activePerks[i].Label);
-            sharedBuilder.AppendLine();
-            sharedBuilder.AppendLine();
+            if (i < perkOptionTexts.Length && perkOptionTexts[i] != null)
+            {
+                perkOptionTexts[i].text = (i + 1) + ". " + activePerks[i].Label;
+                perkOptionTexts[i].transform.parent.gameObject.SetActive(true);
+            }
         }
 
-        sharedBuilder.Append(Localize("perk_pick"));
-        perkHintText.text = sharedBuilder.ToString();
+        for (int i = activePerks.Count; i < perkOptionTexts.Length; i++)
+        {
+            if (perkOptionTexts[i] != null)
+            {
+                perkOptionTexts[i].text = string.Empty;
+                perkOptionTexts[i].transform.parent.gameObject.SetActive(false);
+            }
+        }
+
+        perkHintText.text = Localize("perk_pick");
         LogMessage(Localize("log_levelup"), "warning");
     }
 
     private void UpdatePerkSelectionInput()
     {
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
+        if (keyboard != null)
         {
-            return;
+            if (keyboard.digit1Key.wasPressedThisFrame) ApplyPerk(0);
+            if (keyboard.digit2Key.wasPressedThisFrame) ApplyPerk(1);
+            if (keyboard.digit3Key.wasPressedThisFrame) ApplyPerk(2);
         }
 
-        if (keyboard.digit1Key.wasPressedThisFrame) ApplyPerk(0);
-        if (keyboard.digit2Key.wasPressedThisFrame) ApplyPerk(1);
-        if (keyboard.digit3Key.wasPressedThisFrame) ApplyPerk(2);
+        Vector2 pointerPosition;
+        if (TryGetPrimaryPointerDown(out pointerPosition))
+        {
+            TryApplyPerkFromPointer(pointerPosition);
+        }
+    }
+
+    private bool TryApplyPerkFromPointer(Vector2 screenPosition)
+    {
+        for (int i = 0; i < activePerks.Count && i < perkOptionRects.Length; i++)
+        {
+            RectTransform optionRect = perkOptionRects[i];
+            if (optionRect != null && RectTransformUtility.RectangleContainsScreenPoint(optionRect, screenPosition, null))
+            {
+                ApplyPerk(i);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ApplyPerk(int index)
@@ -3161,7 +4476,11 @@ public class SpaceCombatSceneController : MonoBehaviour
             float pulse = 0.7f + Mathf.Sin(player.ThrusterPulse * 7f) * 0.18f;
             Color color = new Color(1f, 0.74f, 0.3f, Mathf.Lerp(0.12f, 0.78f, thrustAmount) * pulse);
             player.ThrusterRenderer.color = color;
-            player.ThrusterRenderer.transform.localScale = new Vector3(0.3f + thrustAmount * 0.12f, 0.45f + thrustAmount * 0.45f, 1f);
+        }
+        if (player != null && player.ThrusterEffect != null)
+        {
+            float thrustAmount = Mathf.Clamp01(player.Velocity.magnitude / Mathf.Max(0.1f, player.Speed * player.SpeedMultiplier));
+            player.ThrusterEffect.SetIntensity(thrustAmount);
         }
 
         for (int i = 0; i < enemies.Count; i++)
@@ -3185,6 +4504,10 @@ public class SpaceCombatSceneController : MonoBehaviour
                 float pulse = 0.4f + Mathf.Sin(Time.time * 8f + i) * 0.15f + enemy.AttackFlashTimer * 0.35f;
                 enemy.ThrusterRenderer.color = new Color(1f, 0.36f, 0.22f, Mathf.Clamp01(pulse));
             }
+            if (enemy.ThrusterEffect != null)
+            {
+                enemy.ThrusterEffect.SetIntensity(0.55f + enemy.AttackFlashTimer * 0.35f);
+            }
 
             if (enemy.TargetRenderer != null)
             {
@@ -3193,12 +4516,199 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
         }
 
+        UpdateTargetingVisuals();
+    }
+
+    private void UpdateTargetingVisuals()
+    {
+        bool hasTarget = targetEnemy != null && targetEnemy.IsAlive() && player != null && player.Transform != null;
+        if (!hasTarget)
+        {
+            SetTargetingVisualsActive(false);
+            return;
+        }
+
+        EnsureTargetingVisuals();
+
+        Bounds targetBounds;
+        if (!TryCalculateTargetBounds(targetEnemy, out targetBounds))
+        {
+            targetBounds = new Bounds(targetEnemy.Transform.position, Vector3.one);
+        }
+
+        if (targetFrameRenderer != null && targetFrameRenderer.sprite != null)
+        {
+            Vector3 size = targetBounds.size + new Vector3(targetFramePadding, targetFramePadding, 0f);
+            size.x = Mathf.Max(0.6f, size.x);
+            size.y = Mathf.Max(0.6f, size.y);
+            Vector3 spriteSize = targetFrameRenderer.sprite.bounds.size;
+            targetFrameObject.SetActive(true);
+            targetFrameObject.transform.position = new Vector3(targetBounds.center.x, targetBounds.center.y, 0f);
+            targetFrameObject.transform.rotation = Quaternion.identity;
+            targetFrameObject.transform.localScale = new Vector3(
+                spriteSize.x > 0.001f ? size.x / spriteSize.x : 1f,
+                spriteSize.y > 0.001f ? size.y / spriteSize.y : 1f,
+                1f);
+            targetFrameRenderer.color = targetFrameColor;
+        }
+
+        if (targetLineRenderer != null)
+        {
+            targetLineRenderer.gameObject.SetActive(true);
+            targetLineRenderer.startColor = targetLineColor;
+            targetLineRenderer.endColor = targetLineColor;
+            targetLineRenderer.startWidth = targetLineWidth;
+            targetLineRenderer.endWidth = targetLineWidth;
+            targetLineRenderer.sortingOrder = targetLineSortingOrder;
+            Vector3 start = player.Transform.position;
+            Vector3 end = targetBounds.center;
+            start.z = 0f;
+            end.z = 0f;
+            targetLineRenderer.SetPosition(0, start);
+            targetLineRenderer.SetPosition(1, end);
+        }
+    }
+
+    private void EnsureTargetingVisuals()
+    {
+        Transform parent = worldRoot != null ? worldRoot : transform;
+        if (targetFrameObject == null)
+        {
+            targetFrameObject = new GameObject("TargetFrame");
+            targetFrameObject.transform.SetParent(parent, false);
+            targetFrameRenderer = targetFrameObject.AddComponent<SpriteRenderer>();
+            targetFrameRenderer.sortingOrder = 40;
+        }
+
+        if (targetFrameRenderer != null && targetFrameRenderer.sprite == null)
+        {
+            targetFrameRenderer.sprite = GetTargetFrameSprite();
+        }
+
+        if (targetLineRenderer == null)
+        {
+            GameObject lineObject = new GameObject("TargetLine");
+            lineObject.transform.SetParent(parent, false);
+            targetLineRenderer = lineObject.AddComponent<LineRenderer>();
+            targetLineRenderer.positionCount = 2;
+            targetLineRenderer.useWorldSpace = true;
+            targetLineRenderer.alignment = LineAlignment.View;
+            targetLineRenderer.textureMode = LineTextureMode.Stretch;
+            targetLineRenderer.numCapVertices = 4;
+            targetLineRenderer.sortingOrder = targetLineSortingOrder;
+            targetLineRenderer.material = GetTargetingMaterial();
+        }
+    }
+
+    private Sprite GetTargetFrameSprite()
+    {
+        if (runtimeTargetFrameSprite != null)
+        {
+            return runtimeTargetFrameSprite;
+        }
+
+        if (targetFrameSourceSprite == null || targetFrameSourceSprite.texture == null)
+        {
+            return null;
+        }
+
+        Texture2D texture = targetFrameSourceSprite.texture;
+        runtimeTargetFrameSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            targetFrameSourceSprite.pixelsPerUnit);
+        runtimeTargetFrameSprite.name = "TargetFrame_Runtime";
+        return runtimeTargetFrameSprite;
+    }
+
+    private Material GetTargetingMaterial()
+    {
+        if (targetingMaterial != null)
+        {
+            return targetingMaterial;
+        }
+
+        Shader shader = Shader.Find("Sprites/Default");
+        targetingMaterial = shader != null ? new Material(shader) : null;
+        return targetingMaterial;
+    }
+
+    private void SetTargetingVisualsActive(bool active)
+    {
+        if (targetFrameObject != null)
+        {
+            targetFrameObject.SetActive(active);
+        }
+        if (targetLineRenderer != null)
+        {
+            targetLineRenderer.gameObject.SetActive(active);
+        }
+    }
+
+    private static bool TryCalculateTargetBounds(EnemyShip enemy, out Bounds bounds)
+    {
+        bounds = default;
+        if (enemy == null || enemy.Transform == null)
+        {
+            return false;
+        }
+
+        SpriteRenderer[] renderers = enemy.Transform.GetComponentsInChildren<SpriteRenderer>(false);
+        bool hasBounds = false;
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            SpriteRenderer renderer = renderers[i];
+            if (renderer == null || renderer.sprite == null || IsNonTargetBodyRenderer(renderer))
+            {
+                continue;
+            }
+
+            if (!hasBounds)
+            {
+                bounds = renderer.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+        }
+
+        if (hasBounds)
+        {
+            return true;
+        }
+
+        bounds = new Bounds(enemy.Transform.position, Vector3.one);
+        return true;
+    }
+
+    private static bool IsNonTargetBodyRenderer(SpriteRenderer renderer)
+    {
+        string lowerName = renderer.name.ToLowerInvariant();
+        return lowerName.Contains("target") ||
+               lowerName.Contains("aura") ||
+               lowerName.Contains("shield") ||
+               lowerName.Contains("thruster") ||
+               lowerName.Contains("engine_fire") ||
+               lowerName.Contains("enginefire");
     }
 
     private void UpdateHud()
     {
         combatLogText.text = string.Join("\n", combatLog);
+        UpdateCombatLogScroll();
+        if (pauseHudButtonView != null)
+        {
+            pauseHudButtonView.Rect.gameObject.SetActive(gameStarted && !gameOver && !gamePaused && !levelUpPending);
+        }
+
         capacitorText.text = Localize("capacitor") + Mathf.RoundToInt(player.CapacitorPercent * 100f) + "%";
+        if (capacitorValueText != null)
+        {
+            capacitorValueText.text = FormatBarValue(player.Capacitor, player.MaxCapacitor);
+        }
         targetDisplayText.text = Localize("target_label") + (targetEnemy != null ? targetEnemy.Id + " (" + targetEnemy.Type + ")" : Localize("target_none_name"));
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
             ? availableShips[selectedShipIndex].displayName
@@ -3215,11 +4725,21 @@ public class SpaceCombatSceneController : MonoBehaviour
             SetFillWidth(targetShieldFill.rectTransform, targetEnemy.ShieldPercent, 252f);
             SetFillWidth(targetArmorFill.rectTransform, targetEnemy.ArmorPercent, 252f);
             SetFillWidth(targetHullFill.rectTransform, targetEnemy.HullPercent, 252f);
+            if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(targetEnemy.Shield, targetEnemy.MaxShield);
+            if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(targetEnemy.Armor, targetEnemy.MaxArmor);
+            if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(targetEnemy.Hull, targetEnemy.MaxHull);
         }
 
         SetFillWidth(playerShieldFill.rectTransform, player.ShieldPercent, 180f);
         SetFillWidth(playerArmorFill.rectTransform, player.ArmorPercent, 180f);
         SetFillWidth(playerHullFill.rectTransform, player.HullPercent, 180f);
+        float experiencePercent = player.ExperienceToNext <= 0 ? 0f : player.Experience / (float)player.ExperienceToNext;
+        SetFillWidth(playerExperienceFill.rectTransform, experiencePercent, 180f);
+        if (playerShieldValueText != null) playerShieldValueText.text = FormatBarValue(player.Shield, player.MaxShield);
+        if (playerArmorValueText != null) playerArmorValueText.text = FormatBarValue(player.Armor, player.MaxArmor);
+        if (playerHullValueText != null) playerHullValueText.text = FormatBarValue(player.Hull, player.MaxHull);
+        if (playerExperienceValueText != null) playerExperienceValueText.text = player.Experience + " / " + player.ExperienceToNext;
+        if (playerLevelBadgeText != null) playerLevelBadgeText.text = "LVL " + player.Level;
         SetFillHeight(capacitorFill.rectTransform, player.CapacitorPercent, 60f);
 
         UpdateEnemyRows();
@@ -3242,6 +4762,25 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         UpdateUI();
+    }
+
+    private void UpdateCombatLogScroll()
+    {
+        if (combatLogText == null || combatLogContentRect == null)
+        {
+            return;
+        }
+
+        float preferredHeight = Mathf.Max(160f, combatLogText.preferredHeight + 8f);
+        combatLogContentRect.sizeDelta = new Vector2(combatLogContentRect.sizeDelta.x, preferredHeight);
+        SetAnchoredRect(combatLogText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, -preferredHeight));
+
+        if (combatLogShouldSnapToBottom && combatLogScrollRect != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            combatLogScrollRect.verticalNormalizedPosition = 0f;
+            combatLogShouldSnapToBottom = false;
+        }
     }
 
     private void UpdateUI()
@@ -3354,10 +4893,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         combatLog.Add(prefix + message);
-        while (combatLog.Count > 11)
+        while (combatLog.Count > 80)
         {
             combatLog.RemoveAt(0);
         }
+        combatLogShouldSnapToBottom = true;
     }
 
     private Sprite CreateFilledSprite(int width, int height, Func<int, int, int, Color> generator)
@@ -3385,7 +4925,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         return uiFactory.CreateImage(objectName, parent, squareSprite, color);
     }
 
-    private Text CreateText(string objectName, Transform parent, string content, int fontSize, FontStyle fontStyle, Color color)
+    private TMP_Text CreateText(string objectName, Transform parent, string content, int fontSize, FontStyle fontStyle, Color color)
     {
         return uiFactory.CreateText(objectName, parent, uiFont, content, fontSize, fontStyle, color);
     }
@@ -3405,6 +4945,27 @@ public class SpaceCombatSceneController : MonoBehaviour
         return uiFactory.CreateLabeledBar(parent, squareSprite, uiFont, label, anchoredPosition, fillColor);
     }
 
+    private TMP_Text CreateBarValueText(Image fillImage, float width)
+    {
+        Transform parent = fillImage != null ? fillImage.transform.parent : null;
+        if (parent == null)
+        {
+            return null;
+        }
+
+        TMP_Text valueText = CreateText("Value", parent, string.Empty, 10, FontStyle.Bold, Color.white);
+        valueText.alignment = TextAlignmentOptions.Center;
+        valueText.textWrappingMode = TextWrappingModes.NoWrap;
+        valueText.raycastTarget = false;
+        SetAnchoredRect(valueText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        return valueText;
+    }
+
+    private static string FormatBarValue(float current, float max)
+    {
+        return Mathf.RoundToInt(Mathf.Max(0f, current)) + " / " + Mathf.RoundToInt(Mathf.Max(0f, max));
+    }
+
     private void SetAnchoredRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
     {
         uiFactory.SetAnchoredRect(rect, anchorMin, anchorMax, offsetMin, offsetMax);
@@ -3420,4 +4981,3 @@ public class SpaceCombatSceneController : MonoBehaviour
         uiFactory.SetFillHeight(rect, percent, maxHeight);
     }
 }
-

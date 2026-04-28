@@ -90,7 +90,7 @@ public sealed class WeaponInstance
         float clampedArc = Mathf.Clamp(Data.firingAngle, 0f, 360f);
         if (clampedArc < 359.9f)
         {
-            Vector2 forward = GetForwardDirection();
+            Vector2 forward = GetArcCenterDirection();
             if (Vector2.Angle(forward, toTarget.normalized) > clampedArc * 0.5f)
             {
                 return false;
@@ -153,6 +153,26 @@ public sealed class WeaponInstance
         }
 
         Vector2 forward = muzzle.up;
+        if (forward.sqrMagnitude <= 0.0001f)
+        {
+            forward = Vector2.up;
+        }
+
+        return forward.normalized;
+    }
+
+    public Vector2 GetArcCenterDirection()
+    {
+        Transform muzzle = MuzzleTransform != null ? MuzzleTransform : OwnerTransform;
+        Transform mount = muzzle != null && muzzle.parent != null ? muzzle.parent : muzzle;
+        Transform slot = mount != null && mount.parent != null ? mount.parent : null;
+        Transform arcRoot = slot != null ? slot : OwnerTransform;
+        if (arcRoot == null)
+        {
+            return Vector2.up;
+        }
+
+        Vector2 forward = arcRoot.up;
         if (forward.sqrMagnitude <= 0.0001f)
         {
             forward = Vector2.up;

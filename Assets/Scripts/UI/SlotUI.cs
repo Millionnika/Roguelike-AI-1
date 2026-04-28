@@ -1,10 +1,11 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 public sealed class SlotUI : MonoBehaviour
 {
     [SerializeField] private Image iconImage;
-    [SerializeField] private Text keyBindText;
+    [SerializeField] private TMP_Text keyBindText;
     [SerializeField] private Image cooldownOverlay;
     [SerializeField] private Image backgroundImage;
     [SerializeField] private Sprite placeholderIcon;
@@ -13,7 +14,12 @@ public sealed class SlotUI : MonoBehaviour
     [SerializeField] private Color equippedBackgroundColor = new Color(0.09f, 0.19f, 0.28f, 0.95f);
     [SerializeField] private Color emptyBackgroundColor = new Color(0.05f, 0.1f, 0.14f, 0.55f);
 
-    public void AssignReferences(Image icon, Text keyBind, Image cooldown, Image background)
+    private void Awake()
+    {
+        EnsureTextReference();
+    }
+
+    public void AssignReferences(Image icon, TMP_Text keyBind, Image cooldown, Image background)
     {
         iconImage = icon;
         keyBindText = keyBind;
@@ -23,13 +29,18 @@ public sealed class SlotUI : MonoBehaviour
 
     public void Setup(Sprite icon, string keyBind)
     {
-        bool hasItem = icon != null;
+        Setup(icon, keyBind, icon != null);
+    }
+
+    public void Setup(Sprite icon, string keyBind, bool hasItem)
+    {
+        EnsureTextReference();
 
         if (iconImage != null)
         {
             iconImage.sprite = hasItem ? icon : placeholderIcon;
             iconImage.color = hasItem ? equippedIconColor : emptyIconColor;
-            iconImage.enabled = iconImage.sprite != null;
+            iconImage.enabled = hasItem || iconImage.sprite != null;
         }
 
         if (keyBindText != null)
@@ -43,6 +54,35 @@ public sealed class SlotUI : MonoBehaviour
         }
 
         SetCooldown01(0f);
+    }
+
+    private void EnsureTextReference()
+    {
+        if (keyBindText != null)
+        {
+            return;
+        }
+
+        keyBindText = GetComponentInChildren<TMP_Text>(true);
+        if (keyBindText != null)
+        {
+            return;
+        }
+
+        GameObject keyObject = new GameObject("KeyBindTMP", typeof(RectTransform), typeof(TextMeshProUGUI));
+        keyObject.transform.SetParent(transform, false);
+        RectTransform keyRect = keyObject.GetComponent<RectTransform>();
+        keyRect.anchorMin = new Vector2(0f, 1f);
+        keyRect.anchorMax = new Vector2(1f, 1f);
+        keyRect.pivot = new Vector2(0.5f, 1f);
+        keyRect.anchoredPosition = new Vector2(0f, -4f);
+        keyRect.sizeDelta = new Vector2(0f, 18f);
+
+        keyBindText = keyObject.GetComponent<TMP_Text>();
+        keyBindText.fontSize = 12f;
+        keyBindText.alignment = TextAlignmentOptions.Center;
+        keyBindText.color = Color.white;
+        keyBindText.raycastTarget = false;
     }
 
     public void SetCooldown01(float cooldown01)

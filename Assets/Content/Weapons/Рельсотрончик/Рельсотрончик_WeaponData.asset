@@ -15,18 +15,19 @@ MonoBehaviour:
   fireMode: 0
   damage: 28
   cooldown: 0.45
-  maxRange: 6
-  firingAngle: 360
+  maxRange: 18
+  firingAngle: 120
   spreadAngle: 0
-  targetMask:
-    serializedVersion: 2
-    m_Bits: 0
+  aimTurnSpeed: 720
+  projectileRotationOffset: 90
   projectilePrefab: {fileID: 317976935477892410, guid: 5deb430b8c06bb249a9c58d0743a9084, type: 3}
   projectileSpeed: 18
-  projectileMaxDistance: 8
+  projectileMaxDistance: 18
   projectileLifetime: 2
+  projectileVisualScale: 0.16
   fireRate: 0.45
   capacitorPerShot: 9
   requiredClass: 0
-  icon: {fileID: 0}
-  fireSound: {fileID: 8300000, guid: eb026bb0346990f40af63845de0f3f48, type: 3}
+  icon: {fileID: 21300000, guid: a1b2c3d4e5f6478899aabbccddeeff02, type: 3}
+  visualPrefab: {fileID: 100000, guid: a1b2c3d4e5f6478899aabbccddeeff03, type: 3}
+  fireSound: {fileID: 8300000, guid: 0b735146f5483fc4ead61a880543885b, type: 3}

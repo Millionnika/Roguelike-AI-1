@@ -27,8 +27,10 @@ internal sealed class SpaceCombatLocalizationService : ILocalizationService
             case "main_title": return ru ? "КОСМИЧЕСКИЙ РУБЕЖ" : "SPACE FRONTIER";
             case "main_subtitle": return ru ? "Тактический бой среди звёзд" : "Tactical combat among the stars";
             case "menu_new_game": return ru ? "НОВАЯ ИГРА" : "NEW GAME";
+            case "menu_continue": return ru ? "ПРОДОЛЖИТЬ" : "CONTINUE";
             case "menu_settings": return ru ? "НАСТРОЙКИ" : "SETTINGS";
             case "menu_exit": return ru ? "ВЫХОД" : "EXIT";
+            case "pause_to_menu": return ru ? "В МЕНЮ" : "MAIN MENU";
             case "hangar_title": return ru ? "АНГАР ФЛОТА" : "STAR HANGAR";
             case "hangar_subtitle": return ru ? "Выберите корабль и начните вылет" : "Choose your ship and launch into the sector";
             case "hangar_hint_desktop": return ru ? "1-3 выбор корпуса, Enter или START для вылета." : "Press 1-3 to select a hull, Enter or START to launch.";

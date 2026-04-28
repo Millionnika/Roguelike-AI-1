@@ -10,12 +10,15 @@ public sealed class WeaponDataSO : ScriptableObject
     [Min(0f)] public float maxRange = 6f;
     [Range(0f, 360f)] public float firingAngle = 360f;
     [Range(0f, 45f)] public float spreadAngle = 0f;
+    [Min(1f)] public float aimTurnSpeed = 720f;
+    [Range(-180f, 180f)] public float projectileRotationOffset = 90f;
 
     [Header("Projectile")]
     public GameObject projectilePrefab;
     [Min(0f)] public float projectileSpeed = 18f;
     [Min(0f)] public float projectileMaxDistance = 8f;
     [Min(0f)] public float projectileLifetime = 2f;
+    [Min(0.01f)] public float projectileVisualScale = 0.16f;
 
     [Header("Legacy Compatibility")]
     public float fireRate = 0.45f;
@@ -24,7 +27,13 @@ public sealed class WeaponDataSO : ScriptableObject
 
     [Header("Visual")]
     public Sprite icon;
+    public GameObject visualPrefab;
 
     [Header("Audio")]
     public AudioClip fireSound;
+
+    private void OnValidate()
+    {
+        aimTurnSpeed = Mathf.Max(1f, aimTurnSpeed);
+    }
 }
