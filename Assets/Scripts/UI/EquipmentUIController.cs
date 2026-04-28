@@ -77,6 +77,9 @@ public sealed class EquipmentUIController : MonoBehaviour
             return;
         }
 
+        RemoveMissingSlots(weaponSlots);
+        RemoveMissingSlots(moduleSlots);
+
         int weaponCount = state != null ? state.InstalledWeapons.Count : 0;
         int moduleCount = state != null ? state.InstalledModules.Count : 0;
 
@@ -85,16 +88,28 @@ public sealed class EquipmentUIController : MonoBehaviour
 
         for (int i = 0; i < weaponSlots.Count; i++)
         {
+            SlotUI slot = weaponSlots[i];
+            if (slot == null)
+            {
+                continue;
+            }
+
             WeaponDataSO weapon = state != null ? state.InstalledWeapons[i] : null;
             Sprite icon = weapon != null ? weapon.icon : null;
-            weaponSlots[i].Setup(icon, (i + 1).ToString(), weapon != null);
+            slot.Setup(icon, (i + 1).ToString(), weapon != null);
         }
 
         for (int i = 0; i < moduleSlots.Count; i++)
         {
+            SlotUI slot = moduleSlots[i];
+            if (slot == null)
+            {
+                continue;
+            }
+
             ModuleDataSO module = state != null ? state.InstalledModules[i] : null;
             Sprite icon = module != null ? module.icon : null;
-            moduleSlots[i].Setup(icon, (i + 1).ToString());
+            slot.Setup(icon, (i + 1).ToString());
         }
 
         RefreshCooldowns(state);
@@ -102,8 +117,17 @@ public sealed class EquipmentUIController : MonoBehaviour
 
     public void RefreshCooldowns(ShipEquipmentState state)
     {
+        RemoveMissingSlots(weaponSlots);
+        RemoveMissingSlots(moduleSlots);
+
         for (int i = 0; i < weaponSlots.Count; i++)
         {
+            SlotUI slot = weaponSlots[i];
+            if (slot == null)
+            {
+                continue;
+            }
+
             float cooldown01 = 0f;
 
             if (state != null && i < state.InstalledWeapons.Count && i < state.WeaponTimers.Count)
@@ -120,12 +144,16 @@ public sealed class EquipmentUIController : MonoBehaviour
                 }
             }
 
-            weaponSlots[i].SetCooldown01(cooldown01);
+            slot.SetCooldown01(cooldown01);
         }
 
         for (int i = 0; i < moduleSlots.Count; i++)
         {
-            moduleSlots[i].SetCooldown01(0f);
+            SlotUI slot = moduleSlots[i];
+            if (slot != null)
+            {
+                slot.SetCooldown01(0f);
+            }
         }
     }
 
@@ -152,6 +180,8 @@ public sealed class EquipmentUIController : MonoBehaviour
 
     private void EnsureSlotCount(List<SlotUI> slots, Transform container, int targetCount, string prefix)
     {
+        CaptureExistingSlots(slots, container);
+
         while (slots.Count > targetCount)
         {
             int lastIndex = slots.Count - 1;
@@ -170,6 +200,39 @@ public sealed class EquipmentUIController : MonoBehaviour
                 : CreateRuntimeSlot(container, prefix + "_" + (slots.Count + 1));
             slot.name = prefix + "_" + (slots.Count + 1);
             slots.Add(slot);
+        }
+    }
+
+    private static void CaptureExistingSlots(List<SlotUI> slots, Transform container)
+    {
+        if (container == null || slots == null || slots.Count > 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < container.childCount; i++)
+        {
+            SlotUI existing = container.GetChild(i).GetComponent<SlotUI>();
+            if (existing != null)
+            {
+                slots.Add(existing);
+            }
+        }
+    }
+
+    private static void RemoveMissingSlots(List<SlotUI> slots)
+    {
+        if (slots == null || slots.Count == 0)
+        {
+            return;
+        }
+
+        for (int i = slots.Count - 1; i >= 0; i--)
+        {
+            if (slots[i] == null)
+            {
+                slots.RemoveAt(i);
+            }
         }
     }
 

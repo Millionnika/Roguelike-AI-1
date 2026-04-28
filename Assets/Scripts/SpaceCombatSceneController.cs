@@ -319,6 +319,8 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ValidateSerializedReferences()
     {
+        TryResolveLegacyHudReferences();
+
         if (healthBar == null)
         {
             Debug.LogError("SpaceCombatSceneController: healthBar is not assigned.", this);
@@ -335,6 +337,48 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Debug.LogError("SpaceCombatSceneController: currentTimeline is not assigned.", this);
         }
+    }
+
+    private void TryResolveLegacyHudReferences()
+    {
+        GameObject inspectorUi = FindSceneGameObject("InspectorUI");
+        if (inspectorUi == null)
+        {
+            return;
+        }
+
+        if (healthBar == null)
+        {
+            healthBar = FindComponentInChildrenByName<Slider>(inspectorUi.transform, "HealthBar");
+        }
+        if (scoreText == null)
+        {
+            scoreText = FindComponentInChildrenByName<TMP_Text>(inspectorUi.transform, "ScoreText");
+        }
+        if (waveText == null)
+        {
+            waveText = FindComponentInChildrenByName<TMP_Text>(inspectorUi.transform, "WaveText");
+        }
+    }
+
+    private static T FindComponentInChildrenByName<T>(Transform root, string objectName) where T : Component
+    {
+        if (root == null || string.IsNullOrEmpty(objectName))
+        {
+            return null;
+        }
+
+        T[] components = root.GetComponentsInChildren<T>(true);
+        for (int i = 0; i < components.Length; i++)
+        {
+            T component = components[i];
+            if (component != null && component.gameObject.name == objectName)
+            {
+                return component;
+            }
+        }
+
+        return null;
     }
 
     private void EnsureDataAssets()
@@ -2079,6 +2123,12 @@ public class SpaceCombatSceneController : MonoBehaviour
             canvasObject.AddComponent<GraphicRaycaster>();
         }
 
+        if (HasAuthoredInspectorHud(uiRoot))
+        {
+            BindAuthoredInspectorHud(uiRoot);
+            return;
+        }
+
         Image rootBackground = CreateImage("Frame", uiRoot, new Color(0.01f, 0.015f, 0.02f, 0f));
         RectTransform rootRect = rootBackground.rectTransform;
         rootRect.anchorMin = Vector2.zero;
@@ -2106,14 +2156,437 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private Transform ResolveInspectorUiRoot()
     {
-        GameObject inspectorUi = GameObject.Find("InspectorUI");
+        GameObject inspectorUi = FindSceneGameObject("InspectorUI");
         if (inspectorUi != null)
         {
+            inspectorUi.SetActive(true);
             return inspectorUi.transform;
         }
 
         GameObject canvasObject = new GameObject("InspectorUI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         return canvasObject.transform;
+    }
+
+    private static GameObject FindSceneGameObject(string objectName)
+    {
+        GameObject activeObject = GameObject.Find(objectName);
+        if (activeObject != null)
+        {
+            return activeObject;
+        }
+
+        GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < allObjects.Length; i++)
+        {
+            GameObject candidate = allObjects[i];
+            if (candidate == null || candidate.name != objectName || !candidate.scene.IsValid())
+            {
+                continue;
+            }
+
+            return candidate;
+        }
+
+        return null;
+    }
+
+    private static bool HasAuthoredInspectorHud(Transform uiRoot)
+    {
+        return uiRoot != null &&
+               (uiRoot.Find("OverviewPanel") != null ||
+                uiRoot.Find("StartMenu") != null ||
+                uiRoot.Find("PlayerStatus") != null);
+    }
+
+    private void BindAuthoredInspectorHud(Transform uiRoot)
+    {
+        BindOverviewPanel(uiRoot);
+        BindCombatLogPanel(uiRoot);
+        BindGateHint(uiRoot);
+        BindPlayerStatusPanel(uiRoot);
+        BindEquipmentPanel(uiRoot);
+        BindModulePanel(uiRoot);
+        pauseHudButtonView = BindMenuButton(uiRoot.Find("PauseButton"), "PauseButton");
+        statusText = FindText(uiRoot, "StatusLabel");
+        BindPerkPanel(uiRoot);
+        BindGameOverPanel(uiRoot);
+        BindPauseMenu(uiRoot);
+        BindStartMenu(uiRoot);
+        BindVirtualJoystick(uiRoot);
+    }
+
+    private void BindOverviewPanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("OverviewPanel");
+        if (panel == null)
+        {
+            return;
+        }
+
+        overviewPanelRect = panel.GetComponent<RectTransform>();
+        overviewTitleText = FindText(panel, "Title");
+        targetPanel = FindImage(panel, "TargetPanel");
+        Transform target = panel.Find("TargetPanel");
+        targetNameText = FindText(target, "TargetName");
+        targetDistanceText = FindText(target, "TargetDistance");
+        targetShieldFill = FindIndexedFill(target, "BarBackground", 0);
+        targetArmorFill = FindIndexedFill(target, "BarBackground", 1);
+        targetHullFill = FindIndexedFill(target, "BarBackground", 2);
+        targetShieldValueText = FindIndexedText(target, "Value", 0);
+        targetArmorValueText = FindIndexedText(target, "Value", 1);
+        targetHullValueText = FindIndexedText(target, "Value", 2);
+        enemyHeaderText = FindText(panel, "EnemyHeader");
+        capacitorText = FindText(panel, "CapText");
+        targetDisplayText = FindText(panel, "TargetDisplay");
+        shipText = FindText(panel, "ShipText");
+        levelText = FindText(panel, "LevelText");
+        experienceText = FindText(panel, "ExperienceText");
+
+        enemyRows.Clear();
+        Transform rowsRoot = panel.Find("EnemyRows");
+        if (rowsRoot == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < 9; i++)
+        {
+            Transform rowTransform = rowsRoot.Find("EnemyRow_" + i);
+            if (rowTransform == null)
+            {
+                continue;
+            }
+
+            enemyRows.Add(new EnemyRow
+            {
+                RootTransform = rowTransform.GetComponent<RectTransform>(),
+                RootText = FindText(rowTransform, "RowText"),
+                ShieldFill = FindIndexedFill(rowTransform, "BarBg", 0),
+                ArmorFill = FindIndexedFill(rowTransform, "BarBg", 1),
+                HullFill = FindIndexedFill(rowTransform, "BarBg", 2)
+            });
+        }
+    }
+
+    private void BindCombatLogPanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("CombatLog");
+        if (panel == null)
+        {
+            return;
+        }
+
+        combatLogTitleText = FindText(panel, "Label");
+        combatLogText = FindText(panel, "Viewport/Content/Text");
+        Transform content = panel.Find("Viewport/Content");
+        combatLogContentRect = content != null ? content.GetComponent<RectTransform>() : null;
+        combatLogScrollRect = panel.GetComponent<ScrollRect>();
+        if (combatLogScrollRect == null)
+        {
+            combatLogScrollRect = panel.gameObject.AddComponent<ScrollRect>();
+        }
+
+        Transform viewport = panel.Find("Viewport");
+        combatLogScrollRect.viewport = viewport != null ? viewport.GetComponent<RectTransform>() : null;
+        combatLogScrollRect.content = combatLogContentRect;
+        combatLogScrollRect.horizontal = false;
+        combatLogScrollRect.vertical = true;
+        combatLogScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        combatLogScrollRect.scrollSensitivity = 24f;
+    }
+
+    private void BindGateHint(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("GateHint");
+        gateHintText = FindText(panel, "Text");
+    }
+
+    private void BindPlayerStatusPanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("PlayerStatus");
+        if (panel == null)
+        {
+            return;
+        }
+
+        playerStatusTitleText = FindText(panel, "Label");
+        playerLevelBadgeText = FindText(panel, "LevelBadge");
+        playerShieldFill = FindImage(panel, "ShieldBg/ShieldFill");
+        playerArmorFill = FindImage(panel, "ArmorBg/ArmorFill");
+        playerHullFill = FindImage(panel, "HullBg/HullFill");
+        playerExperienceFill = FindImage(panel, "XPBg/XPFill");
+        playerShieldValueText = FindText(panel, "ShieldBg/Value");
+        playerArmorValueText = FindText(panel, "ArmorBg/Value");
+        playerHullValueText = FindText(panel, "HullBg/Value");
+        playerExperienceValueText = FindText(panel, "XPBg/Value");
+        capacitorFill = FindImage(panel, "CapacitorFill");
+        capacitorValueText = FindText(panel, "CapValue");
+    }
+
+    private void BindEquipmentPanel(Transform uiRoot)
+    {
+        Transform authoredPanel = uiRoot.Find("EquipmentPanel");
+        Transform runtimePanel = uiRoot.Find("EquipmentPanelRuntime");
+        Transform panel = authoredPanel != null ? authoredPanel : runtimePanel;
+        if (panel == null)
+        {
+            return;
+        }
+
+        panel.gameObject.SetActive(true);
+        DisableDuplicateEquipmentPanels(uiRoot, panel);
+
+        EquipmentUIController runtimeController = panel.GetComponent<EquipmentUIController>();
+        if (runtimeController == null)
+        {
+            runtimeController = panel.gameObject.AddComponent<EquipmentUIController>();
+        }
+        else
+        {
+            runtimeController.enabled = true;
+        }
+
+        Transform weaponsRow = panel.Find("WeaponsRow");
+        Transform modulesRow = panel.Find("ModulesRow");
+        runtimeController.Configure(
+            this,
+            slotUiPrefab,
+            weaponsRow != null ? weaponsRow.GetComponent<RectTransform>() : null,
+            modulesRow != null ? modulesRow.GetComponent<RectTransform>() : null);
+        equipmentUiController = runtimeController;
+    }
+
+    private static void DisableDuplicateEquipmentPanels(Transform uiRoot, Transform activePanel)
+    {
+        EquipmentUIController[] controllers = uiRoot.GetComponentsInChildren<EquipmentUIController>(true);
+        for (int i = 0; i < controllers.Length; i++)
+        {
+            EquipmentUIController controller = controllers[i];
+            if (controller == null || controller.transform == activePanel)
+            {
+                continue;
+            }
+
+            controller.enabled = false;
+            controller.gameObject.SetActive(false);
+        }
+    }
+
+    private void BindModulePanel(Transform uiRoot)
+    {
+        Transform panel = uiRoot.Find("ModulePanel");
+        modulePanelRect = panel != null ? panel.GetComponent<RectTransform>() : null;
+        BindModuleSlots();
+    }
+
+    private void BindPerkPanel(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("PerkPanel");
+        perkPanelObject = root != null ? root.gameObject : null;
+        Transform content = root != null ? root.Find("Content") : null;
+        perkTitleText = FindText(content, "Title");
+        perkHintText = FindText(content, "Choices");
+        for (int i = 0; i < perkOptionTexts.Length; i++)
+        {
+            Transform option = content != null ? content.Find("PerkOption_" + i) : null;
+            perkOptionRects[i] = option != null ? option.GetComponent<RectTransform>() : null;
+            perkOptionTexts[i] = FindText(option, "Label");
+            EnsureButton(option);
+        }
+        if (perkPanelObject != null)
+        {
+            perkPanelObject.SetActive(false);
+        }
+    }
+
+    private void BindGameOverPanel(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("GameOverPanel");
+        gameOverPanelObject = root != null ? root.gameObject : null;
+        Transform content = root != null ? root.Find("Content") : null;
+        retryButtonView = BindMenuButton(content != null ? content.Find("gameover_retry") : null, "gameover_retry");
+        gameOverMenuButtonView = BindMenuButton(content != null ? content.Find("gameover_menu") : null, "gameover_menu");
+        gameOverExitButtonView = BindMenuButton(content != null ? content.Find("gameover_exit") : null, "gameover_exit");
+        if (gameOverPanelObject != null)
+        {
+            gameOverPanelObject.SetActive(false);
+        }
+    }
+
+    private void BindPauseMenu(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("PauseMenu");
+        pauseMenuObject = root != null ? root.gameObject : null;
+        Transform panel = root != null ? root.Find("Panel") : null;
+        pauseResumeButtonView = BindMenuButton(panel != null ? panel.Find("pause_resume") : null, "pause_resume");
+        pauseSettingsButtonView = BindMenuButton(panel != null ? panel.Find("pause_settings") : null, "pause_settings");
+        pauseMenuButtonView = BindMenuButton(panel != null ? panel.Find("pause_menu") : null, "pause_menu");
+        if (pauseMenuObject != null)
+        {
+            pauseMenuObject.SetActive(false);
+        }
+    }
+
+    private void BindStartMenu(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("StartMenu");
+        startMenuObject = root != null ? root.gameObject : null;
+        Transform panel = root != null ? root.Find("Panel") : null;
+        Transform main = panel != null ? panel.Find("MainMenuPanel") : null;
+        Transform hangar = panel != null ? panel.Find("HangarPanel") : null;
+        Transform settings = panel != null ? panel.Find("SettingsPanel") : null;
+
+        mainMenuPanelObject = main != null ? main.gameObject : null;
+        hangarPanelObject = hangar != null ? hangar.gameObject : null;
+        settingsPanelObject = settings != null ? settings.gameObject : null;
+
+        mainMenuTitleText = FindText(main, "Title");
+        mainMenuSubtitleText = FindText(main, "Subtitle");
+        continueButtonView = BindMenuButton(main != null ? main.Find("main_continue") : null, "main_continue");
+        newGameButtonView = BindMenuButton(main != null ? main.Find("main_new_game") : null, "main_new_game");
+        settingsMenuButtonView = BindMenuButton(main != null ? main.Find("main_settings") : null, "main_settings");
+        exitButtonView = BindMenuButton(main != null ? main.Find("main_exit") : null, "main_exit");
+
+        hangarTitleText = FindText(hangar, "Title");
+        hangarSubtitleText = FindText(hangar, "Subtitle");
+        BindShipCards(hangar);
+        Transform infoPanel = hangar != null ? hangar.Find("InfoPanel") : null;
+        startMenuPreviewImage = FindImage(infoPanel, "Preview");
+        startMenuShipNameText = FindText(infoPanel, "ShipName");
+        startMenuRoleText = FindText(infoPanel, "Role");
+        startMenuDescriptionText = FindText(infoPanel, "Description");
+        startMenuStatsText = FindText(infoPanel, "Stats");
+        startMenuHintText = FindText(hangar, "Hint");
+        startButtonImage = FindImage(hangar, "StartButton");
+        startButtonRect = startButtonImage != null ? startButtonImage.rectTransform : null;
+        startButtonText = FindText(hangar, "StartButton/Label");
+        EnsureButton(startButtonImage != null ? startButtonImage.transform : null);
+        hangarBackButtonView = BindMenuButton(hangar != null ? hangar.Find("hangar_back") : null, "hangar_back");
+
+        settingsTitleText = FindText(settings, "Title");
+        settingsSubtitleText = FindText(settings, "Subtitle");
+        Transform settingsBox = settings != null ? settings.Find("SettingsBox") : null;
+        settingsLanguageLabelText = FindText(settingsBox, "LanguageLabel");
+        languageRuButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_ru") : null, "lang_ru");
+        languageEngButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_eng") : null, "lang_eng");
+        settingsFpsLabelText = FindText(settingsBox, "FpsLabel");
+        for (int i = 0; i < fpsOptions.Length; i++)
+        {
+            fpsButtonViews[i] = BindMenuButton(settingsBox != null ? settingsBox.Find("fps_" + fpsOptions[i]) : null, "fps_" + fpsOptions[i]);
+        }
+        settingsBackButtonView = BindMenuButton(settings != null ? settings.Find("settings_back") : null, "settings_back");
+        SetStartMenuPage(StartMenuPage.Main);
+    }
+
+    private void BindShipCards(Transform hangar)
+    {
+        shipCardViews.Clear();
+        Transform cardsRoot = hangar != null ? hangar.Find("Cards") : null;
+        int shipCount = availableShips != null ? availableShips.Count : 0;
+        for (int i = 0; i < shipCount; i++)
+        {
+            Transform card = cardsRoot != null ? cardsRoot.Find("ShipCard_" + i) : null;
+            if (card == null)
+            {
+                continue;
+            }
+
+            EnsureButton(card);
+            shipCardViews.Add(new ShipCardView
+            {
+                Rect = card.GetComponent<RectTransform>(),
+                Background = card.GetComponent<Image>(),
+                Title = FindText(card, "Title"),
+                Stats = FindText(card, "Stats")
+            });
+        }
+    }
+
+    private void BindVirtualJoystick(Transform uiRoot)
+    {
+        Transform root = uiRoot.Find("VirtualJoystick");
+        joystickRootObject = root != null ? root.gameObject : null;
+        Transform baseTransform = root != null ? root.Find("Base") : null;
+        joystickAreaRect = baseTransform != null ? baseTransform.GetComponent<RectTransform>() : null;
+        joystickBaseImage = baseTransform != null ? baseTransform.GetComponent<Image>() : null;
+        joystickKnobImage = FindImage(baseTransform, "Knob");
+        joystickHintText = FindText(baseTransform, "Hint");
+    }
+
+    private UiButtonView BindMenuButton(Transform buttonTransform, string id)
+    {
+        if (buttonTransform == null)
+        {
+            return null;
+        }
+
+        EnsureButton(buttonTransform);
+        return new UiButtonView
+        {
+            Id = id,
+            Rect = buttonTransform.GetComponent<RectTransform>(),
+            Background = buttonTransform.GetComponent<Image>(),
+            Label = FindText(buttonTransform, "Label")
+        };
+    }
+
+    private static void EnsureButton(Transform target)
+    {
+        if (target != null && target.GetComponent<Button>() == null)
+        {
+            target.gameObject.AddComponent<Button>();
+        }
+    }
+
+    private static Image FindImage(Transform root, string path)
+    {
+        Transform child = root != null ? root.Find(path) : null;
+        return child != null ? child.GetComponent<Image>() : null;
+    }
+
+    private static TMP_Text FindText(Transform root, string path)
+    {
+        Transform child = root != null ? root.Find(path) : null;
+        return child != null ? child.GetComponent<TMP_Text>() : null;
+    }
+
+    private static Image FindIndexedFill(Transform root, string backgroundName, int index)
+    {
+        Transform background = FindIndexedChild(root, backgroundName, index);
+        Transform fill = background != null ? background.Find("Fill") : null;
+        return fill != null ? fill.GetComponent<Image>() : null;
+    }
+
+    private static TMP_Text FindIndexedText(Transform root, string childName, int index)
+    {
+        Transform child = FindIndexedChild(root, childName, index);
+        return child != null ? child.GetComponent<TMP_Text>() : null;
+    }
+
+    private static Transform FindIndexedChild(Transform root, string childName, int index)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        int matchIndex = 0;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            if (child.name != childName)
+            {
+                continue;
+            }
+
+            if (matchIndex == index)
+            {
+                return child;
+            }
+            matchIndex++;
+        }
+
+        return null;
     }
 
     private void CreateRightOverviewPanel(Transform parent)
