@@ -16,12 +16,15 @@ MonoBehaviour:
   damage: 28
   cooldown: 0.45
   maxRange: 6
-  firingAngle: 360
+  firingAngle: 120
   spreadAngle: 0
-  projectilePrefab: {fileID: 0}
+  aimTurnSpeed: 720
+  projectileRotationOffset: 90
+  projectilePrefab: {fileID: 317976935477892410, guid: 5deb430b8c06bb249a9c58d0743a9084, type: 3}
   projectileSpeed: 18
   projectileMaxDistance: 8
   projectileLifetime: 2
+  projectileVisualScale: 0.16
   fireRate: 0.45
   capacitorPerShot: 9
   requiredClass: 0

@@ -29,16 +29,17 @@ MonoBehaviour:
   maxHull: 220
   capacitor: 1200
   capacitorRechargeTime: 92
+  capacitorRechargeRate: 1.2
   scoreReward: 40
   weaponSlotCount: 3
   moduleSlotCount: 2
   damageMultiplier: 1
   repairMultiplier: 1
-  shipPrefab: {fileID: 4216741831099175454, guid: aea2bbc2ad8279b479f0f8c63655fa2e, type: 3}
+  shipPrefab: {fileID: 5174309541489062761, guid: aea2bbc2ad8279b479f0f8c63655fa2e, type: 3}
   startingWeapons:
   - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
+  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}

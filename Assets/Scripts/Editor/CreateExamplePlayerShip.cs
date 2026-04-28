@@ -128,6 +128,7 @@ public static class CreateExamplePlayerShip
         ship.maxHull = 240f;
         ship.capacitor = 1200f;
         ship.capacitorRechargeTime = 85f;
+        ship.capacitorRechargeRate = 1.2f;
         ship.scoreReward = 40;
         ship.weaponSlotCount = 3;
         ship.moduleSlotCount = 4;

@@ -24,6 +24,7 @@ public sealed class ShipDataSO : ScriptableObject
     public float maxHull = 220f;
     public float capacitor = 1200f;
     public float capacitorRechargeTime = 92f;
+    [Min(0.1f)] public float capacitorRechargeRate = 1.2f;
     [Min(0)] public int scoreReward = 40;
 
     [Header("Loadout")]
@@ -46,6 +47,7 @@ public sealed class ShipDataSO : ScriptableObject
         moduleSlotCount = Mathf.Max(0, moduleSlotCount);
         startingWeapons ??= new List<WeaponDataSO>();
         startingModules ??= new List<ModuleDataSO>();
+        capacitorRechargeRate = Mathf.Max(0.1f, capacitorRechargeRate);
         Resize(startingWeapons, weaponSlotCount);
         Resize(startingModules, moduleSlotCount);
     }
