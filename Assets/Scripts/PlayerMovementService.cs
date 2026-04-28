@@ -65,6 +65,7 @@ internal sealed class PlayerMovementService : IMovementService
     private const float ClickThresholdSeconds = 0.16f;
     private const float ClickMaxTravel = 0.45f;
     private const float ClickStopDistance = 0.25f;
+    private const float RotationVelocityThreshold = 0.18f;
 
     private Vector2 velocitySmoothRef;
     private bool wasPointerPressed;
@@ -115,7 +116,7 @@ internal sealed class PlayerMovementService : IMovementService
         player.Velocity = Vector2.Lerp(player.Velocity, Vector2.zero, Mathf.Clamp01(player.Drag * deltaTime));
         player.Transform.position += (Vector3)(player.Velocity * deltaTime);
 
-        if (player.Velocity.sqrMagnitude > 0.01f)
+        if (player.Velocity.sqrMagnitude > RotationVelocityThreshold * RotationVelocityThreshold)
         {
             float angle = Mathf.Atan2(player.Velocity.y, player.Velocity.x) * Mathf.Rad2Deg - 90f;
             Quaternion targetRotation = Quaternion.Euler(0f, 0f, angle);
@@ -179,7 +180,7 @@ internal sealed class PlayerMovementService : IMovementService
         return distance > 0.001f ? toTarget / distance : Vector2.zero;
     }
 
-    private static Vector2 GetClickDirection(PlayerShip player)
+    private Vector2 GetClickDirection(PlayerShip player)
     {
         if (!player.MoveCommandActive)
         {
@@ -189,12 +190,19 @@ internal sealed class PlayerMovementService : IMovementService
         Vector2 toTarget = (Vector2)(player.MoveCommandTarget - player.Transform.position);
         float distance = toTarget.magnitude;
 
-        if (distance <= ClickStopDistance && player.Velocity.magnitude <= 0.2f)
+        if (distance <= ClickStopDistance)
         {
-            player.MoveCommandActive = false;
+            StopClickMovement(player);
             return Vector2.zero;
         }
 
         return distance > 0.001f ? toTarget / distance : Vector2.zero;
+    }
+
+    private void StopClickMovement(PlayerShip player)
+    {
+        player.MoveCommandActive = false;
+        player.Velocity = Vector2.zero;
+        velocitySmoothRef = Vector2.zero;
     }
 }

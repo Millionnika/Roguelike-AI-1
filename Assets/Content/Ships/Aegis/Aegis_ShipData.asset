@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4ba9b335aad7b47408e6553b105e0455, type: 3}
-  m_Name: Zooz_ShipData
+  m_Name: Aegis_ShipData
   m_EditorClassIdentifier: Assembly-CSharp::ShipDataSO
-  displayName: Zooz
+  displayName: Aegis
   role: Custom Hull
   description: Created by Ship Factory.
   roleRu: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C\u0441\u043A\u0438\u0439
@@ -24,18 +24,18 @@ MonoBehaviour:
   acceleration: 11
   rotationSpeed: 8.5
   drag: 1.6
-  maxShield: 430
-  maxArmor: 320
-  maxHull: 220
+  maxShield: 4300
+  maxArmor: 3200
+  maxHull: 2200
   capacitor: 1200
   capacitorRechargeTime: 92
-  capacitorRechargeRate: 1.2
+  capacitorRechargeRate: 1.4
   scoreReward: 40
   weaponSlotCount: 3
   moduleSlotCount: 2
   damageMultiplier: 1
   repairMultiplier: 1
-  shipPrefab: {fileID: 5174309541489062761, guid: aea2bbc2ad8279b479f0f8c63655fa2e, type: 3}
+  shipPrefab: {fileID: 2101523389554617440, guid: e86f7f022e04de648a0fa89836d72841, type: 3}
   startingWeapons:
   - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
   - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
@@ -45,4 +45,4 @@ MonoBehaviour:
   - {fileID: 0}
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
-  shipIcon: {fileID: 5211051135896225528, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
+  shipIcon: {fileID: -6481520680327269525, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}

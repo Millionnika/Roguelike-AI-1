@@ -102,18 +102,7 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
-            Vector3 direction = enemy.Transform.position - playerPosition;
-            float currentDistance = direction.magnitude;
-            if (currentDistance > 0.01f)
-            {
-                Vector3 radialDirection = direction.normalized;
-                float radialShift = (enemy.OrbitDistance - currentDistance) * deltaTime;
-                enemy.Transform.position += radialDirection * radialShift;
-            }
-
-            enemy.OrbitAngle += enemy.OrbitSpeed * deltaTime;
-            Vector3 tangent = new Vector3(-Mathf.Sin(enemy.OrbitAngle), Mathf.Cos(enemy.OrbitAngle), 0f);
-            enemy.Transform.position += tangent * enemy.DriftSpeed * deltaTime;
+            UpdateEnemyPosition(enemy, playerPosition, deltaTime);
 
             Vector3 toPlayer = playerPosition - enemy.Transform.position;
             if (toPlayer.sqrMagnitude > 0.001f)
@@ -151,6 +140,53 @@ internal sealed class CombatService : ICombatService
         }
     }
 
+    private static void UpdateEnemyPosition(EnemyShip enemy, Vector3 playerPosition, float deltaTime)
+    {
+        if (enemy == null || enemy.Transform == null)
+        {
+            return;
+        }
+
+        Vector3 awayFromPlayer = enemy.Transform.position - playerPosition;
+        float currentDistance = awayFromPlayer.magnitude;
+        if (currentDistance <= 0.01f)
+        {
+            awayFromPlayer = Quaternion.Euler(0f, 0f, enemy.OrbitAngle * Mathf.Rad2Deg) * Vector3.up;
+            currentDistance = 0.01f;
+        }
+
+        Vector3 radialDirection = awayFromPlayer / currentDistance;
+        float retreatDistance = Mathf.Max(0.1f, enemy.RetreatDistance);
+        float reengageDistance = Mathf.Max(retreatDistance + 0.1f, enemy.ReengageDistance);
+        if (currentDistance < retreatDistance)
+        {
+            enemy.Retreating = true;
+        }
+        else if (currentDistance > reengageDistance)
+        {
+            enemy.Retreating = false;
+        }
+
+        float desiredDistance = Mathf.Max(reengageDistance, enemy.OrbitDistance);
+        float distanceError = desiredDistance - currentDistance;
+        float responsiveness = Mathf.Max(0.1f, enemy.DistanceResponsiveness);
+        float radialSpeed = distanceError * responsiveness;
+        if (enemy.Retreating)
+        {
+            float panicSpeed = enemy.DriftSpeed * Mathf.Max(1f, enemy.RetreatSpeedMultiplier);
+            radialSpeed = Mathf.Max(radialSpeed, panicSpeed);
+        }
+
+        float maxRadialSpeed = enemy.DriftSpeed * (enemy.Retreating ? Mathf.Max(1.2f, enemy.RetreatSpeedMultiplier) : 1.15f);
+        radialSpeed = Mathf.Clamp(radialSpeed, -maxRadialSpeed, maxRadialSpeed);
+        enemy.Transform.position += radialDirection * radialSpeed * deltaTime;
+
+        enemy.OrbitAngle += enemy.OrbitSpeed * deltaTime;
+        Vector3 tangent = new Vector3(-Mathf.Sin(enemy.OrbitAngle), Mathf.Cos(enemy.OrbitAngle), 0f);
+        float tangentScale = enemy.Retreating ? 0.35f : 1f;
+        enemy.Transform.position += tangent * enemy.DriftSpeed * tangentScale * deltaTime;
+    }
+
     private bool TryFireEnemyWeapons(CombatUpdateContext context, EnemyShip enemy, Vector3 playerPosition, float deltaTime)
     {
         if (enemy.WeaponInstances == null || enemy.WeaponInstances.Count == 0)
@@ -168,6 +204,7 @@ internal sealed class CombatService : ICombatService
             }
 
             weapon.Tick(deltaTime);
+            AimWeaponAt(weapon, playerPosition, deltaTime);
             if (!weapon.CanFireAt(playerPosition))
             {
                 continue;
@@ -178,7 +215,7 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
-            Vector2 shotDirection = weapon.GetShotDirectionTo(playerPosition);
+            Vector2 shotDirection = weapon.ApplySpread(weapon.GetForwardDirection());
             float shotDamage = weapon.Data != null
                 ? Mathf.Max(1f, weapon.Data.damage * Mathf.Max(0.1f, enemy.WeaponDamageMultiplier))
                 : Mathf.Max(1f, enemy.Damage);
@@ -283,6 +320,7 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
+            AimWeaponAt(weapon, context.TargetEnemy.Transform.position, deltaTime);
             if (!weapon.CanFireAt(context.TargetEnemy.Transform.position))
             {
                 continue;
@@ -302,7 +340,7 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
-            Vector2 shotDirection = weapon.GetShotDirectionTo(context.TargetEnemy.Transform.position);
+            Vector2 shotDirection = weapon.ApplySpread(weapon.GetForwardDirection());
             float shotDamage = weapon.Data != null
                 ? Mathf.Max(1f, weapon.Data.damage * context.Player.DamageMultiplier)
                 : Mathf.Max(1f, weaponControlModule.Damage * context.Player.DamageMultiplier);
@@ -320,6 +358,43 @@ internal sealed class CombatService : ICombatService
                 context.EquipmentState.WeaponTimers[i] = 0f;
             }
         }
+    }
+
+    private static void AimWeaponAt(WeaponInstance weapon, Vector3 targetWorldPosition, float deltaTime)
+    {
+        if (weapon == null || weapon.Data == null || weapon.MuzzleTransform == null)
+        {
+            return;
+        }
+
+        Transform mount = weapon.MuzzleTransform.parent != null ? weapon.MuzzleTransform.parent : weapon.MuzzleTransform;
+        Transform arcRoot = mount.parent != null ? mount.parent : weapon.OwnerTransform;
+        if (mount == null || arcRoot == null)
+        {
+            return;
+        }
+
+        Vector2 origin = weapon.GetMuzzlePosition();
+        Vector2 toTarget = (Vector2)targetWorldPosition - origin;
+        if (toTarget.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        Vector2 centerForward = weapon.GetArcCenterDirection();
+
+        float arc = Mathf.Clamp(weapon.Data.firingAngle, 0f, 360f);
+        float signedAngle = Vector2.SignedAngle(centerForward, toTarget.normalized);
+        if (arc < 359.9f)
+        {
+            signedAngle = Mathf.Clamp(signedAngle, -arc * 0.5f, arc * 0.5f);
+        }
+
+        Vector2 aimedForward = Quaternion.Euler(0f, 0f, signedAngle) * centerForward;
+        float targetAngle = Mathf.Atan2(aimedForward.y, aimedForward.x) * Mathf.Rad2Deg - 90f;
+        Quaternion targetRotation = Quaternion.Euler(0f, 0f, targetAngle);
+        float turnSpeed = Mathf.Max(1f, weapon.Data.aimTurnSpeed);
+        mount.rotation = Quaternion.RotateTowards(mount.rotation, targetRotation, turnSpeed * Mathf.Max(0f, deltaTime));
     }
 
     private bool ExecuteWeaponFire(
@@ -387,13 +462,17 @@ internal sealed class CombatService : ICombatService
         Vector3 origin = weapon.GetMuzzlePosition();
         origin.z = 0f;
         projectileObject.transform.position = origin;
-        projectileObject.transform.rotation = Quaternion.FromToRotation(Vector3.up, shotDirection);
+        projectileObject.transform.rotation = Quaternion.FromToRotation(Vector3.up, shotDirection) *
+                                              Quaternion.Euler(0f, 0f, weapon.Data.projectileRotationOffset);
+        projectileObject.transform.localScale = Vector3.one * Mathf.Max(0.01f, weapon.Data.projectileVisualScale);
 
         SpriteRenderer renderer = projectileObject.GetComponent<SpriteRenderer>();
         if (renderer != null)
         {
             renderer.sortingOrder = 6;
         }
+
+        ConfigureProjectileTrail(projectileObject, ownerFaction);
 
         ProjectileBehaviour behaviour = projectileObject.GetComponent<ProjectileBehaviour>();
         if (behaviour == null)
@@ -419,7 +498,11 @@ internal sealed class CombatService : ICombatService
             projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
             projectileMaxDistance: maxDistance,
             projectileLifetime: lifetime);
+        CombatLayerUtility.ApplyProjectileLayer(projectileObject, ownerFaction);
 
+        CombatLayerUtility.ApplyProjectileLayer(projectileObject, ownerFaction);
+        Debug.Log(
+            $"{WeaponDebugPrefix} Projectile spawned: muzzle={(weapon.MuzzleTransform != null ? weapon.MuzzleTransform.name : "None")} position={origin} scale={projectileObject.transform.localScale.x:0.###}");
         return true;
     }
 
@@ -451,12 +534,13 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
-            if (weapon.OwnerObject != null && collider.transform.root == weapon.OwnerObject.transform.root)
+            if (IsOwnedCollider(collider, weapon.OwnerObject))
             {
+                Debug.Log($"{WeaponDebugPrefix} Hitscan ignored {collider.name}: owner collider.");
                 continue;
             }
 
-            TeamMember teamMember = collider.GetComponentInParent<TeamMember>();
+            TeamMember teamMember = ResolveTeamMember(collider);
             if (teamMember == null)
             {
                 Debug.Log($"{WeaponDebugPrefix} Hitscan ignored {collider.name}: no TeamMember.");
@@ -469,7 +553,7 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
-            IDamageable damageable = collider.GetComponentInParent<IDamageable>();
+            IDamageable damageable = ResolveDamageable(collider);
             if (damageable == null)
             {
                 Debug.Log($"{WeaponDebugPrefix} Hitscan ignored {collider.name}: no IDamageable.");
@@ -495,7 +579,7 @@ internal sealed class CombatService : ICombatService
             }
             else
             {
-                EnemyShip hitEnemy = FindEnemyByTransformRoot(context.Enemies, collider.transform.root);
+                EnemyShip hitEnemy = FindEnemyByTeamMember(context.Enemies, teamMember);
                 if (hitEnemy != null)
                 {
                     hitEnemy.HitFlashTimer = 1f;
@@ -519,23 +603,47 @@ internal sealed class CombatService : ICombatService
         return false;
     }
 
-    private static EnemyShip FindEnemyByTransformRoot(List<EnemyShip> enemies, Transform root)
+    private static void ConfigureProjectileTrail(GameObject projectileObject, CombatFaction ownerFaction)
     {
-        if (enemies == null || root == null)
+        if (projectileObject == null)
         {
-            return null;
+            return;
         }
 
-        for (int i = 0; i < enemies.Count; i++)
+        TrailRenderer trail = projectileObject.GetComponent<TrailRenderer>();
+        if (trail == null)
         {
-            EnemyShip enemy = enemies[i];
-            if (enemy != null && enemy.Transform != null && enemy.Transform.root == root)
-            {
-                return enemy;
-            }
+            trail = projectileObject.AddComponent<TrailRenderer>();
         }
 
-        return null;
+        trail.time = 0.28f;
+        trail.minVertexDistance = 0.02f;
+        trail.widthMultiplier = 0.08f;
+        trail.autodestruct = false;
+        trail.emitting = true;
+        trail.sortingOrder = 5;
+        trail.material = GetProjectileTrailMaterial();
+        Color start = ownerFaction == CombatFaction.Player
+            ? new Color(0.35f, 0.9f, 1f, 0.95f)
+            : new Color(1f, 0.38f, 0.24f, 0.95f);
+        Color end = new Color(start.r, start.g, start.b, 0f);
+        trail.startColor = start;
+        trail.endColor = end;
+        trail.Clear();
+    }
+
+    private static Material projectileTrailMaterial;
+
+    private static Material GetProjectileTrailMaterial()
+    {
+        if (projectileTrailMaterial != null)
+        {
+            return projectileTrailMaterial;
+        }
+
+        Shader shader = Shader.Find("Sprites/Default");
+        projectileTrailMaterial = shader != null ? new Material(shader) : null;
+        return projectileTrailMaterial;
     }
 
     private static DamageInfo BuildDamageInfo(
@@ -572,6 +680,66 @@ internal sealed class CombatService : ICombatService
         context.LogMessage?.Invoke(enemyId + context.Localize("log_enemy_hits") + Mathf.RoundToInt(info.Amount), "hit");
     }
 
+    private static TeamMember ResolveTeamMember(Collider2D collider)
+    {
+        if (collider == null)
+        {
+            return null;
+        }
+
+        Transform hierarchyRoot = collider.transform.root;
+        TeamMember rootMember = hierarchyRoot != null ? hierarchyRoot.GetComponent<TeamMember>() : null;
+        return rootMember != null ? rootMember : collider.GetComponentInParent<TeamMember>();
+    }
+
+    private static IDamageable ResolveDamageable(Collider2D collider)
+    {
+        if (collider == null)
+        {
+            return null;
+        }
+
+        Transform hierarchyRoot = collider.transform.root;
+        IDamageable rootDamageable = hierarchyRoot != null ? hierarchyRoot.GetComponent<IDamageable>() : null;
+        return rootDamageable != null ? rootDamageable : collider.GetComponentInParent<IDamageable>();
+    }
+
+    private static EnemyShip FindEnemyByTeamMember(List<EnemyShip> enemies, TeamMember teamMember)
+    {
+        if (enemies == null || teamMember == null)
+        {
+            return null;
+        }
+
+        Transform teamTransform = teamMember.transform;
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            EnemyShip enemy = enemies[i];
+            if (enemy == null || enemy.Transform == null)
+            {
+                continue;
+            }
+
+            if (teamTransform == enemy.Transform || teamTransform.IsChildOf(enemy.Transform))
+            {
+                return enemy;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsOwnedCollider(Collider2D collider, GameObject ownerObject)
+    {
+        if (collider == null || ownerObject == null)
+        {
+            return false;
+        }
+
+        Transform ownerTransform = ownerObject.transform;
+        return collider.transform == ownerTransform || collider.transform.IsChildOf(ownerTransform);
+    }
+
     private static ModuleState GetWeaponControlModule(List<ModuleState> modules)
     {
         if (modules == null)
@@ -594,7 +762,8 @@ internal sealed class CombatService : ICombatService
     {
         if (weapon?.OwnerObject != null)
         {
-            TeamMember member = weapon.OwnerObject.GetComponentInParent<TeamMember>();
+            TeamMember member = weapon.OwnerObject.transform.root.GetComponent<TeamMember>();
+            member ??= weapon.OwnerObject.GetComponentInParent<TeamMember>();
             if (member != null)
             {
                 return member.Faction;

@@ -47,6 +47,7 @@ public sealed class ShipDataSOEditor : Editor
         EditorGUILayout.PropertyField(serializedObject.FindProperty("maxHull"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("capacitor"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("capacitorRechargeTime"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("capacitorRechargeRate"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("scoreReward"));
         EditorGUILayout.Space(6f);
     }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -86,7 +87,7 @@ public sealed class EquipmentUIController : MonoBehaviour
         {
             WeaponDataSO weapon = state != null ? state.InstalledWeapons[i] : null;
             Sprite icon = weapon != null ? weapon.icon : null;
-            weaponSlots[i].Setup(icon, (i + 1).ToString());
+            weaponSlots[i].Setup(icon, (i + 1).ToString(), weapon != null);
         }
 
         for (int i = 0; i < moduleSlots.Count; i++)
@@ -200,7 +201,7 @@ public sealed class EquipmentUIController : MonoBehaviour
         Image iconImage = iconGo.GetComponent<Image>();
         iconImage.color = new Color(1f, 1f, 1f, 0.25f);
 
-        GameObject keyGo = new GameObject("KeyBind", typeof(RectTransform), typeof(Text));
+        GameObject keyGo = new GameObject("KeyBind", typeof(RectTransform), typeof(TextMeshProUGUI));
         keyGo.transform.SetParent(root.transform, false);
         RectTransform keyRect = keyGo.GetComponent<RectTransform>();
         keyRect.anchorMin = new Vector2(0f, 1f);
@@ -208,11 +209,11 @@ public sealed class EquipmentUIController : MonoBehaviour
         keyRect.pivot = new Vector2(0.5f, 1f);
         keyRect.anchoredPosition = new Vector2(0f, -4f);
         keyRect.sizeDelta = new Vector2(0f, 18f);
-        Text keyText = keyGo.GetComponent<Text>();
-        keyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        TMP_Text keyText = keyGo.GetComponent<TMP_Text>();
         keyText.fontSize = 12;
-        keyText.alignment = TextAnchor.MiddleCenter;
+        keyText.alignment = TextAlignmentOptions.Center;
         keyText.color = Color.white;
+        keyText.raycastTarget = false;
 
         GameObject cooldownGo = new GameObject("CooldownOverlay", typeof(RectTransform), typeof(Image));
         cooldownGo.transform.SetParent(root.transform, false);

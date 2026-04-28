@@ -18,6 +18,7 @@ namespace SpaceFrontier.Player
         public SpriteRenderer BodyRenderer { get; set; }
         public SpriteRenderer AuraRenderer { get; set; }
         public SpriteRenderer ThrusterRenderer { get; set; }
+        public ShipThrusterEffect ThrusterEffect { get; set; }
         public ShipDamageReceiver DamageReceiver { get; set; }
         public TeamMember TeamMember { get; set; }
         public Color BaseBodyColor { get; set; } = Color.white;
@@ -95,6 +96,12 @@ namespace SpaceFrontier.Player
         {
             get => Stats.CapacitorRechargeTime;
             set => Stats.CapacitorRechargeTime = value;
+        }
+
+        public float CapacitorRechargeRate
+        {
+            get => Stats.CapacitorRechargeRate;
+            set => Stats.CapacitorRechargeRate = value;
         }
 
         public int Level

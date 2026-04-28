@@ -9,10 +9,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
-  m_Name: Ayegis1_ShipData
+  m_Script: {fileID: 11500000, guid: 4ba9b335aad7b47408e6553b105e0455, type: 3}
+  m_Name: NewTest1_ShipData
   m_EditorClassIdentifier: Assembly-CSharp::ShipDataSO
-  displayName: Ayegis1
+  displayName: NewTest1
   role: Custom Hull
   description: Created by Ship Factory.
   roleRu: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C\u0441\u043A\u0438\u0439
@@ -24,23 +24,25 @@ MonoBehaviour:
   acceleration: 11
   rotationSpeed: 8.5
   drag: 1.6
-  maxShield: 2000000
+  maxShield: 430
   maxArmor: 320
   maxHull: 220
   capacitor: 1200
   capacitorRechargeTime: 92
-  weaponSlotCount: 3
-  moduleSlotCount: 2
+  scoreReward: 40
+  weaponSlotCount: 2
+  moduleSlotCount: 4
   damageMultiplier: 1
   repairMultiplier: 1
-  shipPrefab: {fileID: 6688824221006203595, guid: e86f7f022e04de648a0fa89836d72841, type: 3}
+  shipPrefab: {fileID: 4965996416541077232, guid: 798932e733fa09b499a291ddc09de9ba, type: 3}
   startingWeapons:
-  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: bef525f325d41e94fab7bdc07ca74162, type: 2}
   - {fileID: 0}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
-  shipIcon: {fileID: -6481520680327269525, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
+  shipIcon: {fileID: -2742821149201264671, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}

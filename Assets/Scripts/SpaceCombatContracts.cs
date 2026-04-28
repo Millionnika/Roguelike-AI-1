@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -50,7 +51,7 @@ internal interface IBackgroundParallaxService
 internal interface ISpaceCombatUiFactory
 {
     Image CreateImage(string objectName, Transform parent, Sprite squareSprite, Color color);
-    Text CreateText(string objectName, Transform parent, Font uiFont, string content, int fontSize, FontStyle fontStyle, Color color);
+    TMP_Text CreateText(string objectName, Transform parent, Font uiFont, string content, int fontSize, FontStyle fontStyle, Color color);
     void AddOutline(GameObject target, Color color);
     Image CreateBar(Transform parent, Sprite squareSprite, Vector2 anchoredPosition, Color fillColor);
     Image CreateLabeledBar(Transform parent, Sprite squareSprite, Font uiFont, string label, Vector2 anchoredPosition, Color fillColor);

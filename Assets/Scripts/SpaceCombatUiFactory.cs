@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,17 +15,19 @@ internal sealed class SpaceCombatUiFactory : ISpaceCombatUiFactory
         return image;
     }
 
-    public Text CreateText(string objectName, Transform parent, Font uiFont, string content, int fontSize, FontStyle fontStyle, Color color)
+    public TMP_Text CreateText(string objectName, Transform parent, Font uiFont, string content, int fontSize, FontStyle fontStyle, Color color)
     {
-        GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(Text));
+        GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
-        Text text = go.GetComponent<Text>();
-        text.font = uiFont;
+        TMP_Text text = go.GetComponent<TMP_Text>();
         text.text = content;
         text.fontSize = fontSize;
-        text.fontStyle = fontStyle;
+        text.fontStyle = fontStyle == FontStyle.Bold ? FontStyles.Bold : FontStyles.Normal;
         text.color = color;
-        text.alignment = TextAnchor.MiddleLeft;
+        text.alignment = TextAlignmentOptions.MidlineLeft;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Overflow;
+        text.raycastTarget = false;
         return text;
     }
 
@@ -57,7 +60,7 @@ internal sealed class SpaceCombatUiFactory : ISpaceCombatUiFactory
 
     public Image CreateLabeledBar(Transform parent, Sprite squareSprite, Font uiFont, string label, Vector2 anchoredPosition, Color fillColor)
     {
-        Text text = CreateText(label + "Label", parent, uiFont, label, 13, FontStyle.Bold, new Color(0.88f, 0.94f, 1f));
+        TMP_Text text = CreateText(label + "Label", parent, uiFont, label, 13, FontStyle.Bold, new Color(0.88f, 0.94f, 1f));
         SetAnchoredRect(text.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), anchoredPosition, anchoredPosition + new Vector2(52f, -16f));
 
         Image background = CreateImage(label + "Bg", parent, squareSprite, new Color(0.12f, 0.17f, 0.2f, 1f));

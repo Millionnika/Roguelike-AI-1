@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [DisallowMultipleComponent]
 public sealed class ProjectileBehaviour : MonoBehaviour
@@ -20,6 +21,7 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private float traveledDistance;
     private Vector2 previousPosition;
     private bool activeProjectile;
+    private readonly List<Collider2D> ignoredOwnerColliders = new List<Collider2D>();
 
     internal void Initialize(
         IPoolService runtimePoolService,
@@ -49,12 +51,15 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         activeProjectile = true;
 
         EnsurePhysicsComponents();
+        ConfigureOwnerCollisionIgnores();
 
-        transform.rotation = Quaternion.FromToRotation(Vector3.up, direction);
+        float visualOffset = weaponData != null ? weaponData.projectileRotationOffset : 0f;
+        transform.rotation = Quaternion.FromToRotation(Vector3.up, direction) * Quaternion.Euler(0f, 0f, visualOffset);
         body.linearVelocity = direction * speed;
         Debug.Log(
             $"{WeaponDebugPrefix} Projectile init: projectile={name} owner={(ownerObject != null ? ownerObject.name : "None")} team={ownerFaction} damage={damage:0.##}");
     }
+    private readonly List<Collider2D> projectileColliders = new List<Collider2D>();
 
     public void ForceDespawn()
     {
@@ -100,6 +105,11 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         }
     }
 
+    private void OnDisable()
+    {
+        RestoreOwnerCollisionIgnores();
+    }
+
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (!activeProjectile)
@@ -129,19 +139,20 @@ public sealed class ProjectileBehaviour : MonoBehaviour
 
         Debug.Log($"{WeaponDebugPrefix} Projectile hit candidate: {other.name}");
 
-        if (ownerObject != null && other.transform.root == ownerObject.transform.root)
+        if (IsOwnerCollider(other))
         {
+            Debug.Log($"{WeaponDebugPrefix} Projectile ignored {other.name}: owner collider.");
             return;
         }
 
-        TeamMember targetTeamMember = other.GetComponentInParent<TeamMember>();
+        TeamMember targetTeamMember = ResolveTeamMember(other);
         if (targetTeamMember == null)
         {
             Debug.Log($"{WeaponDebugPrefix} Projectile ignored {other.name}: no TeamMember.");
             return;
         }
 
-        IDamageable damageable = other.GetComponentInParent<IDamageable>();
+        IDamageable damageable = ResolveDamageable(other);
         if (damageable == null)
         {
             Debug.Log($"{WeaponDebugPrefix} Projectile ignored {other.name}: no IDamageable.");
@@ -173,10 +184,12 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private void Despawn()
     {
         activeProjectile = false;
+        RestoreOwnerCollisionIgnores();
         if (body != null)
         {
             body.linearVelocity = Vector2.zero;
         }
+        RestoreIgnoredOwnerCollisions();
 
         if (poolService != null && prefabKey != null)
         {
@@ -210,5 +223,188 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         }
 
         projectileCollider.isTrigger = true;
+    }
+
+    private TeamMember ResolveTargetTeamMember(Collider2D hitCollider)
+    {
+        if (hitCollider == null)
+        {
+            return null;
+        }
+
+        Transform root = hitCollider.transform.root;
+        TeamMember rootMember = root != null ? root.GetComponent<TeamMember>() : null;
+        if (rootMember != null)
+        {
+            return rootMember;
+        }
+
+        return hitCollider.GetComponentInParent<TeamMember>();
+    }
+
+    private IDamageable ResolveTargetDamageable(Collider2D hitCollider)
+    {
+        if (hitCollider == null)
+        {
+            return null;
+        }
+
+        Transform root = hitCollider.transform.root;
+        IDamageable rootDamageable = root != null ? root.GetComponent<IDamageable>() : null;
+        if (rootDamageable != null)
+        {
+            return rootDamageable;
+        }
+
+        return hitCollider.GetComponentInParent<IDamageable>();
+    }
+
+    private void IgnoreOwnerColliders()
+    {
+        if (ownerObject == null || projectileCollider == null)
+        {
+            return;
+        }
+
+        Collider2D[] ownerColliders = ownerObject.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < ownerColliders.Length; i++)
+        {
+            Collider2D ownerCollider = ownerColliders[i];
+            if (ownerCollider == null || ownerCollider == projectileCollider)
+            {
+                continue;
+            }
+
+            Physics2D.IgnoreCollision(projectileCollider, ownerCollider, true);
+            ignoredOwnerColliders.Add(ownerCollider);
+        }
+    }
+
+    private void RestoreIgnoredOwnerCollisions()
+    {
+        if (projectileCollider == null)
+        {
+            ignoredOwnerColliders.Clear();
+            return;
+        }
+
+        for (int i = 0; i < ignoredOwnerColliders.Count; i++)
+        {
+            Collider2D ownerCollider = ignoredOwnerColliders[i];
+            if (ownerCollider == null)
+            {
+                continue;
+            }
+
+            Physics2D.IgnoreCollision(projectileCollider, ownerCollider, false);
+        }
+
+        ignoredOwnerColliders.Clear();
+    }
+
+    private void ConfigureOwnerCollisionIgnores()
+    {
+        RestoreOwnerCollisionIgnores();
+
+        if (ownerObject == null)
+        {
+            return;
+        }
+
+        projectileColliders.Clear();
+        GetComponentsInChildren(true, projectileColliders);
+        if (projectileColliders.Count == 0)
+        {
+            return;
+        }
+
+        Collider2D[] ownerColliders = ownerObject.GetComponentsInChildren<Collider2D>(true);
+        for (int ownerIndex = 0; ownerIndex < ownerColliders.Length; ownerIndex++)
+        {
+            Collider2D ownerCollider = ownerColliders[ownerIndex];
+            if (ownerCollider == null)
+            {
+                continue;
+            }
+
+            for (int projectileIndex = 0; projectileIndex < projectileColliders.Count; projectileIndex++)
+            {
+                Collider2D currentProjectileCollider = projectileColliders[projectileIndex];
+                if (currentProjectileCollider == null)
+                {
+                    continue;
+                }
+
+                Physics2D.IgnoreCollision(currentProjectileCollider, ownerCollider, true);
+            }
+
+            ignoredOwnerColliders.Add(ownerCollider);
+        }
+    }
+
+    private void RestoreOwnerCollisionIgnores()
+    {
+        if (ignoredOwnerColliders.Count == 0 || projectileColliders.Count == 0)
+        {
+            ignoredOwnerColliders.Clear();
+            return;
+        }
+
+        for (int ownerIndex = 0; ownerIndex < ignoredOwnerColliders.Count; ownerIndex++)
+        {
+            Collider2D ownerCollider = ignoredOwnerColliders[ownerIndex];
+            if (ownerCollider == null)
+            {
+                continue;
+            }
+
+            for (int projectileIndex = 0; projectileIndex < projectileColliders.Count; projectileIndex++)
+            {
+                Collider2D currentProjectileCollider = projectileColliders[projectileIndex];
+                if (currentProjectileCollider == null)
+                {
+                    continue;
+                }
+
+                Physics2D.IgnoreCollision(currentProjectileCollider, ownerCollider, false);
+            }
+        }
+
+        ignoredOwnerColliders.Clear();
+    }
+
+    private bool IsOwnerCollider(Collider2D other)
+    {
+        if (ownerObject == null || other == null)
+        {
+            return false;
+        }
+
+        Transform ownerTransform = ownerObject.transform;
+        return other.transform == ownerTransform || other.transform.IsChildOf(ownerTransform);
+    }
+
+    private static TeamMember ResolveTeamMember(Collider2D other)
+    {
+        if (other == null)
+        {
+            return null;
+        }
+
+        Transform hierarchyRoot = other.transform.root;
+        TeamMember rootMember = hierarchyRoot != null ? hierarchyRoot.GetComponent<TeamMember>() : null;
+        return rootMember != null ? rootMember : other.GetComponentInParent<TeamMember>();
+    }
+
+    private static IDamageable ResolveDamageable(Collider2D other)
+    {
+        if (other == null)
+        {
+            return null;
+        }
+
+        Transform hierarchyRoot = other.transform.root;
+        IDamageable rootDamageable = hierarchyRoot != null ? hierarchyRoot.GetComponent<IDamageable>() : null;
+        return rootDamageable != null ? rootDamageable : other.GetComponentInParent<IDamageable>();
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,9 +21,14 @@ internal sealed class EnemyShip
     public SpriteRenderer ShieldRenderer;
     public SpriteRenderer TargetRenderer;
     public SpriteRenderer ThrusterRenderer;
+    public ShipThrusterEffect ThrusterEffect;
     public float OrbitDistance;
     public float OrbitAngle;
     public float OrbitSpeed;
+    public float RetreatDistance;
+    public float ReengageDistance;
+    public float DistanceResponsiveness;
+    public float RetreatSpeedMultiplier;
     public float AttackCooldown;
     public float AttackTimer;
     public float Damage;
@@ -30,6 +36,7 @@ internal sealed class EnemyShip
     public float DriftSpeed;
     public float HitFlashTimer;
     public float AttackFlashTimer;
+    public bool Retreating;
     public Color BaseBodyColor = Color.white;
     public Color BaseShieldColor = Color.white;
 
@@ -74,8 +81,8 @@ internal sealed class ModuleState
     public WeaponDataSO WeaponData;
 
     public Image SlotImage;
-    public Text SlotTitle;
-    public Text SlotKey;
+    public TMP_Text SlotTitle;
+    public TMP_Text SlotKey;
 }
 
 public sealed class ShipEquipmentState
@@ -121,7 +128,7 @@ internal sealed class PerkChoice
 
 internal sealed class EnemyRow
 {
-    public Text RootText;
+    public TMP_Text RootText;
     public Image ShieldFill;
     public Image ArmorFill;
     public Image HullFill;
@@ -133,8 +140,8 @@ internal sealed class ShipCardView
 {
     public RectTransform Rect;
     public Image Background;
-    public Text Title;
-    public Text Stats;
+    public TMP_Text Title;
+    public TMP_Text Stats;
 }
 
 internal sealed class UiButtonView
@@ -142,7 +149,7 @@ internal sealed class UiButtonView
     public string Id;
     public RectTransform Rect;
     public Image Background;
-    public Text Label;
+    public TMP_Text Label;
 }
 
 internal sealed class StarVisual

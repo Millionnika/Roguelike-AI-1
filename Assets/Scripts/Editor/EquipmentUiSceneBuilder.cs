@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -13,10 +14,11 @@ public static class EquipmentUiSceneBuilder
     private const string ExampleShipDataPath = "Assets/Data/Ships/SD_ExampleVanguard.asset";
     private const string FactoryRootDir = "Assets/Content/Ships";
     private const string WeaponFactoryRootDir = "Assets/Content/Weapons";
+    private const string RailgunVisualSpritePath = "Assets/Content/Weapons/Рельсотрончик/RailgunWeaponVisual.png";
 
     public static void Build()
     {
-        Canvas canvas = Object.FindObjectOfType<Canvas>(true);
+        Canvas canvas = UnityEngine.Object.FindObjectOfType<Canvas>(true);
         if (canvas == null)
         {
             GameObject canvasGo = new GameObject("HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -76,7 +78,7 @@ public static class EquipmentUiSceneBuilder
             equipmentUi = panel.gameObject.AddComponent<EquipmentUIController>();
         }
 
-        SpaceCombatSceneController sceneController = Object.FindObjectOfType<SpaceCombatSceneController>(true);
+        SpaceCombatSceneController sceneController = UnityEngine.Object.FindObjectOfType<SpaceCombatSceneController>(true);
         if (sceneController == null)
         {
             Debug.LogError("EquipmentUiSceneBuilder: SpaceCombatSceneController not found in scene.");
@@ -109,6 +111,77 @@ public static class EquipmentUiSceneBuilder
     public static void OpenWeaponFactoryWizard()
     {
         ScriptableWizard.DisplayWizard<WeaponFactoryWizard>("Create New Weapon", "Build Weapon");
+    }
+
+    [MenuItem("Tools/Roguelike/Repair Existing Ship Prefabs")]
+    public static void RepairExistingShipPrefabs()
+    {
+        Sprite railgunVisualSprite = AssetDatabase.LoadAssetAtPath<Sprite>(RailgunVisualSpritePath);
+        string[] guids = AssetDatabase.FindAssets("t:ShipDataSO", new[] { FactoryRootDir });
+        int repairedCount = 0;
+
+        for (int i = 0; i < guids.Length; i++)
+        {
+            string dataPath = AssetDatabase.GUIDToAssetPath(guids[i]);
+            ShipDataSO shipData = AssetDatabase.LoadAssetAtPath<ShipDataSO>(dataPath);
+            if (shipData == null)
+            {
+                continue;
+            }
+
+            string prefabPath = shipData.shipPrefab != null
+                ? AssetDatabase.GetAssetPath(shipData.shipPrefab)
+                : GetExpectedShipPrefabPath(dataPath, shipData);
+            if (string.IsNullOrEmpty(prefabPath))
+            {
+                continue;
+            }
+
+            RepairShipPrefab(prefabPath, shipData, railgunVisualSprite);
+            repairedCount++;
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("EquipmentUiSceneBuilder: repaired " + repairedCount + " ship prefab(s).");
+    }
+
+    [MenuItem("Tools/Roguelike/Fix Ship Visual Helpers")]
+    public static void FixShipVisualHelpers()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:ShipDataSO", new[] { FactoryRootDir });
+        int fixedCount = 0;
+
+        for (int i = 0; i < guids.Length; i++)
+        {
+            ShipDataSO shipData = AssetDatabase.LoadAssetAtPath<ShipDataSO>(AssetDatabase.GUIDToAssetPath(guids[i]));
+            if (shipData == null || shipData.shipPrefab == null)
+            {
+                continue;
+            }
+
+            string prefabPath = AssetDatabase.GetAssetPath(shipData.shipPrefab);
+            if (string.IsNullOrEmpty(prefabPath))
+            {
+                continue;
+            }
+
+            FixShipVisualHelperPrefab(prefabPath, shipData);
+            fixedCount++;
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("EquipmentUiSceneBuilder: fixed visual helpers for " + fixedCount + " ship prefab(s).");
+    }
+
+    private static string GetExpectedShipPrefabPath(string shipDataPath, ShipDataSO shipData)
+    {
+        string directory = Path.GetDirectoryName(shipDataPath)?.Replace("\\", "/");
+        string safeName = SanitizeName(!string.IsNullOrWhiteSpace(shipData.displayName) ? shipData.displayName : shipData.name.Replace("_ShipData", string.Empty));
+        return string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(safeName)
+            ? string.Empty
+            : directory + "/" + safeName + "_Prefab.prefab";
     }
 
     internal static void BuildShipFromFactory(string sourceName, Sprite shipSprite)
@@ -175,9 +248,10 @@ public static class EquipmentUiSceneBuilder
 
             CircleCollider2D collider = root.AddComponent<CircleCollider2D>();
             collider.radius = 0.28f;
+            EnsureShipPrefabPhysics(root);
 
             shipPrefab = PrefabUtility.SaveAsPrefabAsset(root, ExampleShipPrefabPath);
-            Object.DestroyImmediate(root);
+            UnityEngine.Object.DestroyImmediate(root);
         }
 
         WeaponDataSO weaponData = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(ExampleWeaponPath);
@@ -221,6 +295,7 @@ public static class EquipmentUiSceneBuilder
         shipData.maxHull = 240f;
         shipData.capacitor = 1200f;
         shipData.capacitorRechargeTime = 85f;
+        shipData.capacitorRechargeRate = 1.2f;
         shipData.scoreReward = 40;
         shipData.weaponSlotCount = 3;
         shipData.moduleSlotCount = 4;
@@ -229,7 +304,7 @@ public static class EquipmentUiSceneBuilder
         shipData.shipPrefab = shipPrefab;
         EditorUtility.SetDirty(shipData);
 
-        SpaceCombatSceneController controller = Object.FindObjectOfType<SpaceCombatSceneController>(true);
+        SpaceCombatSceneController controller = UnityEngine.Object.FindObjectOfType<SpaceCombatSceneController>(true);
         if (controller != null)
         {
             SerializedObject so = new SerializedObject(controller);
@@ -281,12 +356,14 @@ public static class EquipmentUiSceneBuilder
         string weaponDir = WeaponFactoryRootDir + "/" + safeName;
         EnsureFolder(weaponDir);
 
+        GameObject preparedProjectilePrefab = EnsureFactoryProjectilePrefab(weaponDir, safeName, projectilePrefab, icon);
+
         string weaponDataPath = weaponDir + "/" + safeName + "_WeaponData.asset";
         WeaponDataSO weaponData = CreateFactoryWeaponData(
             weaponDataPath,
             safeName,
             requiredClass,
-            projectilePrefab,
+            preparedProjectilePrefab,
             icon,
             fireSound,
             damage,
@@ -400,7 +477,7 @@ public static class EquipmentUiSceneBuilder
         slotSo.ApplyModifiedPropertiesWithoutUndo();
 
         PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-        Object.DestroyImmediate(root);
+        UnityEngine.Object.DestroyImmediate(root);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
@@ -409,37 +486,329 @@ public static class EquipmentUiSceneBuilder
 
     private static GameObject CreateFactoryShipPrefab(string prefabPath, string safeName, Sprite shipSprite)
     {
+        Sprite railgunVisualSprite = AssetDatabase.LoadAssetAtPath<Sprite>(RailgunVisualSpritePath);
         GameObject root = new GameObject(safeName + "_ShipRoot");
+        BuildCompleteShipHierarchy(root.transform, shipSprite, 2, railgunVisualSprite);
 
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        UnityEngine.Object.DestroyImmediate(root);
+        return prefab;
+    }
+
+    private static GameObject EnsureFactoryProjectilePrefab(string weaponDir, string safeName, GameObject sourcePrefab, Sprite fallbackSprite)
+    {
+        string projectilePath = weaponDir + "/" + safeName + "_Projectile.prefab";
+        string sourcePath = sourcePrefab != null ? AssetDatabase.GetAssetPath(sourcePrefab) : string.Empty;
+
+        if (sourcePrefab == null)
+        {
+            return CreateOrUpdateProjectilePrefab(projectilePath, safeName, fallbackSprite);
+        }
+
+        if (!string.IsNullOrEmpty(sourcePath) && sourcePath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+        {
+            GameObject root = PrefabUtility.LoadPrefabContents(sourcePath);
+            EnsureProjectilePrefabPhysics(root, fallbackSprite);
+            PrefabUtility.SaveAsPrefabAsset(root, sourcePath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
+        }
+
+        GameObject instance = UnityEngine.Object.Instantiate(sourcePrefab);
+        instance.name = safeName + "_Projectile";
+        EnsureProjectilePrefabPhysics(instance, fallbackSprite);
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(instance, projectilePath);
+        UnityEngine.Object.DestroyImmediate(instance);
+        return prefab;
+    }
+
+    private static GameObject CreateOrUpdateProjectilePrefab(string projectilePath, string safeName, Sprite fallbackSprite)
+    {
+        bool exists = File.Exists(projectilePath);
+        GameObject root = exists
+            ? PrefabUtility.LoadPrefabContents(projectilePath)
+            : new GameObject(safeName + "_Projectile");
+
+        EnsureProjectilePrefabPhysics(root, fallbackSprite);
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, projectilePath);
+
+        if (exists)
+        {
+            PrefabUtility.UnloadPrefabContents(root);
+        }
+        else
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+
+        return prefab;
+    }
+
+    private static void EnsureProjectilePrefabPhysics(GameObject projectileRoot, Sprite fallbackSprite)
+    {
+        if (projectileRoot == null)
+        {
+            return;
+        }
+
+        SpriteRenderer renderer = projectileRoot.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = projectileRoot.AddComponent<SpriteRenderer>();
+        }
+
+        if (renderer.sprite == null && fallbackSprite != null)
+        {
+            renderer.sprite = fallbackSprite;
+        }
+
+        renderer.sortingOrder = 6;
+
+        Rigidbody2D body = projectileRoot.GetComponent<Rigidbody2D>();
+        if (body == null)
+        {
+            body = projectileRoot.AddComponent<Rigidbody2D>();
+        }
+
+        body.bodyType = RigidbodyType2D.Dynamic;
+        body.gravityScale = 0f;
+        body.linearDamping = 0f;
+        body.angularDamping = 0f;
+        body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        body.interpolation = RigidbodyInterpolation2D.Interpolate;
+
+        Collider2D collider = projectileRoot.GetComponent<Collider2D>();
+        if (collider == null)
+        {
+            CircleCollider2D circle = projectileRoot.AddComponent<CircleCollider2D>();
+            circle.radius = 0.08f;
+            collider = circle;
+        }
+
+        collider.isTrigger = true;
+
+        if (projectileRoot.transform.localScale == Vector3.zero)
+        {
+            projectileRoot.transform.localScale = Vector3.one;
+        }
+    }
+
+    private static void EnsureShipPrefabPhysics(GameObject shipRoot)
+    {
+        if (shipRoot == null)
+        {
+            return;
+        }
+
+        Rigidbody2D body = shipRoot.GetComponent<Rigidbody2D>();
+        if (body == null)
+        {
+            body = shipRoot.AddComponent<Rigidbody2D>();
+        }
+
+        body.bodyType = RigidbodyType2D.Kinematic;
+        body.gravityScale = 0f;
+        body.linearDamping = 0f;
+        body.angularDamping = 0f;
+        body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        body.interpolation = RigidbodyInterpolation2D.Interpolate;
+
+        Collider2D collider = shipRoot.GetComponentInChildren<Collider2D>(true);
+        if (collider == null)
+        {
+            CircleCollider2D fallbackCollider = shipRoot.AddComponent<CircleCollider2D>();
+            fallbackCollider.radius = 0.24f;
+        }
+    }
+
+    private static void RepairShipPrefab(string prefabPath, ShipDataSO shipData, Sprite weaponVisualSprite)
+    {
+        string prefabName = Path.GetFileNameWithoutExtension(prefabPath);
+        Sprite shipSprite = shipData != null ? shipData.shipIcon : null;
+        GameObject root = new GameObject(prefabName);
+        BuildCompleteShipHierarchy(root.transform, shipSprite, Mathf.Max(0, shipData.weaponSlotCount), weaponVisualSprite);
+        AssetDatabase.DeleteAsset(prefabPath);
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        UnityEngine.Object.DestroyImmediate(root);
+
+        if (shipData != null)
+        {
+            shipData.shipPrefab = prefab;
+            Resize(shipData.startingWeapons, Mathf.Max(0, shipData.weaponSlotCount));
+            Resize(shipData.startingModules, Mathf.Max(0, shipData.moduleSlotCount));
+            EditorUtility.SetDirty(shipData);
+        }
+    }
+
+    private static void BuildCompleteShipHierarchy(Transform root, Sprite shipSprite, int weaponSlotCount, Sprite weaponVisualSprite)
+    {
         GameObject body = new GameObject("Body");
-        body.transform.SetParent(root.transform, false);
+        body.transform.SetParent(root, false);
+        body.transform.localScale = new Vector3(0.42f, 0.55f, 1f);
         SpriteRenderer bodyRenderer = body.AddComponent<SpriteRenderer>();
         bodyRenderer.sprite = shipSprite;
         bodyRenderer.color = Color.white;
         bodyRenderer.sortingOrder = 5;
-        body.transform.localScale = new Vector3(0.42f, 0.55f, 1f);
         body.AddComponent<PolygonCollider2D>();
 
         GameObject aura = new GameObject("Aura");
-        aura.transform.SetParent(root.transform, false);
+        aura.transform.SetParent(root, false);
+        aura.transform.localScale = new Vector3(0.66f, 0.8f, 1f);
         SpriteRenderer auraRenderer = aura.AddComponent<SpriteRenderer>();
         auraRenderer.sprite = shipSprite;
         auraRenderer.color = new Color(0.42f, 0.9f, 1f, 0.28f);
         auraRenderer.sortingOrder = 4;
-        aura.transform.localScale = new Vector3(0.66f, 0.8f, 1f);
 
         GameObject thruster = new GameObject("Thruster");
-        thruster.transform.SetParent(root.transform, false);
+        thruster.transform.SetParent(root, false);
         thruster.transform.localPosition = new Vector3(0f, -0.52f, 0f);
+        thruster.transform.localScale = new Vector3(0.22f, 0.28f, 1f);
         SpriteRenderer thrusterRenderer = thruster.AddComponent<SpriteRenderer>();
         thrusterRenderer.sprite = shipSprite;
         thrusterRenderer.color = new Color(1f, 0.72f, 0.24f, 0.65f);
         thrusterRenderer.sortingOrder = 3;
-        thruster.transform.localScale = new Vector3(0.22f, 0.28f, 1f);
 
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-        Object.DestroyImmediate(root);
-        return prefab;
+        CreateEngineFire(thruster.transform, "Engine_Fire_L", new Vector3(-0.22f, -0.58f, 0f));
+        CreateEngineFire(thruster.transform, "Engine_Fire_R", new Vector3(0.22f, -0.58f, 0f));
+        CreateWeaponSlots(root, weaponSlotCount, weaponVisualSprite);
+    }
+
+    private static void FixShipVisualHelperPrefab(string prefabPath, ShipDataSO shipData)
+    {
+        GameObject root = PrefabUtility.LoadPrefabContents(prefabPath);
+        try
+        {
+            Sprite shipSprite = ResolveShipSpriteForPrefab(root.transform, shipData);
+            EnsureSpriteRenderer(root.transform.Find("Aura"), shipSprite, new Color(0.42f, 0.9f, 1f, 0.28f), 4);
+            EnsureSpriteRenderer(root.transform.Find("Thruster"), shipSprite, new Color(1f, 0.72f, 0.24f, 0.65f), 3);
+            Transform thruster = root.transform.Find("Thruster");
+            if (thruster != null)
+            {
+                EnsureEngineFireVisual(thruster, "Engine_Fire_L", new Vector3(-0.76f, 0f, 0f), shipSprite);
+                EnsureEngineFireVisual(thruster, "Engine_Fire_R", new Vector3(0.76f, 0f, 0f), shipSprite);
+            }
+
+            Transform[] children = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == "WeaponVisualInstance")
+                {
+                    children[i].localRotation = Quaternion.identity;
+                    SpriteRenderer renderer = children[i].GetComponent<SpriteRenderer>();
+                    if (renderer != null)
+                    {
+                        renderer.sortingOrder = 9;
+                    }
+                }
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(root);
+        }
+    }
+
+    private static Sprite ResolveShipSpriteForPrefab(Transform root, ShipDataSO shipData)
+    {
+        Transform body = root.Find("Body");
+        SpriteRenderer bodyRenderer = body != null ? body.GetComponent<SpriteRenderer>() : null;
+        if (bodyRenderer != null && bodyRenderer.sprite != null)
+        {
+            return bodyRenderer.sprite;
+        }
+
+        return shipData != null ? shipData.shipIcon : null;
+    }
+
+    private static void EnsureSpriteRenderer(Transform transform, Sprite sprite, Color color, int sortingOrder)
+    {
+        if (transform == null)
+        {
+            return;
+        }
+
+        SpriteRenderer renderer = transform.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = transform.gameObject.AddComponent<SpriteRenderer>();
+        }
+
+        if (renderer.sprite == null)
+        {
+            renderer.sprite = sprite;
+        }
+
+        renderer.color = color;
+        renderer.sortingOrder = sortingOrder;
+    }
+
+    private static void CreateEngineFire(Transform parent, string name, Vector3 localPosition)
+    {
+        GameObject fire = new GameObject(name);
+        fire.transform.SetParent(parent, false);
+        fire.transform.localPosition = localPosition;
+        fire.transform.localScale = new Vector3(0.22f, 0.42f, 1f);
+        SpriteRenderer renderer = fire.AddComponent<SpriteRenderer>();
+        SpriteRenderer parentRenderer = parent.GetComponent<SpriteRenderer>();
+        renderer.sprite = parentRenderer != null ? parentRenderer.sprite : null;
+        renderer.color = new Color(1f, 0.48f, 0.08f, 0.72f);
+        renderer.sortingOrder = 2;
+    }
+
+    private static void EnsureEngineFireVisual(Transform parent, string name, Vector3 localPosition, Sprite sprite)
+    {
+        Transform fire = parent.Find(name);
+        if (fire == null)
+        {
+            fire = new GameObject(name).transform;
+            fire.SetParent(parent, false);
+        }
+
+        fire.localPosition = localPosition;
+        fire.localRotation = Quaternion.identity;
+        fire.localScale = new Vector3(0.22f, 0.42f, 1f);
+        SpriteRenderer renderer = fire.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = fire.gameObject.AddComponent<SpriteRenderer>();
+        }
+
+        renderer.sprite = sprite;
+        renderer.color = new Color(1f, 0.48f, 0.08f, 0.72f);
+        renderer.sortingOrder = 2;
+    }
+
+    private static void CreateWeaponSlots(Transform root, int weaponSlotCount, Sprite weaponVisualSprite)
+    {
+        GameObject slotsRoot = new GameObject("WeaponSlots");
+        slotsRoot.transform.SetParent(root, false);
+
+        for (int i = 0; i < weaponSlotCount; i++)
+        {
+            float lerp = weaponSlotCount <= 1 ? 0.5f : i / (float)(weaponSlotCount - 1);
+            float x = Mathf.Lerp(-0.38f, 0.38f, lerp);
+            float y = Mathf.Lerp(0.58f, 0.66f, 1f - Mathf.Abs(lerp - 0.5f) * 2f);
+
+            GameObject slot = new GameObject("WeaponSlot_" + (i + 1));
+            slot.transform.SetParent(slotsRoot.transform, false);
+            slot.transform.localPosition = new Vector3(x, y, 0f);
+
+            GameObject mount = new GameObject("WeaponMount_" + (i + 1));
+            mount.transform.SetParent(slot.transform, false);
+
+            GameObject visual = new GameObject("WeaponVisualInstance");
+            visual.transform.SetParent(mount.transform, false);
+            visual.transform.localRotation = Quaternion.identity;
+            visual.transform.localScale = new Vector3(0.55f, 0.55f, 1f);
+            SpriteRenderer visualRenderer = visual.AddComponent<SpriteRenderer>();
+            visualRenderer.sprite = weaponVisualSprite;
+            visualRenderer.sortingOrder = 9;
+
+            GameObject muzzle = new GameObject("Muzzle");
+            muzzle.transform.SetParent(mount.transform, false);
+        }
     }
 
     private static ShipDataSO CreateFactoryShipData(string shipDataPath, string safeName, Sprite shipSprite, GameObject prefab)
