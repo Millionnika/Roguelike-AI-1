@@ -18,6 +18,7 @@ namespace SpaceFrontier.Player
         public SpriteRenderer BodyRenderer { get; set; }
         public SpriteRenderer AuraRenderer { get; set; }
         public SpriteRenderer ThrusterRenderer { get; set; }
+        public ShipShieldVisual ShieldVisual { get; set; }
         public ShipThrusterEffect ThrusterEffect { get; set; }
         public ShipDamageReceiver DamageReceiver { get; set; }
         public TeamMember TeamMember { get; set; }

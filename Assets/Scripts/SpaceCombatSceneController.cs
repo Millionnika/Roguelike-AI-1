@@ -39,17 +39,16 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private int targetLineSortingOrder = 1;
 
     [Header("Shield Visuals")]
+    [Tooltip("Амплитуда пульсации прозрачности щита (fallback, если ShipShieldVisual не назначен).")]
     [SerializeField, Range(0f, 0.6f)] private float shieldPulseAlpha = 0.12f;
+    [Tooltip("Скорость пульсации щита (fallback, если ShipShieldVisual не назначен).")]
     [SerializeField, Min(0.1f)] private float shieldPulseSpeed = 3.2f;
+    [Tooltip("Дополнительная яркость щита в момент попадания (fallback).")]
     [SerializeField, Range(0f, 2f)] private float shieldHitAlphaBoost = 0.55f;
+    [Tooltip("Сила подкрашивания щита при попадании (fallback).")]
     [SerializeField, Range(0f, 1f)] private float shieldHitTintStrength = 0.65f;
+    [Tooltip("Цвет подсветки щита при попадании (fallback).")]
     [SerializeField] private Color shieldHitTint = new Color(0.72f, 0.95f, 1f, 1f);
-    [SerializeField, Min(0.05f)] private float shieldImpactDuration = 0.24f;
-    [SerializeField, Min(0f)] private float shieldImpactStartScale = 0.08f;
-    [SerializeField, Min(0.01f)] private float shieldImpactEndScale = 0.52f;
-    [SerializeField, Range(0f, 2f)] private float shieldImpactAlpha = 1.2f;
-    [SerializeField, Range(0f, 3f)] private float shieldImpactDamageScale = 0.025f;
-    [SerializeField] private Color shieldImpactColor = new Color(0.78f, 0.97f, 1f, 1f);
 
     [Header("Camera")]
     [SerializeField, Min(1f)] private float cameraDefaultOrthographicSize = 9f;
@@ -70,16 +69,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         public bool oneShotExecuted;
         public float continuousAccumulator;
-    }
-
-    private sealed class ShieldImpactRipple
-    {
-        public SpriteRenderer Renderer;
-        public float Timer;
-        public float Duration;
-        public float StartScale;
-        public float EndScale;
-        public float Intensity;
     }
 
     private enum StartMenuPage
@@ -104,7 +93,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
-    private readonly List<ShieldImpactRipple> shieldImpactRipples = new List<ShieldImpactRipple>();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
 
@@ -322,7 +310,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             equipmentUiController.Bind(null);
         }
 
-        ClearShieldImpactRipples();
         backgroundParallaxService?.Dispose();
 
         if (runtimeStarLayerPrefab != null)
@@ -1141,10 +1128,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        SpawnShieldImpactRipple(
-            player != null ? player.AuraRenderer : null,
-            info.HitPoint,
-            result.AppliedShieldDamage);
+        if (player != null && player.ShieldVisual != null)
+        {
+            player.ShieldVisual.PlayImpact(info.HitPoint, result.AppliedShieldDamage);
+        }
     }
 
     private void OnEnemyDamageApplied(EnemyShip enemy, DamageInfo info, DamageResolutionResult result)
@@ -1154,7 +1141,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        SpawnShieldImpactRipple(enemy.ShieldRenderer, info.HitPoint, result.AppliedShieldDamage);
+        if (enemy.ShieldVisual != null)
+        {
+            enemy.ShieldVisual.PlayImpact(info.HitPoint, result.AppliedShieldDamage);
+        }
     }
 
     private void ApplyShipVisualFromPrefab(ShipDataSO ship)
@@ -1173,6 +1163,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.BodyRenderer = null;
         player.AuraRenderer = null;
         player.ThrusterRenderer = null;
+        player.ShieldVisual = null;
         player.ThrusterEffect = null;
 
         if (ship == null || ship.shipPrefab == null)
@@ -1190,12 +1181,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         ResolvePlayerVisualRenderers(playerVisualInstance.transform, out SpriteRenderer body, out SpriteRenderer aura, out SpriteRenderer thruster);
         player.BodyRenderer = body;
         player.AuraRenderer = aura;
-        TryAssignShieldMaterial(player.AuraRenderer);
         player.ThrusterRenderer = thruster;
         player.ThrusterEffect = EnsureThrusterEffect(playerVisualInstance);
 
         player.BaseBodyColor = body != null ? body.color : ship.accentColor;
-        player.BaseAuraColor = aura != null ? aura.color : ship.auraColor;
+        player.BaseAuraColor = aura != null && aura.color.a > 0.001f ? aura.color : ship.auraColor;
+        player.ShieldVisual = EnsureShieldVisual(playerVisualInstance, player.AuraRenderer, player.BaseAuraColor, 0f);
     }
 
     private static ShipThrusterEffect EnsureThrusterEffect(GameObject shipObject)
@@ -1796,7 +1787,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             shieldRenderer = FindChildSpriteRendererContaining(enemyObject.transform, "aura");
         }
-        TryAssignShieldMaterial(shieldRenderer);
         SpriteRenderer targetRenderer = FindChildSpriteRenderer(enemyObject.transform, "TargetRing");
         if (targetRenderer != null)
         {
@@ -1871,8 +1861,9 @@ public class SpaceCombatSceneController : MonoBehaviour
             WeaponDamageMultiplier = Mathf.Max(0.1f, shipData.damageMultiplier) * levelScale,
             Prefab = enemyPrefab,
             BaseBodyColor = bodyRenderer != null ? bodyRenderer.color : Color.white,
-            BaseShieldColor = shieldRenderer != null ? shieldRenderer.color : Color.white
+            BaseShieldColor = shieldRenderer != null && shieldRenderer.color.a > 0.001f ? shieldRenderer.color : shipData.auraColor
         };
+        enemy.ShieldVisual = EnsureShieldVisual(enemyObject, enemy.ShieldRenderer, enemy.BaseShieldColor, enemies.Count * 0.47f);
 
         if (compatibleWeapons.Count == 0 && enemyWeapon != null)
         {
@@ -2126,8 +2117,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ClearEnemies()
     {
-        ClearShieldImpactRipples();
-
         for (int i = 0; i < enemies.Count; i++)
         {
             if (enemies[i].Transform != null)
@@ -4225,14 +4214,21 @@ public class SpaceCombatSceneController : MonoBehaviour
         return null;
     }
 
-    private void TryAssignShieldMaterial(SpriteRenderer renderer)
+    private ShipShieldVisual EnsureShieldVisual(GameObject owner, SpriteRenderer renderer, Color baseColor, float pulseOffset)
     {
-        if (renderer == null || shieldHitMaterial == null)
+        if (owner == null || renderer == null)
         {
-            return;
+            return null;
         }
 
-        renderer.sharedMaterial = shieldHitMaterial;
+        ShipShieldVisual shieldVisual = owner.GetComponentInChildren<ShipShieldVisual>(true);
+        if (shieldVisual == null)
+        {
+            shieldVisual = owner.AddComponent<ShipShieldVisual>();
+        }
+
+        shieldVisual.Initialize(renderer, shieldHitMaterial, ringSprite, baseColor, pulseOffset);
+        return shieldVisual;
     }
 
     private void UpdatePlayer(float deltaTime)
@@ -4564,12 +4560,15 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateEffects(float deltaTime)
     {
-        UpdateShieldImpactRipples(deltaTime);
     }
 
     private void UpdateVisuals()
     {
-        if (player != null && player.AuraRenderer != null)
+        if (player != null && player.ShieldVisual != null)
+        {
+            player.ShieldVisual.SetShieldState(player.ShieldPercent, player.HitFlashTimer);
+        }
+        else if (player != null && player.AuraRenderer != null)
         {
             ApplyShieldVisual(player.AuraRenderer, player.BaseAuraColor, player.ShieldPercent, player.HitFlashTimer, 0f);
         }
@@ -4595,7 +4594,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         for (int i = 0; i < enemies.Count; i++)
         {
             EnemyShip enemy = enemies[i];
-            if (enemy.ShieldRenderer != null)
+            if (enemy.ShieldVisual != null)
+            {
+                float shieldHitFlash = Mathf.Max(enemy.HitFlashTimer, enemy.AttackFlashTimer * 0.35f);
+                enemy.ShieldVisual.SetShieldState(enemy.ShieldPercent, shieldHitFlash);
+            }
+            else if (enemy.ShieldRenderer != null)
             {
                 float shieldHitFlash = Mathf.Max(enemy.HitFlashTimer, enemy.AttackFlashTimer * 0.35f);
                 ApplyShieldVisual(enemy.ShieldRenderer, enemy.BaseShieldColor, enemy.ShieldPercent, shieldHitFlash, i * 0.47f);
@@ -4643,91 +4647,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         shieldColor.a = Mathf.Clamp01(alpha);
         renderer.color = shieldColor;
         renderer.enabled = shieldColor.a > 0.001f;
-    }
-
-    private void SpawnShieldImpactRipple(SpriteRenderer shieldRenderer, Vector2 hitPoint, float absorbedShieldDamage)
-    {
-        if (shieldRenderer == null || ringSprite == null)
-        {
-            return;
-        }
-
-        GameObject rippleObject = new GameObject("ShieldImpactRipple");
-        rippleObject.transform.SetParent(worldRoot != null ? worldRoot : transform, true);
-        rippleObject.transform.position = new Vector3(hitPoint.x, hitPoint.y, shieldRenderer.transform.position.z);
-        rippleObject.transform.rotation = Quaternion.identity;
-
-        SpriteRenderer rippleRenderer = rippleObject.AddComponent<SpriteRenderer>();
-        rippleRenderer.sprite = ringSprite;
-        rippleRenderer.sortingLayerID = shieldRenderer.sortingLayerID;
-        rippleRenderer.sortingOrder = shieldRenderer.sortingOrder + 1;
-        rippleRenderer.sharedMaterial = shieldRenderer.sharedMaterial;
-
-        float intensity = Mathf.Clamp01(absorbedShieldDamage * shieldImpactDamageScale);
-        if (intensity <= 0f)
-        {
-            intensity = 0.15f;
-        }
-
-        shieldImpactRipples.Add(new ShieldImpactRipple
-        {
-            Renderer = rippleRenderer,
-            Timer = 0f,
-            Duration = Mathf.Max(0.05f, shieldImpactDuration),
-            StartScale = Mathf.Max(0f, shieldImpactStartScale),
-            EndScale = Mathf.Max(shieldImpactStartScale, shieldImpactEndScale),
-            Intensity = intensity
-        });
-    }
-
-    private void ClearShieldImpactRipples()
-    {
-        for (int i = 0; i < shieldImpactRipples.Count; i++)
-        {
-            ShieldImpactRipple ripple = shieldImpactRipples[i];
-            if (ripple != null && ripple.Renderer != null)
-            {
-                Destroy(ripple.Renderer.gameObject);
-            }
-        }
-
-        shieldImpactRipples.Clear();
-    }
-
-    private void UpdateShieldImpactRipples(float deltaTime)
-    {
-        if (shieldImpactRipples.Count == 0)
-        {
-            return;
-        }
-
-        for (int i = shieldImpactRipples.Count - 1; i >= 0; i--)
-        {
-            ShieldImpactRipple ripple = shieldImpactRipples[i];
-            if (ripple == null || ripple.Renderer == null)
-            {
-                shieldImpactRipples.RemoveAt(i);
-                continue;
-            }
-
-            ripple.Timer += Mathf.Max(0f, deltaTime);
-            float duration = Mathf.Max(0.05f, ripple.Duration);
-            float t = Mathf.Clamp01(ripple.Timer / duration);
-            float fadeOut = 1f - t;
-            float eased = 1f - Mathf.Pow(1f - t, 2f);
-            float scale = Mathf.Lerp(ripple.StartScale, ripple.EndScale, eased);
-
-            ripple.Renderer.transform.localScale = new Vector3(scale, scale, 1f);
-            Color color = shieldImpactColor;
-            color.a = Mathf.Clamp01(shieldImpactAlpha * ripple.Intensity * fadeOut);
-            ripple.Renderer.color = color;
-
-            if (t >= 1f)
-            {
-                Destroy(ripple.Renderer.gameObject);
-                shieldImpactRipples.RemoveAt(i);
-            }
-        }
     }
 
     private void UpdateTargetingVisuals()

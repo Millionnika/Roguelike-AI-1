@@ -19,6 +19,7 @@ internal sealed class EnemyShip
     public Transform Transform;
     public SpriteRenderer BodyRenderer;
     public SpriteRenderer ShieldRenderer;
+    public ShipShieldVisual ShieldVisual;
     public SpriteRenderer TargetRenderer;
     public SpriteRenderer ThrusterRenderer;
     public ShipThrusterEffect ThrusterEffect;
