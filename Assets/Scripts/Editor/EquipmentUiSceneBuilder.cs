@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-using System;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -18,7 +17,7 @@ public static class EquipmentUiSceneBuilder
 
     public static void Build()
     {
-        Canvas canvas = UnityEngine.Object.FindObjectOfType<Canvas>(true);
+        Canvas canvas = Object.FindObjectOfType<Canvas>(true);
         if (canvas == null)
         {
             GameObject canvasGo = new GameObject("HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -78,7 +77,7 @@ public static class EquipmentUiSceneBuilder
             equipmentUi = panel.gameObject.AddComponent<EquipmentUIController>();
         }
 
-        SpaceCombatSceneController sceneController = UnityEngine.Object.FindObjectOfType<SpaceCombatSceneController>(true);
+        SpaceCombatSceneController sceneController = Object.FindObjectOfType<SpaceCombatSceneController>(true);
         if (sceneController == null)
         {
             Debug.LogError("EquipmentUiSceneBuilder: SpaceCombatSceneController not found in scene.");
@@ -248,10 +247,9 @@ public static class EquipmentUiSceneBuilder
 
             CircleCollider2D collider = root.AddComponent<CircleCollider2D>();
             collider.radius = 0.28f;
-            EnsureShipPrefabPhysics(root);
 
             shipPrefab = PrefabUtility.SaveAsPrefabAsset(root, ExampleShipPrefabPath);
-            UnityEngine.Object.DestroyImmediate(root);
+            Object.DestroyImmediate(root);
         }
 
         WeaponDataSO weaponData = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(ExampleWeaponPath);
@@ -304,7 +302,7 @@ public static class EquipmentUiSceneBuilder
         shipData.shipPrefab = shipPrefab;
         EditorUtility.SetDirty(shipData);
 
-        SpaceCombatSceneController controller = UnityEngine.Object.FindObjectOfType<SpaceCombatSceneController>(true);
+        SpaceCombatSceneController controller = Object.FindObjectOfType<SpaceCombatSceneController>(true);
         if (controller != null)
         {
             SerializedObject so = new SerializedObject(controller);
@@ -356,14 +354,12 @@ public static class EquipmentUiSceneBuilder
         string weaponDir = WeaponFactoryRootDir + "/" + safeName;
         EnsureFolder(weaponDir);
 
-        GameObject preparedProjectilePrefab = EnsureFactoryProjectilePrefab(weaponDir, safeName, projectilePrefab, icon);
-
         string weaponDataPath = weaponDir + "/" + safeName + "_WeaponData.asset";
         WeaponDataSO weaponData = CreateFactoryWeaponData(
             weaponDataPath,
             safeName,
             requiredClass,
-            preparedProjectilePrefab,
+            projectilePrefab,
             icon,
             fireSound,
             damage,
@@ -477,7 +473,7 @@ public static class EquipmentUiSceneBuilder
         slotSo.ApplyModifiedPropertiesWithoutUndo();
 
         PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-        UnityEngine.Object.DestroyImmediate(root);
+        Object.DestroyImmediate(root);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
@@ -491,134 +487,8 @@ public static class EquipmentUiSceneBuilder
         BuildCompleteShipHierarchy(root.transform, shipSprite, 2, railgunVisualSprite);
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-        UnityEngine.Object.DestroyImmediate(root);
+        Object.DestroyImmediate(root);
         return prefab;
-    }
-
-    private static GameObject EnsureFactoryProjectilePrefab(string weaponDir, string safeName, GameObject sourcePrefab, Sprite fallbackSprite)
-    {
-        string projectilePath = weaponDir + "/" + safeName + "_Projectile.prefab";
-        string sourcePath = sourcePrefab != null ? AssetDatabase.GetAssetPath(sourcePrefab) : string.Empty;
-
-        if (sourcePrefab == null)
-        {
-            return CreateOrUpdateProjectilePrefab(projectilePath, safeName, fallbackSprite);
-        }
-
-        if (!string.IsNullOrEmpty(sourcePath) && sourcePath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
-        {
-            GameObject root = PrefabUtility.LoadPrefabContents(sourcePath);
-            EnsureProjectilePrefabPhysics(root, fallbackSprite);
-            PrefabUtility.SaveAsPrefabAsset(root, sourcePath);
-            PrefabUtility.UnloadPrefabContents(root);
-            return AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
-        }
-
-        GameObject instance = UnityEngine.Object.Instantiate(sourcePrefab);
-        instance.name = safeName + "_Projectile";
-        EnsureProjectilePrefabPhysics(instance, fallbackSprite);
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(instance, projectilePath);
-        UnityEngine.Object.DestroyImmediate(instance);
-        return prefab;
-    }
-
-    private static GameObject CreateOrUpdateProjectilePrefab(string projectilePath, string safeName, Sprite fallbackSprite)
-    {
-        bool exists = File.Exists(projectilePath);
-        GameObject root = exists
-            ? PrefabUtility.LoadPrefabContents(projectilePath)
-            : new GameObject(safeName + "_Projectile");
-
-        EnsureProjectilePrefabPhysics(root, fallbackSprite);
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, projectilePath);
-
-        if (exists)
-        {
-            PrefabUtility.UnloadPrefabContents(root);
-        }
-        else
-        {
-            UnityEngine.Object.DestroyImmediate(root);
-        }
-
-        return prefab;
-    }
-
-    private static void EnsureProjectilePrefabPhysics(GameObject projectileRoot, Sprite fallbackSprite)
-    {
-        if (projectileRoot == null)
-        {
-            return;
-        }
-
-        SpriteRenderer renderer = projectileRoot.GetComponent<SpriteRenderer>();
-        if (renderer == null)
-        {
-            renderer = projectileRoot.AddComponent<SpriteRenderer>();
-        }
-
-        if (renderer.sprite == null && fallbackSprite != null)
-        {
-            renderer.sprite = fallbackSprite;
-        }
-
-        renderer.sortingOrder = 6;
-
-        Rigidbody2D body = projectileRoot.GetComponent<Rigidbody2D>();
-        if (body == null)
-        {
-            body = projectileRoot.AddComponent<Rigidbody2D>();
-        }
-
-        body.bodyType = RigidbodyType2D.Dynamic;
-        body.gravityScale = 0f;
-        body.linearDamping = 0f;
-        body.angularDamping = 0f;
-        body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-        body.interpolation = RigidbodyInterpolation2D.Interpolate;
-
-        Collider2D collider = projectileRoot.GetComponent<Collider2D>();
-        if (collider == null)
-        {
-            CircleCollider2D circle = projectileRoot.AddComponent<CircleCollider2D>();
-            circle.radius = 0.08f;
-            collider = circle;
-        }
-
-        collider.isTrigger = true;
-
-        if (projectileRoot.transform.localScale == Vector3.zero)
-        {
-            projectileRoot.transform.localScale = Vector3.one;
-        }
-    }
-
-    private static void EnsureShipPrefabPhysics(GameObject shipRoot)
-    {
-        if (shipRoot == null)
-        {
-            return;
-        }
-
-        Rigidbody2D body = shipRoot.GetComponent<Rigidbody2D>();
-        if (body == null)
-        {
-            body = shipRoot.AddComponent<Rigidbody2D>();
-        }
-
-        body.bodyType = RigidbodyType2D.Kinematic;
-        body.gravityScale = 0f;
-        body.linearDamping = 0f;
-        body.angularDamping = 0f;
-        body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-        body.interpolation = RigidbodyInterpolation2D.Interpolate;
-
-        Collider2D collider = shipRoot.GetComponentInChildren<Collider2D>(true);
-        if (collider == null)
-        {
-            CircleCollider2D fallbackCollider = shipRoot.AddComponent<CircleCollider2D>();
-            fallbackCollider.radius = 0.24f;
-        }
     }
 
     private static void RepairShipPrefab(string prefabPath, ShipDataSO shipData, Sprite weaponVisualSprite)
@@ -629,7 +499,7 @@ public static class EquipmentUiSceneBuilder
         BuildCompleteShipHierarchy(root.transform, shipSprite, Mathf.Max(0, shipData.weaponSlotCount), weaponVisualSprite);
         AssetDatabase.DeleteAsset(prefabPath);
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-        UnityEngine.Object.DestroyImmediate(root);
+        Object.DestroyImmediate(root);
 
         if (shipData != null)
         {

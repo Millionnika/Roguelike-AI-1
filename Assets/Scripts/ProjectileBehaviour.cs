@@ -1,5 +1,5 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
 [DisallowMultipleComponent]
 public sealed class ProjectileBehaviour : MonoBehaviour
@@ -22,6 +22,7 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private Vector2 previousPosition;
     private bool activeProjectile;
     private readonly List<Collider2D> ignoredOwnerColliders = new List<Collider2D>();
+    private readonly List<Collider2D> projectileColliders = new List<Collider2D>();
 
     internal void Initialize(
         IPoolService runtimePoolService,
@@ -59,7 +60,6 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         Debug.Log(
             $"{WeaponDebugPrefix} Projectile init: projectile={name} owner={(ownerObject != null ? ownerObject.name : "None")} team={ownerFaction} damage={damage:0.##}");
     }
-    private readonly List<Collider2D> projectileColliders = new List<Collider2D>();
 
     public void ForceDespawn()
     {
@@ -79,6 +79,11 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private void OnEnable()
     {
         previousPosition = transform.position;
+    }
+
+    private void OnDisable()
+    {
+        RestoreOwnerCollisionIgnores();
     }
 
     private void FixedUpdate()
@@ -103,11 +108,6 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         {
             Despawn();
         }
-    }
-
-    private void OnDisable()
-    {
-        RestoreOwnerCollisionIgnores();
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -189,7 +189,6 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         {
             body.linearVelocity = Vector2.zero;
         }
-        RestoreIgnoredOwnerCollisions();
 
         if (poolService != null && prefabKey != null)
         {
@@ -223,83 +222,6 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         }
 
         projectileCollider.isTrigger = true;
-    }
-
-    private TeamMember ResolveTargetTeamMember(Collider2D hitCollider)
-    {
-        if (hitCollider == null)
-        {
-            return null;
-        }
-
-        Transform root = hitCollider.transform.root;
-        TeamMember rootMember = root != null ? root.GetComponent<TeamMember>() : null;
-        if (rootMember != null)
-        {
-            return rootMember;
-        }
-
-        return hitCollider.GetComponentInParent<TeamMember>();
-    }
-
-    private IDamageable ResolveTargetDamageable(Collider2D hitCollider)
-    {
-        if (hitCollider == null)
-        {
-            return null;
-        }
-
-        Transform root = hitCollider.transform.root;
-        IDamageable rootDamageable = root != null ? root.GetComponent<IDamageable>() : null;
-        if (rootDamageable != null)
-        {
-            return rootDamageable;
-        }
-
-        return hitCollider.GetComponentInParent<IDamageable>();
-    }
-
-    private void IgnoreOwnerColliders()
-    {
-        if (ownerObject == null || projectileCollider == null)
-        {
-            return;
-        }
-
-        Collider2D[] ownerColliders = ownerObject.GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < ownerColliders.Length; i++)
-        {
-            Collider2D ownerCollider = ownerColliders[i];
-            if (ownerCollider == null || ownerCollider == projectileCollider)
-            {
-                continue;
-            }
-
-            Physics2D.IgnoreCollision(projectileCollider, ownerCollider, true);
-            ignoredOwnerColliders.Add(ownerCollider);
-        }
-    }
-
-    private void RestoreIgnoredOwnerCollisions()
-    {
-        if (projectileCollider == null)
-        {
-            ignoredOwnerColliders.Clear();
-            return;
-        }
-
-        for (int i = 0; i < ignoredOwnerColliders.Count; i++)
-        {
-            Collider2D ownerCollider = ignoredOwnerColliders[i];
-            if (ownerCollider == null)
-            {
-                continue;
-            }
-
-            Physics2D.IgnoreCollision(projectileCollider, ownerCollider, false);
-        }
-
-        ignoredOwnerColliders.Clear();
     }
 
     private void ConfigureOwnerCollisionIgnores()

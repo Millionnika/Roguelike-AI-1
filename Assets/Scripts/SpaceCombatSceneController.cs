@@ -2140,7 +2140,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreateCombatLogPanel(uiRoot);
         CreateGateHint(uiRoot);
         CreatePlayerStatusHud(uiRoot);
-        CreateEquipmentHud(uiRoot);
+        if (uiRoot.Find("EquipmentPanel") == null)
+        {
+            CreateEquipmentHud(uiRoot);
+        }
         CreateModuleHud(uiRoot);
         CreatePauseHudButton(uiRoot);
         CreateStatusLabel(uiRoot);
@@ -2327,13 +2330,26 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Transform authoredPanel = uiRoot.Find("EquipmentPanel");
         Transform runtimePanel = uiRoot.Find("EquipmentPanelRuntime");
-        Transform panel = authoredPanel != null ? authoredPanel : runtimePanel;
+        Transform panel = authoredPanel;
         if (panel == null)
         {
+            if (runtimePanel != null)
+            {
+                runtimePanel.gameObject.SetActive(false);
+            }
             return;
         }
 
         panel.gameObject.SetActive(true);
+        if (runtimePanel != null)
+        {
+            runtimePanel.gameObject.SetActive(false);
+        }
+
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        bool panelHadInvertedAnchors = NormalizeAuthoredRect(panelRect);
+        AlignEquipmentPanelToModulePanelIfNeeded(uiRoot, panelRect, panelHadInvertedAnchors);
+
         DisableDuplicateEquipmentPanels(uiRoot, panel);
 
         EquipmentUIController runtimeController = panel.GetComponent<EquipmentUIController>();
@@ -2521,10 +2537,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         EnsureButton(buttonTransform);
+        RectTransform buttonRect = buttonTransform.GetComponent<RectTransform>();
+        NormalizeAuthoredRect(buttonRect);
         return new UiButtonView
         {
             Id = id,
-            Rect = buttonTransform.GetComponent<RectTransform>(),
+            Rect = buttonRect,
             Background = buttonTransform.GetComponent<Image>(),
             Label = FindText(buttonTransform, "Label")
         };
@@ -2536,6 +2554,79 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             target.gameObject.AddComponent<Button>();
         }
+    }
+
+    private static bool NormalizeAuthoredRect(RectTransform rect)
+    {
+        if (rect == null)
+        {
+            return false;
+        }
+
+        Vector2 anchorMin = rect.anchorMin;
+        Vector2 anchorMax = rect.anchorMax;
+        bool changed = false;
+
+        if (anchorMin.x > anchorMax.x)
+        {
+            float temp = anchorMin.x;
+            anchorMin.x = anchorMax.x;
+            anchorMax.x = temp;
+            changed = true;
+        }
+
+        if (anchorMin.y > anchorMax.y)
+        {
+            float temp = anchorMin.y;
+            anchorMin.y = anchorMax.y;
+            anchorMax.y = temp;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+        }
+
+        return changed;
+    }
+
+    private static void AlignEquipmentPanelToModulePanelIfNeeded(Transform uiRoot, RectTransform equipmentPanelRect, bool forceAlign)
+    {
+        if (uiRoot == null || equipmentPanelRect == null)
+        {
+            return;
+        }
+
+        Transform modulePanelTransform = uiRoot.Find("ModulePanel");
+        RectTransform modulePanelRect = modulePanelTransform != null ? modulePanelTransform.GetComponent<RectTransform>() : null;
+        if (modulePanelRect == null)
+        {
+            return;
+        }
+
+        bool hasInvalidAnchors =
+            equipmentPanelRect.anchorMin.x > equipmentPanelRect.anchorMax.x ||
+            equipmentPanelRect.anchorMin.y > equipmentPanelRect.anchorMax.y;
+
+        bool hasInvalidSize = equipmentPanelRect.sizeDelta.x <= 0f || equipmentPanelRect.sizeDelta.y <= 0f;
+        bool shouldAutoAlign = forceAlign || hasInvalidAnchors || hasInvalidSize;
+        if (!shouldAutoAlign)
+        {
+            return;
+        }
+
+        equipmentPanelRect.anchorMin = modulePanelRect.anchorMin;
+        equipmentPanelRect.anchorMax = modulePanelRect.anchorMax;
+        equipmentPanelRect.pivot = modulePanelRect.pivot;
+
+        float moduleWidth = Mathf.Max(200f, modulePanelRect.sizeDelta.x);
+        float moduleHeight = Mathf.Max(48f, modulePanelRect.sizeDelta.y);
+        equipmentPanelRect.sizeDelta = new Vector2(moduleWidth * 1.95f, moduleHeight * 1.9f);
+        equipmentPanelRect.anchoredPosition = new Vector2(
+            modulePanelRect.anchoredPosition.x + moduleWidth + 26f,
+            modulePanelRect.anchoredPosition.y);
     }
 
     private static Image FindImage(Transform root, string path)
@@ -2825,7 +2916,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void CreateEquipmentHud(Transform parent)
     {
-        RectTransform panel = new GameObject("EquipmentPanelRuntime", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup)).GetComponent<RectTransform>();
+        RectTransform panel = new GameObject("EquipmentPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup)).GetComponent<RectTransform>();
         panel.SetParent(parent, false);
         panel.anchorMin = new Vector2(0.5f, 0f);
         panel.anchorMax = new Vector2(0.5f, 0f);

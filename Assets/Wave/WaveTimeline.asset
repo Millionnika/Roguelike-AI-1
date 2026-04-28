@@ -18,3 +18,13 @@ MonoBehaviour:
     pattern: 0
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
     count: 4
+  - startTime: 35
+    duration: 1
+    pattern: 0
+    shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
+    count: 5
+  - startTime: 72
+    duration: 1
+    pattern: 0
+    shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
+    count: 6

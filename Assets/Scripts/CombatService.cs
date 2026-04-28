@@ -498,12 +498,54 @@ internal sealed class CombatService : ICombatService
             projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
             projectileMaxDistance: maxDistance,
             projectileLifetime: lifetime);
-        CombatLayerUtility.ApplyProjectileLayer(projectileObject, ownerFaction);
 
         CombatLayerUtility.ApplyProjectileLayer(projectileObject, ownerFaction);
         Debug.Log(
             $"{WeaponDebugPrefix} Projectile spawned: muzzle={(weapon.MuzzleTransform != null ? weapon.MuzzleTransform.name : "None")} position={origin} scale={projectileObject.transform.localScale.x:0.###}");
         return true;
+    }
+
+    private static void ConfigureProjectileTrail(GameObject projectileObject, CombatFaction ownerFaction)
+    {
+        if (projectileObject == null)
+        {
+            return;
+        }
+
+        TrailRenderer trail = projectileObject.GetComponent<TrailRenderer>();
+        if (trail == null)
+        {
+            trail = projectileObject.AddComponent<TrailRenderer>();
+        }
+
+        trail.time = 0.28f;
+        trail.minVertexDistance = 0.02f;
+        trail.widthMultiplier = 0.08f;
+        trail.autodestruct = false;
+        trail.emitting = true;
+        trail.sortingOrder = 5;
+        trail.material = GetProjectileTrailMaterial();
+        Color start = ownerFaction == CombatFaction.Player
+            ? new Color(0.35f, 0.9f, 1f, 0.95f)
+            : new Color(1f, 0.38f, 0.24f, 0.95f);
+        Color end = new Color(start.r, start.g, start.b, 0f);
+        trail.startColor = start;
+        trail.endColor = end;
+        trail.Clear();
+    }
+
+    private static Material projectileTrailMaterial;
+
+    private static Material GetProjectileTrailMaterial()
+    {
+        if (projectileTrailMaterial != null)
+        {
+            return projectileTrailMaterial;
+        }
+
+        Shader shader = Shader.Find("Sprites/Default");
+        projectileTrailMaterial = shader != null ? new Material(shader) : null;
+        return projectileTrailMaterial;
     }
 
     private bool FireHitscan(
@@ -603,107 +645,6 @@ internal sealed class CombatService : ICombatService
         return false;
     }
 
-    private static void ConfigureProjectileTrail(GameObject projectileObject, CombatFaction ownerFaction)
-    {
-        if (projectileObject == null)
-        {
-            return;
-        }
-
-        TrailRenderer trail = projectileObject.GetComponent<TrailRenderer>();
-        if (trail == null)
-        {
-            trail = projectileObject.AddComponent<TrailRenderer>();
-        }
-
-        trail.time = 0.28f;
-        trail.minVertexDistance = 0.02f;
-        trail.widthMultiplier = 0.08f;
-        trail.autodestruct = false;
-        trail.emitting = true;
-        trail.sortingOrder = 5;
-        trail.material = GetProjectileTrailMaterial();
-        Color start = ownerFaction == CombatFaction.Player
-            ? new Color(0.35f, 0.9f, 1f, 0.95f)
-            : new Color(1f, 0.38f, 0.24f, 0.95f);
-        Color end = new Color(start.r, start.g, start.b, 0f);
-        trail.startColor = start;
-        trail.endColor = end;
-        trail.Clear();
-    }
-
-    private static Material projectileTrailMaterial;
-
-    private static Material GetProjectileTrailMaterial()
-    {
-        if (projectileTrailMaterial != null)
-        {
-            return projectileTrailMaterial;
-        }
-
-        Shader shader = Shader.Find("Sprites/Default");
-        projectileTrailMaterial = shader != null ? new Material(shader) : null;
-        return projectileTrailMaterial;
-    }
-
-    private static DamageInfo BuildDamageInfo(
-        float amount,
-        CombatFaction sourceFaction,
-        GameObject sourceObject,
-        WeaponDataSO weaponData,
-        Vector2 hitPoint,
-        Vector2 direction)
-    {
-        return new DamageInfo
-        {
-            Amount = Mathf.Max(0f, amount),
-            SourceFaction = sourceFaction,
-            Source = sourceObject,
-            WeaponData = weaponData,
-            HitPoint = hitPoint,
-            Direction = direction
-        };
-    }
-
-    private void ApplyDamageToPlayer(CombatUpdateContext context, DamageInfo info, string enemyId)
-    {
-        if (context.Player.DamageReceiver != null)
-        {
-            context.Player.DamageReceiver.TakeDamage(info);
-        }
-        else
-        {
-            ApplyDamage(context.Player.Stats, info.Amount);
-        }
-
-        context.Player.HitFlashTimer = 1f;
-        context.LogMessage?.Invoke(enemyId + context.Localize("log_enemy_hits") + Mathf.RoundToInt(info.Amount), "hit");
-    }
-
-    private static TeamMember ResolveTeamMember(Collider2D collider)
-    {
-        if (collider == null)
-        {
-            return null;
-        }
-
-        Transform hierarchyRoot = collider.transform.root;
-        TeamMember rootMember = hierarchyRoot != null ? hierarchyRoot.GetComponent<TeamMember>() : null;
-        return rootMember != null ? rootMember : collider.GetComponentInParent<TeamMember>();
-    }
-
-    private static IDamageable ResolveDamageable(Collider2D collider)
-    {
-        if (collider == null)
-        {
-            return null;
-        }
-
-        Transform hierarchyRoot = collider.transform.root;
-        IDamageable rootDamageable = hierarchyRoot != null ? hierarchyRoot.GetComponent<IDamageable>() : null;
-        return rootDamageable != null ? rootDamageable : collider.GetComponentInParent<IDamageable>();
-    }
-
     private static EnemyShip FindEnemyByTeamMember(List<EnemyShip> enemies, TeamMember teamMember)
     {
         if (enemies == null || teamMember == null)
@@ -740,6 +681,64 @@ internal sealed class CombatService : ICombatService
         return collider.transform == ownerTransform || collider.transform.IsChildOf(ownerTransform);
     }
 
+    private static TeamMember ResolveTeamMember(Collider2D collider)
+    {
+        if (collider == null)
+        {
+            return null;
+        }
+
+        Transform hierarchyRoot = collider.transform.root;
+        TeamMember rootMember = hierarchyRoot != null ? hierarchyRoot.GetComponent<TeamMember>() : null;
+        return rootMember != null ? rootMember : collider.GetComponentInParent<TeamMember>();
+    }
+
+    private static IDamageable ResolveDamageable(Collider2D collider)
+    {
+        if (collider == null)
+        {
+            return null;
+        }
+
+        Transform hierarchyRoot = collider.transform.root;
+        IDamageable rootDamageable = hierarchyRoot != null ? hierarchyRoot.GetComponent<IDamageable>() : null;
+        return rootDamageable != null ? rootDamageable : collider.GetComponentInParent<IDamageable>();
+    }
+
+    private static DamageInfo BuildDamageInfo(
+        float amount,
+        CombatFaction sourceFaction,
+        GameObject sourceObject,
+        WeaponDataSO weaponData,
+        Vector2 hitPoint,
+        Vector2 direction)
+    {
+        return new DamageInfo
+        {
+            Amount = Mathf.Max(0f, amount),
+            SourceFaction = sourceFaction,
+            Source = sourceObject,
+            WeaponData = weaponData,
+            HitPoint = hitPoint,
+            Direction = direction
+        };
+    }
+
+    private void ApplyDamageToPlayer(CombatUpdateContext context, DamageInfo info, string enemyId)
+    {
+        if (context.Player.DamageReceiver != null)
+        {
+            context.Player.DamageReceiver.TakeDamage(info);
+        }
+        else
+        {
+            ApplyDamage(context.Player.Stats, info.Amount);
+        }
+
+        context.Player.HitFlashTimer = 1f;
+        context.LogMessage?.Invoke(enemyId + context.Localize("log_enemy_hits") + Mathf.RoundToInt(info.Amount), "hit");
+    }
+
     private static ModuleState GetWeaponControlModule(List<ModuleState> modules)
     {
         if (modules == null)
@@ -762,8 +761,7 @@ internal sealed class CombatService : ICombatService
     {
         if (weapon?.OwnerObject != null)
         {
-            TeamMember member = weapon.OwnerObject.transform.root.GetComponent<TeamMember>();
-            member ??= weapon.OwnerObject.GetComponentInParent<TeamMember>();
+            TeamMember member = weapon.OwnerObject.GetComponentInParent<TeamMember>();
             if (member != null)
             {
                 return member.Faction;

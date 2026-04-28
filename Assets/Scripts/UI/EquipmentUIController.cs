@@ -13,6 +13,14 @@ public sealed class EquipmentUIController : MonoBehaviour
     [SerializeField] private Transform weaponSlotsContainer;
     [SerializeField] private Transform moduleSlotsContainer;
 
+    [Header("Responsive Layout")]
+    [SerializeField] private bool autoResizeSlots = true;
+    [SerializeField, Min(0f)] private float panelPadding = 10f;
+    [SerializeField, Min(0f)] private float rowSpacing = 8f;
+    [SerializeField, Min(0f)] private float slotSpacing = 10f;
+    [SerializeField, Min(12f)] private float minRowHeight = 32f;
+    [SerializeField, Min(8f)] private float minSlotSize = 16f;
+
     private readonly List<SlotUI> weaponSlots = new List<SlotUI>();
     private readonly List<SlotUI> moduleSlots = new List<SlotUI>();
     private bool subscribed;
@@ -49,6 +57,11 @@ public sealed class EquipmentUIController : MonoBehaviour
     private void OnDisable()
     {
         Unsubscribe();
+    }
+
+    private void OnRectTransformDimensionsChange()
+    {
+        ApplyResponsiveLayout();
     }
 
     public void Bind(SpaceCombatSceneController controller)
@@ -112,6 +125,7 @@ public sealed class EquipmentUIController : MonoBehaviour
             slot.Setup(icon, (i + 1).ToString());
         }
 
+        ApplyResponsiveLayout();
         RefreshCooldowns(state);
     }
 
@@ -180,7 +194,7 @@ public sealed class EquipmentUIController : MonoBehaviour
 
     private void EnsureSlotCount(List<SlotUI> slots, Transform container, int targetCount, string prefix)
     {
-        CaptureExistingSlots(slots, container);
+        SyncSlotsFromContainer(slots, container);
 
         while (slots.Count > targetCount)
         {
@@ -203,9 +217,15 @@ public sealed class EquipmentUIController : MonoBehaviour
         }
     }
 
-    private static void CaptureExistingSlots(List<SlotUI> slots, Transform container)
+    private static void SyncSlotsFromContainer(List<SlotUI> slots, Transform container)
     {
-        if (container == null || slots == null || slots.Count > 0)
+        if (slots == null)
+        {
+            return;
+        }
+
+        slots.Clear();
+        if (container == null)
         {
             return;
         }
@@ -213,7 +233,7 @@ public sealed class EquipmentUIController : MonoBehaviour
         for (int i = 0; i < container.childCount; i++)
         {
             SlotUI existing = container.GetChild(i).GetComponent<SlotUI>();
-            if (existing != null)
+            if (existing != null && !slots.Contains(existing))
             {
                 slots.Add(existing);
             }
@@ -234,6 +254,192 @@ public sealed class EquipmentUIController : MonoBehaviour
                 slots.RemoveAt(i);
             }
         }
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (!autoResizeSlots)
+        {
+            return;
+        }
+
+        RectTransform panelRect = transform as RectTransform;
+        RectTransform weaponsRect = weaponSlotsContainer as RectTransform;
+        RectTransform modulesRect = moduleSlotsContainer as RectTransform;
+        if (panelRect == null || weaponsRect == null || modulesRect == null)
+        {
+            return;
+        }
+
+        NormalizePanelRect(panelRect);
+        DisableConflictingPanelLayout(panelRect);
+
+        float panelWidth = Mathf.Max(1f, panelRect.rect.width);
+        float panelHeight = Mathf.Max(1f, panelRect.rect.height);
+        float usableHeight = Mathf.Max(1f, panelHeight - panelPadding * 2f - rowSpacing);
+        float rowHeight = Mathf.Max(minRowHeight, usableHeight * 0.5f);
+
+        SetRowRect(weaponsRect, panelPadding, rowHeight, panelPadding);
+        SetRowRect(modulesRect, panelPadding + rowHeight + rowSpacing, rowHeight, panelPadding);
+
+        UpdateRowLayoutGroup(weaponsRect);
+        UpdateRowLayoutGroup(modulesRect);
+        ResizeSlotsToRow(weaponsRect, weaponSlots);
+        ResizeSlotsToRow(modulesRect, moduleSlots);
+    }
+
+    private static void NormalizePanelRect(RectTransform panelRect)
+    {
+        if (panelRect == null)
+        {
+            return;
+        }
+
+        Vector2 anchorMin = panelRect.anchorMin;
+        Vector2 anchorMax = panelRect.anchorMax;
+        if (anchorMin.x > anchorMax.x)
+        {
+            float temp = anchorMin.x;
+            anchorMin.x = anchorMax.x;
+            anchorMax.x = temp;
+        }
+
+        if (anchorMin.y > anchorMax.y)
+        {
+            float temp = anchorMin.y;
+            anchorMin.y = anchorMax.y;
+            anchorMax.y = temp;
+        }
+
+        panelRect.anchorMin = anchorMin;
+        panelRect.anchorMax = anchorMax;
+        panelRect.localScale = Vector3.one;
+    }
+
+    private static void DisableConflictingPanelLayout(RectTransform panelRect)
+    {
+        if (panelRect == null)
+        {
+            return;
+        }
+
+        VerticalLayoutGroup verticalLayout = panelRect.GetComponent<VerticalLayoutGroup>();
+        if (verticalLayout != null && verticalLayout.enabled)
+        {
+            verticalLayout.enabled = false;
+        }
+
+        ContentSizeFitter fitter = panelRect.GetComponent<ContentSizeFitter>();
+        if (fitter != null && fitter.enabled)
+        {
+            fitter.enabled = false;
+        }
+    }
+
+    private static void SetRowRect(RectTransform rowRect, float topOffset, float height, float horizontalPadding)
+    {
+        rowRect.anchorMin = new Vector2(0f, 1f);
+        rowRect.anchorMax = new Vector2(1f, 1f);
+        rowRect.pivot = new Vector2(0.5f, 1f);
+        rowRect.offsetMin = new Vector2(horizontalPadding, -topOffset - height);
+        rowRect.offsetMax = new Vector2(-horizontalPadding, -topOffset);
+    }
+
+    private void UpdateRowLayoutGroup(RectTransform rowRect)
+    {
+        HorizontalLayoutGroup layoutGroup = rowRect.GetComponent<HorizontalLayoutGroup>();
+        if (layoutGroup == null)
+        {
+            return;
+        }
+
+        layoutGroup.spacing = slotSpacing;
+        layoutGroup.childAlignment = TextAnchor.MiddleLeft;
+        layoutGroup.childControlWidth = true;
+        layoutGroup.childControlHeight = true;
+        layoutGroup.childForceExpandWidth = false;
+        layoutGroup.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = rowRect.GetComponent<ContentSizeFitter>();
+        if (fitter != null && fitter.enabled)
+        {
+            fitter.enabled = false;
+        }
+    }
+
+    private void ResizeSlotsToRow(RectTransform rowRect, List<SlotUI> slots)
+    {
+        if (rowRect == null || slots == null || slots.Count == 0)
+        {
+            return;
+        }
+
+        HorizontalLayoutGroup layoutGroup = rowRect.GetComponent<HorizontalLayoutGroup>();
+        float spacing = layoutGroup != null ? layoutGroup.spacing : slotSpacing;
+        int paddingLeft = layoutGroup != null ? layoutGroup.padding.left : 0;
+        int paddingRight = layoutGroup != null ? layoutGroup.padding.right : 0;
+        int paddingTop = layoutGroup != null ? layoutGroup.padding.top : 0;
+        int paddingBottom = layoutGroup != null ? layoutGroup.padding.bottom : 0;
+
+        int count = 0;
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i] != null)
+            {
+                count++;
+            }
+        }
+        if (count == 0)
+        {
+            return;
+        }
+
+        float usableWidth = Mathf.Max(1f, rowRect.rect.width - paddingLeft - paddingRight - spacing * Mathf.Max(0, count - 1));
+        float usableHeight = Mathf.Max(1f, rowRect.rect.height - paddingTop - paddingBottom);
+        float slotSize = Mathf.Max(minSlotSize, Mathf.Min(usableWidth / count, usableHeight));
+
+        for (int i = 0; i < slots.Count; i++)
+        {
+            SlotUI slot = slots[i];
+            if (slot == null)
+            {
+                continue;
+            }
+
+            RectTransform slotRect = slot.transform as RectTransform;
+            if (slotRect != null)
+            {
+                NormalizeSlotRect(slotRect);
+                slotRect.sizeDelta = new Vector2(slotSize, slotSize);
+            }
+
+            LayoutElement layoutElement = slot.GetComponent<LayoutElement>();
+            if (layoutElement == null)
+            {
+                layoutElement = slot.gameObject.AddComponent<LayoutElement>();
+            }
+
+            layoutElement.minWidth = minSlotSize;
+            layoutElement.minHeight = minSlotSize;
+            layoutElement.preferredWidth = slotSize;
+            layoutElement.preferredHeight = slotSize;
+            layoutElement.flexibleWidth = 0f;
+            layoutElement.flexibleHeight = 0f;
+        }
+    }
+
+    private static void NormalizeSlotRect(RectTransform slotRect)
+    {
+        if (slotRect == null)
+        {
+            return;
+        }
+
+        slotRect.anchorMin = new Vector2(0.5f, 0.5f);
+        slotRect.anchorMax = new Vector2(0.5f, 0.5f);
+        slotRect.pivot = new Vector2(0.5f, 0.5f);
+        slotRect.anchoredPosition = Vector2.zero;
+        slotRect.localScale = Vector3.one;
     }
 
     private static SlotUI CreateRuntimeSlot(Transform parent, string objectName)
