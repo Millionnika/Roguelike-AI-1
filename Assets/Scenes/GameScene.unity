@@ -27492,6 +27492,90 @@ Material:
     - _UnderlayColor: {r: 0, g: 0, b: 0, a: 0.5}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
+--- !u!1 &1649103437
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1649103441}
+  - component: {fileID: 1649103440}
+  - component: {fileID: 1649103439}
+  - component: {fileID: 1649103438}
+  m_Layer: 0
+  m_Name: GameManagers
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1649103438
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1649103437}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3691091adad17c84c9dff65c362f54f2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunEventDirector
+  config: {fileID: 11400000, guid: 339d20614a9658343a506b8240181fb6, type: 2}
+  currentTension: 1
+  combatStreak: 0
+  completedNodeCount: 0
+  lastPlayerHullPercent: 1
+  lastDamageTaken: 0
+  lastCompletedNodeType: 0
+--- !u!114 &1649103439
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1649103437}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5ff4d6eaebc0a14d91afd6625af236f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunMapDirector
+  config: {fileID: 11400000, guid: 13451997ac2c3e54bb4c1bed0689adc0, type: 2}
+  encounterPool: {fileID: 11400000, guid: 39bc13502805afc4280d59f883e4d2fc, type: 2}
+  eventDirector: {fileID: 1649103438}
+--- !u!114 &1649103440
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1649103437}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35913a05366f6574f8fbd145b6ecd510, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunManager
+  currentEncounter: {fileID: 0}
+  lastSelectedEncounter: {fileID: 0}
+  completedEncounterCount: 0
+  runStarted: 0
+--- !u!4 &1649103441
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1649103437}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!21 &1649252487
 Material:
   serializedVersion: 8
@@ -28619,6 +28703,18 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0ee6c6b9a0b1c644d8595ee8f3c68c16, type: 2}
   - {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
   currentTimeline: {fileID: 11400000, guid: f377acad0504b83458ca04b67eed1de1, type: 2}
+  runManager: {fileID: 1649103440}
+  runMapDirector: {fileID: 1649103439}
+  runEventDirector: {fileID: 1649103438}
+  testNextEncounters:
+  - {fileID: 11400000, guid: 6653bd4c3e84d254c9ce40c0246bc4bb, type: 2}
+  - {fileID: 11400000, guid: 6371f763495561347a30ea3d051d432c, type: 2}
+  - {fileID: 11400000, guid: 89a8ab037405ecf4d956e7d1f1788f3f, type: 2}
+  - {fileID: 11400000, guid: e9381c7d90631244c822707d18531fef, type: 2}
+  - {fileID: 11400000, guid: 4fcb9ce8d001a1f4b846c2de32724102, type: 2}
+  - {fileID: 11400000, guid: d0dcfbcfc2740b14bb54d58ad31f8ae2, type: 2}
+  repairHullPercent: 0.2
+  restHullPercent: 0.1
   backgroundLayers:
   - prefab: {fileID: 0}
     parallaxFactor: 0
@@ -36045,3 +36141,4 @@ SceneRoots:
   - {fileID: 1838064861}
   - {fileID: 1484860474}
   - {fileID: 203070026}
+  - {fileID: 1649103441}

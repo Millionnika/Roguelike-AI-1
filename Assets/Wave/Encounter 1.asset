@@ -15,6 +15,6 @@ MonoBehaviour:
   displayName: New Encounter
   nodeType: 1
   icon: {fileID: -2121471355247410076, guid: 4d8bf4247624e9f47b0baee3920bf946, type: 3}
-  waveTimeline: {fileID: 11400000, guid: f377acad0504b83458ca04b67eed1de1, type: 2}
+  waveTimeline: {fileID: 11400000, guid: d8c4e80cea8c5254b96211a1dd793cf7, type: 2}
   dangerLevel: 1
   shortDescription: 

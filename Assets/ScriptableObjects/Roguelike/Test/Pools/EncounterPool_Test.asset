@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 08bcc39f8d9f8414a90c4f4f9055be76, type: 3}
+  m_Name: EncounterPool_Test
+  m_EditorClassIdentifier: Assembly-CSharp::EncounterPoolSO
+  encounters:
+  - {fileID: 11400000, guid: e9381c7d90631244c822707d18531fef, type: 2}
+  - {fileID: 11400000, guid: 4fcb9ce8d001a1f4b846c2de32724102, type: 2}
+  - {fileID: 11400000, guid: d0dcfbcfc2740b14bb54d58ad31f8ae2, type: 2}
+  - {fileID: 11400000, guid: 0c5b1cb2cba51824bb2fb3b6cb31536a, type: 2}
+  - {fileID: 11400000, guid: d7cb94d4420ce6444ab40d37d1da1ada, type: 2}

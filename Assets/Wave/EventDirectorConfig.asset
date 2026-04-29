@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bde97afbf1056d4899e19afa00b5711, type: 3}
+  m_Name: EventDirectorConfig
+  m_EditorClassIdentifier: Assembly-CSharp::EventDirectorConfigSO
+  lowHullThreshold: 0.35
+  heavyDamageThreshold: 0.35
+  combatStreakLimit: 3
+  repairWeightBoostWhenLowHull: 2
+  shopWeightBoostWhenLowHull: 1.5
+  resourceWeightBoostWhenLowHull: 1.5
+  restWeightBoostWhenHighTension: 1.5
+  eliteWeightPenaltyWhenLowHull: 0.4
+  eliteWeightBoostWhenPlayerStrong: 1.3
+  combatWeightBoostWhenPlayerStrong: 1.2
+  combatWeightPenaltyAfterCombatStreak: 0.5
+  difficultyGrowthPerCompletedNode: 0.1

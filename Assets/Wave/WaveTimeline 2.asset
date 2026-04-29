@@ -15,7 +15,7 @@ MonoBehaviour:
   events:
   - startTime: 1
     duration: 1
-    pattern: 0
+    pattern: 1
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
     count: 2
   - startTime: 11
@@ -25,6 +25,6 @@ MonoBehaviour:
     count: 1
   - startTime: 15
     duration: 1
-    pattern: 0
+    pattern: 1
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
     count: 2
