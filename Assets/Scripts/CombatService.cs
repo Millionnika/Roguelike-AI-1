@@ -420,7 +420,7 @@ internal sealed class CombatService : ICombatService
 
         if (useProjectile)
         {
-            fired = SpawnProjectile(context, weapon, ownerFaction, shotDirection, shotDamage);
+            fired = SpawnProjectile(context, weapon, ownerFaction, shotDirection, shotDamage, fallbackTargetPosition);
         }
         else
         {
@@ -440,7 +440,8 @@ internal sealed class CombatService : ICombatService
         WeaponInstance weapon,
         CombatFaction ownerFaction,
         Vector2 shotDirection,
-        float shotDamage)
+        float shotDamage,
+        Vector3 fallbackTargetPosition)
     {
         if (context.PoolService == null || context.ProjectileRoot == null)
         {
@@ -494,6 +495,7 @@ internal sealed class CombatService : ICombatService
             sourceFaction: ownerFaction,
             sourceWeaponData: weapon.Data,
             startDirection: shotDirection,
+            preferredTargetPoint: fallbackTargetPosition,
             projectileDamage: shotDamage,
             projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
             projectileMaxDistance: maxDistance,

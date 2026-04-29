@@ -37,8 +37,8 @@ MonoBehaviour:
   repairMultiplier: 1
   shipPrefab: {fileID: 6108330163898776736, guid: 00e5e4e2ff327ca4786c65b120efb84b, type: 3}
   startingWeapons:
-  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
-  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
+  - {fileID: 11400000, guid: b42bd98f441922549a4c41e53a9500e0, type: 2}
+  - {fileID: 11400000, guid: b42bd98f441922549a4c41e53a9500e0, type: 2}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}

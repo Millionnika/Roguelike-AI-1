@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5d4e9234307b3d4ea7f4ae0e54c9efd, type: 3}
+  m_Name: Missile
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  fireMode: 3
+  damageProfile: {fileID: 11400000, guid: 23f95f92bd4e4f4482a5d98bb2e0f002, type: 2}
+  damage: 28
+  cooldown: 0.45
+  maxRange: 14
+  firingAngle: 360
+  spreadAngle: 0
+  aimTurnSpeed: 720
+  projectileRotationOffset: 90
+  projectilePrefab: {fileID: 2057760485177685113, guid: bdfb4136817d7e641a11cc5b6acdd849, type: 3}
+  projectileSpeed: 16
+  projectileMaxDistance: 16
+  projectileLifetime: 3
+  projectileVisualScale: 0.16
+  missileTurnSpeed: 240
+  missileSeekRadius: 18
+  missileWobbleAmplitude: 0.08
+  missileWobbleFrequency: 8
+  missileAcceleration: 0.6
+  fireRate: 0.45
+  capacitorPerShot: 9
+  requiredClass: 0
+  icon: {fileID: 0}
+  visualPrefab: {fileID: 0}
+  fireSound: {fileID: 0}

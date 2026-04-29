@@ -45,6 +45,11 @@ internal sealed class SpaceCombatLocalizationService : ILocalizationService
             case "menu_exit": return ru ? "ВЫХОД" : "EXIT";
             case "menu_short": return ru ? "МЕНЮ" : "MENU";
             case "retry": return ru ? "ПОВТОРИТЬ" : "RETRY";
+            case "confirm_title": return ru ? "ПОДТВЕРЖДЕНИЕ" : "CONFIRM";
+            case "confirm_yes": return ru ? "ДА" : "YES";
+            case "confirm_no": return ru ? "НЕТ" : "NO";
+            case "confirm_exit": return ru ? "Вы уверены, что хотите выйти?" : "Are you sure you want to exit?";
+            case "confirm_to_menu": return ru ? "Выйти в главное меню?" : "Return to main menu?";
             case "pause_to_menu": return ru ? "В МЕНЮ" : "MAIN MENU";
             case "hangar_title": return ru ? "АНГАР ФЛОТА" : "STAR HANGAR";
             case "hangar_subtitle": return ru ? "Выберите корабль и начните вылет" : "Choose your ship and launch into the sector";

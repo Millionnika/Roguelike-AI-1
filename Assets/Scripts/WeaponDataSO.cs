@@ -4,51 +4,65 @@ using UnityEngine;
 public sealed class WeaponDataSO : ScriptableObject
 {
     [Header("Core")]
-    [Tooltip("Режим стрельбы: снаряды или hitscan.")]
+    [Tooltip("Weapon fire mode (projectile, hitscan, beam, missile).")]
     public FireMode fireMode = FireMode.Projectile;
-    [Tooltip("Базовый урон за выстрел.")]
+    [Tooltip("Damage split profile. If null, legacy cascade is used: Shield -> Armor -> Hull.")]
+    public DamageDistributionProfileSO damageProfile;
+    [Tooltip("Base damage per shot before ship multipliers.")]
     [Min(0f)] public float damage = 28f;
-    [Tooltip("Перезарядка между выстрелами (сек).")]
+    [Tooltip("Cooldown between shots in seconds.")]
     [Min(0f)] public float cooldown = 0.45f;
-    [Tooltip("Оптимальная/основная дальность применения.")]
+    [Tooltip("Primary effective range.")]
     [Min(0f)] public float maxRange = 6f;
-    [Tooltip("Сектор автонаведения оружия в градусах.")]
+    [Tooltip("Allowed aiming sector in degrees.")]
     [Range(0f, 360f)] public float firingAngle = 360f;
-    [Tooltip("Случайный разброс выстрела в градусах.")]
+    [Tooltip("Random spread angle in degrees.")]
     [Range(0f, 45f)] public float spreadAngle = 0f;
-    [Tooltip("Скорость доворота ствола к цели (град/сек).")]
+    [Tooltip("Turret/mount turn speed in degrees per second.")]
     [Min(1f)] public float aimTurnSpeed = 720f;
-    [Tooltip("Дополнительный поворот снаряда относительно вектора полета.")]
+    [Tooltip("Visual projectile rotation offset relative to flight direction.")]
     [Range(-180f, 180f)] public float projectileRotationOffset = 90f;
 
     [Header("Projectile")]
-    [Tooltip("Префаб снаряда.")]
+    [Tooltip("Prefab spawned as the flying projectile.")]
     public GameObject projectilePrefab;
-    [Tooltip("Скорость полета снаряда.")]
+    [Tooltip("Projectile speed.")]
     [Min(0f)] public float projectileSpeed = 18f;
-    [Tooltip("Максимальная дистанция полета снаряда.")]
+    [Tooltip("Projectile max travel distance.")]
     [Min(0f)] public float projectileMaxDistance = 8f;
-    [Tooltip("Время жизни снаряда (сек).")]
+    [Tooltip("Projectile lifetime in seconds.")]
     [Min(0f)] public float projectileLifetime = 2f;
-    [Tooltip("Визуальный масштаб снаряда.")]
+    [Tooltip("Projectile visual scale multiplier.")]
     [Min(0.01f)] public float projectileVisualScale = 0.16f;
 
+    [Header("Missile")]
+    [Tooltip("Missile turn speed toward target.")]
+    [Min(1f)] public float missileTurnSpeed = 240f;
+    [Tooltip("Missile target acquisition radius.")]
+    [Min(0.1f)] public float missileSeekRadius = 18f;
+    [Tooltip("Missile side wobble amplitude.")]
+    [Min(0f)] public float missileWobbleAmplitude = 0.08f;
+    [Tooltip("Missile side wobble frequency.")]
+    [Min(0f)] public float missileWobbleFrequency = 8f;
+    [Tooltip("Missile acceleration over time.")]
+    [Min(0f)] public float missileAcceleration = 0.6f;
+
     [Header("Legacy Compatibility")]
-    [Tooltip("Устаревший параметр: скорострельность (для совместимости).")]
+    [Tooltip("Legacy fire rate field kept for compatibility.")]
     public float fireRate = 0.45f;
-    [Tooltip("Затраты энергии за выстрел.")]
+    [Tooltip("Capacitor cost per shot.")]
     public float capacitorPerShot = 9f;
-    [Tooltip("Минимальный класс корабля для установки оружия.")]
+    [Tooltip("Minimum ship class required to equip this weapon.")]
     public ShipClass requiredClass = ShipClass.Light;
 
     [Header("Visual")]
-    [Tooltip("Иконка оружия для UI.")]
+    [Tooltip("Icon used in UI.")]
     public Sprite icon;
-    [Tooltip("Префаб визуала ствола/турели.")]
+    [Tooltip("Static weapon model/prefab placed on weapon mount (not the projectile prefab).")]
     public GameObject visualPrefab;
 
     [Header("Audio")]
-    [Tooltip("Звук выстрела.")]
+    [Tooltip("Shot sound clip.")]
     public AudioClip fireSound;
 
     private void OnValidate()

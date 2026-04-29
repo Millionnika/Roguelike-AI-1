@@ -21,6 +21,16 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private float traveledDistance;
     private Vector2 previousPosition;
     private bool activeProjectile;
+    private bool isMissile;
+    private float missileTurnSpeed;
+    private float missileSeekRadius;
+    private float missileWobbleAmplitude;
+    private float missileWobbleFrequency;
+    private float missileSpeedCurrent;
+    private float missileAcceleration;
+    private float missileTimer;
+    private Vector2 preferredTargetPoint;
+    private Transform missileTarget;
     private readonly List<Collider2D> ignoredOwnerColliders = new List<Collider2D>();
     private readonly List<Collider2D> projectileColliders = new List<Collider2D>();
 
@@ -31,6 +41,7 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         CombatFaction sourceFaction,
         WeaponDataSO sourceWeaponData,
         Vector2 startDirection,
+        Vector2 preferredTargetPoint,
         float projectileDamage,
         float projectileSpeed,
         float projectileMaxDistance,
@@ -50,13 +61,28 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         traveledDistance = 0f;
         previousPosition = transform.position;
         activeProjectile = true;
+        missileTimer = 0f;
+        missileTarget = null;
+        this.preferredTargetPoint = preferredTargetPoint;
 
         EnsurePhysicsComponents();
         ConfigureOwnerCollisionIgnores();
 
+        isMissile = weaponData != null && weaponData.fireMode == FireMode.Missile;
+        missileTurnSpeed = weaponData != null ? Mathf.Max(1f, weaponData.missileTurnSpeed) : 180f;
+        missileSeekRadius = weaponData != null ? Mathf.Max(0.1f, weaponData.missileSeekRadius) : 12f;
+        missileWobbleAmplitude = weaponData != null ? Mathf.Max(0f, weaponData.missileWobbleAmplitude) : 0f;
+        missileWobbleFrequency = weaponData != null ? Mathf.Max(0f, weaponData.missileWobbleFrequency) : 0f;
+        missileAcceleration = weaponData != null ? Mathf.Max(0f, weaponData.missileAcceleration) : 0f;
+        missileSpeedCurrent = speed;
+        if (isMissile)
+        {
+            AcquireMissileTarget();
+        }
+
         float visualOffset = weaponData != null ? weaponData.projectileRotationOffset : 0f;
         transform.rotation = Quaternion.FromToRotation(Vector3.up, direction) * Quaternion.Euler(0f, 0f, visualOffset);
-        body.linearVelocity = direction * speed;
+        MoveProjectile(direction * speed, 0f);
         Debug.Log(
             $"{WeaponDebugPrefix} Projectile init: projectile={name} owner={(ownerObject != null ? ownerObject.name : "None")} team={ownerFaction} damage={damage:0.##}");
     }
@@ -93,6 +119,15 @@ public sealed class ProjectileBehaviour : MonoBehaviour
             return;
         }
 
+        if (isMissile)
+        {
+            UpdateMissileMotion(Time.fixedDeltaTime);
+        }
+        else
+        {
+            MoveProjectile(direction * speed, Time.fixedDeltaTime);
+        }
+
         lifeTimer += Time.fixedDeltaTime;
         Vector2 currentPosition = transform.position;
         traveledDistance += Vector2.Distance(previousPosition, currentPosition);
@@ -108,6 +143,84 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         {
             Despawn();
         }
+    }
+
+    private void UpdateMissileMotion(float deltaTime)
+    {
+        missileTimer += Mathf.Max(0f, deltaTime);
+        if (missileTarget == null || !missileTarget.gameObject.activeInHierarchy)
+        {
+            AcquireMissileTarget();
+        }
+
+        Vector2 steerDirection = direction;
+        if (missileTarget != null)
+        {
+            Vector2 toTarget = ((Vector2)missileTarget.position - (Vector2)transform.position);
+            if (toTarget.sqrMagnitude > 0.0001f)
+            {
+                Vector2 desired = toTarget.normalized;
+                float maxRadians = missileTurnSpeed * Mathf.Deg2Rad * Mathf.Max(0f, deltaTime);
+                Vector3 rotated = Vector3.RotateTowards(direction, desired, maxRadians, 0f);
+                steerDirection = new Vector2(rotated.x, rotated.y);
+            }
+        }
+        else if ((preferredTargetPoint - (Vector2)transform.position).sqrMagnitude > 0.04f)
+        {
+            Vector2 toPreferred = (preferredTargetPoint - (Vector2)transform.position).normalized;
+            float maxRadians = missileTurnSpeed * Mathf.Deg2Rad * Mathf.Max(0f, deltaTime);
+            Vector3 rotated = Vector3.RotateTowards(direction, toPreferred, maxRadians, 0f);
+            steerDirection = new Vector2(rotated.x, rotated.y);
+        }
+
+        if (missileWobbleAmplitude > 0f && missileWobbleFrequency > 0f)
+        {
+            Vector2 perpendicular = new Vector2(-steerDirection.y, steerDirection.x);
+            float wobble = Mathf.Sin(missileTimer * missileWobbleFrequency) * missileWobbleAmplitude;
+            steerDirection = (steerDirection + perpendicular * wobble).normalized;
+        }
+
+        direction = steerDirection.sqrMagnitude > 0.0001f ? steerDirection.normalized : direction;
+        missileSpeedCurrent = Mathf.Max(0.1f, missileSpeedCurrent + missileAcceleration * deltaTime);
+
+        MoveProjectile(direction * missileSpeedCurrent, deltaTime);
+
+        float visualOffset = weaponData != null ? weaponData.projectileRotationOffset : 0f;
+        transform.rotation = Quaternion.FromToRotation(Vector3.up, direction) * Quaternion.Euler(0f, 0f, visualOffset);
+    }
+
+    private void AcquireMissileTarget()
+    {
+        TeamMember[] teamMembers = FindObjectsByType<TeamMember>();
+        Transform best = null;
+        float bestSqr = float.MaxValue;
+        Vector2 current = transform.position;
+        float maxSqr = missileSeekRadius * missileSeekRadius;
+
+        for (int i = 0; i < teamMembers.Length; i++)
+        {
+            TeamMember team = teamMembers[i];
+            if (team == null || team.gameObject == ownerObject)
+            {
+                continue;
+            }
+
+            if (ownerFaction != CombatFaction.Neutral && team.Faction == ownerFaction)
+            {
+                continue;
+            }
+
+            float sqr = ((Vector2)team.transform.position - current).sqrMagnitude;
+            if (sqr > maxSqr || sqr >= bestSqr)
+            {
+                continue;
+            }
+
+            bestSqr = sqr;
+            best = team.transform;
+        }
+
+        missileTarget = best;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -185,10 +298,7 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     {
         activeProjectile = false;
         RestoreOwnerCollisionIgnores();
-        if (body != null)
-        {
-            body.linearVelocity = Vector2.zero;
-        }
+        MoveProjectile(Vector2.zero, 0f);
 
         if (poolService != null && prefabKey != null)
         {
@@ -207,6 +317,8 @@ public sealed class ProjectileBehaviour : MonoBehaviour
             body = gameObject.AddComponent<Rigidbody2D>();
         }
 
+        body.bodyType = RigidbodyType2D.Kinematic;
+        body.useFullKinematicContacts = true;
         body.gravityScale = 0f;
         body.linearDamping = 0f;
         body.angularDamping = 0f;
@@ -222,6 +334,26 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         }
 
         projectileCollider.isTrigger = true;
+    }
+
+    private void MoveProjectile(Vector2 velocity, float deltaTime)
+    {
+        if (body == null)
+        {
+            if (deltaTime > 0f)
+            {
+                transform.position += (Vector3)(velocity * deltaTime);
+            }
+            return;
+        }
+
+        if (deltaTime <= 0f)
+        {
+            body.linearVelocity = Vector2.zero;
+            return;
+        }
+
+        body.MovePosition(body.position + velocity * deltaTime);
     }
 
     private void ConfigureOwnerCollisionIgnores()

@@ -5,6 +5,7 @@ using SpaceFrontier.Player;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class SpaceCombatSceneController : MonoBehaviour
@@ -22,6 +23,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private SlotUI slotUiPrefab;
     [Tooltip("Inspector: shield hit material")]
     [SerializeField] private Material shieldHitMaterial;
+    [Tooltip("Если включено, встроенное старт-меню отключается и бой начинается сразу после загрузки сцены.")]
+    [SerializeField] private bool startDirectlyFromExternalMenu = true;
+    [Tooltip("Имя сцены отдельного главного меню.")]
+    [SerializeField] private string mainMenuSceneName = "MainMenuScene";
 
     [Header("Data")]
     [Tooltip("Inspector: available ships")]
@@ -250,6 +255,12 @@ public class SpaceCombatSceneController : MonoBehaviour
     private UiButtonView pauseResumeButtonView;
     private UiButtonView pauseSettingsButtonView;
     private UiButtonView pauseMenuButtonView;
+    private UiButtonView pauseExitButtonView;
+    private UiButtonView confirmYesButtonView;
+    private UiButtonView confirmNoButtonView;
+    private GameObject confirmationPanelObject;
+    private TMP_Text confirmationTitleText;
+    private TMP_Text confirmationBodyText;
     private RectTransform overviewPanelRect;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
@@ -267,6 +278,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool gameOver;
     private bool gameStarted;
     private bool gamePaused;
+    private bool pauseSettingsOpened;
     private bool combatLogShouldSnapToBottom;
     private float gameTimer;
     private int selectedShipIndex;
@@ -284,6 +296,15 @@ public class SpaceCombatSceneController : MonoBehaviour
     private int enemySpawnSequence;
     private float targetCameraOrthographicSize;
     private readonly List<SpawnEventRuntimeState> spawnEventStates = new List<SpawnEventRuntimeState>();
+
+    private enum ConfirmAction
+    {
+        None,
+        ReturnToMainMenu,
+        ExitGame
+    }
+
+    private ConfirmAction pendingConfirmAction = ConfirmAction.None;
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
     public ShipEquipmentState CurrentEquipmentState => equipmentState;
@@ -344,11 +365,20 @@ public class SpaceCombatSceneController : MonoBehaviour
         SelectShip(GetInitialShipIndex());
         BuildHud();
         ApplyPerformanceSettings();
-        ShowStartMenu(true);
         RefreshLocalizedTexts();
-        LogMessage(Localize("log_docked"));
-        LogMessage(Localize("log_choose_hull"));
-        UpdateHud();
+
+        if (startDirectlyFromExternalMenu)
+        {
+            ShowStartMenu(false);
+            StartRun();
+        }
+        else
+        {
+            ShowStartMenu(true);
+            LogMessage(Localize("log_docked"));
+            LogMessage(Localize("log_choose_hull"));
+            UpdateHud();
+        }
     }
 
     private void OnDestroy()
@@ -584,6 +614,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void HandleStartMenuInput()
     {
+        if (HandleConfirmationInput())
+        {
+            return;
+        }
+
         Keyboard keyboard = Keyboard.current;
 
         if (keyboard != null)
@@ -592,7 +627,16 @@ public class SpaceCombatSceneController : MonoBehaviour
             {
                 if (startMenuPage == StartMenuPage.Hangar || startMenuPage == StartMenuPage.Settings)
                 {
-                    SetStartMenuPage(StartMenuPage.Main);
+                    if (pauseSettingsOpened && gamePaused)
+                    {
+                        pauseSettingsOpened = false;
+                        ShowStartMenu(false);
+                        ShowPauseMenu(true);
+                    }
+                    else
+                    {
+                        SetStartMenuPage(StartMenuPage.Main);
+                    }
                 }
             }
 
@@ -645,7 +689,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
                 if (IsButtonClicked(exitButtonView, position))
                 {
-                    ExitGame();
+                    RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
                     return;
                 }
             }
@@ -697,7 +741,16 @@ public class SpaceCombatSceneController : MonoBehaviour
 
                 if (IsButtonClicked(settingsBackButtonView, position))
                 {
-                    SetStartMenuPage(StartMenuPage.Main);
+                    if (pauseSettingsOpened && gamePaused)
+                    {
+                        pauseSettingsOpened = false;
+                        ShowStartMenu(false);
+                        ShowPauseMenu(true);
+                    }
+                    else
+                    {
+                        SetStartMenuPage(StartMenuPage.Main);
+                    }
                     return;
                 }
             }
@@ -1450,6 +1503,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameStarted = true;
         gameOver = false;
         gamePaused = false;
+        pauseSettingsOpened = false;
+        pendingConfirmAction = ConfirmAction.None;
+        if (confirmationPanelObject != null)
+        {
+            confirmationPanelObject.SetActive(false);
+        }
         levelUpPending = false;
         wave = 1;
         gameTimer = 0f;
@@ -2032,12 +2091,17 @@ public class SpaceCombatSceneController : MonoBehaviour
         GameObject existingVisual = FindExistingWeaponVisual(mountTransform);
         if (existingVisual != null)
         {
-            existingVisual.SetActive(weapon != null);
-            return;
+            Destroy(existingVisual);
         }
 
         if (weapon == null || weapon.visualPrefab == null)
         {
+            return;
+        }
+
+        if (weapon.projectilePrefab != null && weapon.visualPrefab == weapon.projectilePrefab)
+        {
+            // Prevent attaching flying projectile art as static muzzle visual.
             return;
         }
 
@@ -2294,6 +2358,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreatePerkPanel(uiRoot);
         CreateGameOverPanel(uiRoot);
         CreatePauseMenu(uiRoot);
+        CreateConfirmationPanel(uiRoot);
         CreateStartMenu(uiRoot);
         if (useVirtualJoystick)
         {
@@ -2581,6 +2646,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         pauseResumeButtonView = BindMenuButton(panel != null ? panel.Find("pause_resume") : null, "pause_resume");
         pauseSettingsButtonView = BindMenuButton(panel != null ? panel.Find("pause_settings") : null, "pause_settings");
         pauseMenuButtonView = BindMenuButton(panel != null ? panel.Find("pause_menu") : null, "pause_menu");
+        pauseExitButtonView = BindMenuButton(panel != null ? panel.Find("pause_exit") : null, "pause_exit");
         if (pauseMenuObject != null)
         {
             pauseMenuObject.SetActive(false);
@@ -2681,6 +2747,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         EnsureButton(buttonTransform);
+        EnsureButtonScaleAnimator(buttonTransform.gameObject);
         RectTransform buttonRect = buttonTransform.GetComponent<RectTransform>();
         NormalizeAuthoredRect(buttonRect);
         return new UiButtonView
@@ -3263,7 +3330,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         panelRect.anchorMin = new Vector2(0.5f, 0.5f);
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(360f, 270f);
+        panelRect.sizeDelta = new Vector2(360f, 340f);
         AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
 
         TMP_Text title = CreateText("Title", panel.transform, "PAUSE", 28, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
@@ -3273,8 +3340,40 @@ public class SpaceCombatSceneController : MonoBehaviour
         pauseResumeButtonView = CreateMenuButton(panel.transform, "pause_resume", new Vector2(0.5f, 0.5f), new Vector2(0f, 38f), new Vector2(260f, 52f));
         pauseSettingsButtonView = CreateMenuButton(panel.transform, "pause_settings", new Vector2(0.5f, 0.5f), new Vector2(0f, -24f), new Vector2(260f, 52f));
         pauseMenuButtonView = CreateMenuButton(panel.transform, "pause_menu", new Vector2(0.5f, 0.5f), new Vector2(0f, -86f), new Vector2(260f, 52f));
+        pauseExitButtonView = CreateMenuButton(panel.transform, "pause_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -148f), new Vector2(260f, 52f));
 
         pauseMenuObject.SetActive(false);
+    }
+
+    private void CreateConfirmationPanel(Transform parent)
+    {
+        confirmationPanelObject = new GameObject("ConfirmationPanel", typeof(RectTransform));
+        confirmationPanelObject.transform.SetParent(parent, false);
+        RectTransform rootRect = confirmationPanelObject.GetComponent<RectTransform>();
+        StretchToParent(rootRect);
+
+        Image dim = CreateImage("Dimmer", confirmationPanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        StretchToParent(dim.rectTransform);
+
+        Image panel = CreateImage("Panel", confirmationPanelObject.transform, new Color(0.05f, 0.1f, 0.14f, 0.98f));
+        RectTransform panelRect = panel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(460f, 230f);
+        AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
+
+        confirmationTitleText = CreateText("Title", panel.transform, Localize("confirm_title"), 28, FontStyle.Bold, Color.white);
+        confirmationTitleText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(confirmationTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -24f), new Vector2(-20f, -66f));
+
+        confirmationBodyText = CreateText("Body", panel.transform, string.Empty, 18, FontStyle.Normal, new Color(0.88f, 0.94f, 1f));
+        confirmationBodyText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(confirmationBodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -72f), new Vector2(-26f, -132f));
+
+        confirmYesButtonView = CreateMenuButton(panel.transform, "confirm_yes", new Vector2(0.5f, 0.5f), new Vector2(-90f, -72f), new Vector2(150f, 48f));
+        confirmNoButtonView = CreateMenuButton(panel.transform, "confirm_no", new Vector2(0.5f, 0.5f), new Vector2(90f, -72f), new Vector2(150f, 48f));
+        confirmationPanelObject.SetActive(false);
     }
 
     private void CreateStartMenu(Transform parent)
@@ -3469,6 +3568,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.sizeDelta = size;
         rect.anchoredPosition = anchoredPosition;
         AddOutline(buttonImage.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
+        EnsureButtonScaleAnimator(buttonImage.gameObject);
 
         TMP_Text label = CreateText("Label", buttonImage.transform, id, 20, FontStyle.Bold, Color.white);
         label.alignment = TextAlignmentOptions.Center;
@@ -3527,7 +3627,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (pauseResumeButtonView != null) pauseResumeButtonView.Label.text = Localize("menu_continue");
         if (pauseSettingsButtonView != null) pauseSettingsButtonView.Label.text = Localize("menu_settings");
         if (pauseMenuButtonView != null) pauseMenuButtonView.Label.text = Localize("pause_to_menu");
+        if (pauseExitButtonView != null) pauseExitButtonView.Label.text = Localize("menu_exit");
         if (pauseHudButtonView != null) pauseHudButtonView.Label.text = Localize("menu_short");
+        if (confirmYesButtonView != null) confirmYesButtonView.Label.text = Localize("confirm_yes");
+        if (confirmNoButtonView != null) confirmNoButtonView.Label.text = Localize("confirm_no");
+        if (confirmationTitleText != null) confirmationTitleText.text = Localize("confirm_title");
         for (int i = 0; i < fpsButtonViews.Length; i++)
         {
             if (fpsButtonViews[i] != null)
@@ -3565,6 +3669,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void HandlePausedInput()
     {
+        if (HandleConfirmationInput())
+        {
+            return;
+        }
+
         Keyboard keyboard = Keyboard.current;
         if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
         {
@@ -3572,7 +3681,11 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        HandleStartMenuInput();
+        if (startMenuObject != null && startMenuObject.activeSelf)
+        {
+            HandleStartMenuInput();
+            return;
+        }
 
         Vector2 pointerPosition;
         if (!TryGetPrimaryPointerDown(out pointerPosition))
@@ -3588,6 +3701,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (IsButtonClicked(pauseSettingsButtonView, pointerPosition))
         {
+            pauseSettingsOpened = true;
             ShowPauseMenu(false);
             ShowStartMenu(true);
             SetStartMenuPage(StartMenuPage.Settings);
@@ -3596,14 +3710,23 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (IsButtonClicked(pauseMenuButtonView, pointerPosition))
         {
-            ShowPauseMenu(false);
-            ShowStartMenu(true);
-            SetStartMenuPage(StartMenuPage.Main);
+            RequestConfirmation(ConfirmAction.ReturnToMainMenu, Localize("confirm_to_menu"));
+            return;
+        }
+
+        if (IsButtonClicked(pauseExitButtonView, pointerPosition))
+        {
+            RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
         }
     }
 
     private void HandleGameOverInput()
     {
+        if (HandleConfirmationInput())
+        {
+            return;
+        }
+
         Vector2 pointerPosition;
         if (!TryGetPrimaryPointerDown(out pointerPosition))
         {
@@ -3618,18 +3741,24 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (IsButtonClicked(gameOverMenuButtonView, pointerPosition))
         {
-            ReturnToMainMenu();
+            RequestConfirmation(ConfirmAction.ReturnToMainMenu, Localize("confirm_to_menu"));
             return;
         }
 
         if (IsButtonClicked(gameOverExitButtonView, pointerPosition))
         {
-            ExitGame();
+            RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
         }
     }
 
     private void ReturnToMainMenu()
     {
+        if (startDirectlyFromExternalMenu && !string.IsNullOrWhiteSpace(mainMenuSceneName))
+        {
+            SceneManager.LoadScene(mainMenuSceneName, LoadSceneMode.Single);
+            return;
+        }
+
         gameStarted = false;
         gameOver = false;
         gamePaused = false;
@@ -3658,6 +3787,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             pauseMenuObject.SetActive(show);
         }
+
+        if (!show)
+        {
+            pauseSettingsOpened = false;
+        }
     }
 
     private void ExitGame()
@@ -3667,6 +3801,79 @@ public class SpaceCombatSceneController : MonoBehaviour
 #else
         Application.Quit();
 #endif
+    }
+
+    private void RequestConfirmation(ConfirmAction action, string bodyText)
+    {
+        if (confirmationPanelObject == null && hudCanvas != null)
+        {
+            CreateConfirmationPanel(hudCanvas.transform);
+            RefreshStartMenuTexts();
+        }
+
+        pendingConfirmAction = action;
+        if (confirmationBodyText != null)
+        {
+            confirmationBodyText.text = bodyText;
+        }
+        if (confirmationPanelObject != null)
+        {
+            confirmationPanelObject.SetActive(true);
+        }
+    }
+
+    private bool HandleConfirmationInput()
+    {
+        if (pendingConfirmAction == ConfirmAction.None || confirmationPanelObject == null || !confirmationPanelObject.activeSelf)
+        {
+            return false;
+        }
+
+        Vector2 pointerPosition;
+        if (!TryGetPrimaryPointerDown(out pointerPosition))
+        {
+            return true;
+        }
+
+        if (IsButtonClicked(confirmNoButtonView, pointerPosition))
+        {
+            pendingConfirmAction = ConfirmAction.None;
+            confirmationPanelObject.SetActive(false);
+            return true;
+        }
+
+        if (!IsButtonClicked(confirmYesButtonView, pointerPosition))
+        {
+            return true;
+        }
+
+        ConfirmAction action = pendingConfirmAction;
+        pendingConfirmAction = ConfirmAction.None;
+        confirmationPanelObject.SetActive(false);
+
+        if (action == ConfirmAction.ReturnToMainMenu)
+        {
+            ReturnToMainMenu();
+        }
+        else if (action == ConfirmAction.ExitGame)
+        {
+            ExitGame();
+        }
+
+        return true;
+    }
+
+    private static void EnsureButtonScaleAnimator(GameObject buttonObject)
+    {
+        if (buttonObject == null)
+        {
+            return;
+        }
+
+        if (buttonObject.GetComponent<UIButtonScaleAnimator>() == null)
+        {
+            buttonObject.AddComponent<UIButtonScaleAnimator>();
+        }
     }
 
     private void StretchToParent(RectTransform rect)

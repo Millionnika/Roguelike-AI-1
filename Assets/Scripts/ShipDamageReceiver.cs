@@ -52,8 +52,15 @@ public sealed class ShipDamageReceiver : MonoBehaviour, IDamageable
         }
 
         ShipDurabilityState current = readState();
-        DamageResolutionResult result = DamageService.ResolveDamage(current, info.Amount);
+        DamageResolutionResult result = DamageService.ResolveDamage(current, info);
         writeState(result.State);
+        string weaponName = info.WeaponData != null ? info.WeaponData.name : "Fallback";
+        Debug.Log(
+            "[WeaponDebug] Damage resolved: weapon=" + weaponName +
+            " total=" + info.Amount.ToString("0.##") +
+            " shield=" + result.AppliedShieldDamage.ToString("0.##") +
+            " armor=" + result.AppliedArmorDamage.ToString("0.##") +
+            " hull=" + result.AppliedHullDamage.ToString("0.##"));
         DamageApplied?.Invoke(info, result);
 
         if (result.Destroyed)
