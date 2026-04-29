@@ -13,18 +13,18 @@ MonoBehaviour:
   m_Name: WaveTimeline
   m_EditorClassIdentifier: Assembly-CSharp::WaveTimelineSO
   events:
-  - startTime: 2
+  - startTime: 1
     duration: 1
     pattern: 0
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
-    count: 4
-  - startTime: 35
+    count: 2
+  - startTime: 11
     duration: 1
     pattern: 0
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
-    count: 5
-  - startTime: 72
+    count: 1
+  - startTime: 15
     duration: 1
     pattern: 0
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
-    count: 6
+    count: 2

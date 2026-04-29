@@ -28,11 +28,25 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Tooltip("Имя сцены отдельного главного меню.")]
     [SerializeField] private string mainMenuSceneName = "MainMenuScene";
 
-    [Header("Data")]
-    [Tooltip("Inspector: available ships")]
+    [Header("Данные")]
+    [Tooltip("Список кораблей, доступных игроку для выбора в стартовом меню.")]
     [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
-    [Tooltip("Inspector: current timeline")]
+    [Tooltip("Ручной таймлайн для тестирования боя. Используется как резервный вариант, если RunManager не имеет выбранной EncounterSO с WaveTimelineSO.")]
     [SerializeField] public WaveTimelineSO currentTimeline;
+    [Tooltip("Runtime-менеджер забега. Если поле пустое, контроллер найдет существующий RunManager в сцене или создаст временный объект.")]
+    [SerializeField] private RunManager runManager;
+    [Tooltip("Директор генерации следующих локаций. Если не назначен или не настроен, используется список Test Next Encounters.")]
+    [SerializeField] private RunMapDirector runMapDirector;
+    [Tooltip("Директор темпа забега. Получает результаты завершенных локаций и влияет на будущие веса выбора, если назначен и настроен.")]
+    [SerializeField] private RunEventDirector runEventDirector;
+    [Tooltip("Резервный список тестовых следующих локаций. Используется, если RunMapDirector отсутствует или не смог сгенерировать варианты.")]
+    [SerializeField] private List<EncounterSO> testNextEncounters = new List<EncounterSO>();
+
+    [Header("Небоевые локации")]
+    [Tooltip("Доля максимального корпуса, восстанавливаемая в Repair-локации. 0.2 означает 20% от MaxHull. Позже будет заменено системой цены ремонта.")]
+    [SerializeField, Range(0f, 1f)] private float repairHullPercent = 0.2f;
+    [Tooltip("Доля максимального корпуса, восстанавливаемая в Rest-локации. 0.1 означает 10% от MaxHull.")]
+    [SerializeField, Range(0f, 1f)] private float restHullPercent = 0.1f;
 
     [Header("Background Layers")]
     [Tooltip("Inspector: background layers")]
@@ -181,6 +195,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
+    private readonly List<UiButtonView> encounterChoiceButtons = new List<UiButtonView>();
+    private readonly List<EncounterSO> activeEncounterChoices = new List<EncounterSO>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
@@ -274,6 +290,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private TMP_Text capacitorValueText;
     private GameObject perkPanelObject;
     private GameObject gameOverPanelObject;
+    private GameObject encounterChoicePanelObject;
+    private GameObject nonCombatPanelObject;
     private GameObject pauseMenuObject;
     private GameObject startMenuObject;
     private GameObject mainMenuPanelObject;
@@ -306,6 +324,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject confirmationPanelObject;
     private TMP_Text confirmationTitleText;
     private TMP_Text confirmationBodyText;
+    private TMP_Text encounterChoiceTitleText;
+    private TMP_Text encounterChoiceBodyText;
+    private TMP_Text nonCombatTitleText;
+    private TMP_Text nonCombatBodyText;
+    private UiButtonView nonCombatActionButtonView;
     private RectTransform overviewPanelRect;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
@@ -323,9 +346,12 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool gameOver;
     private bool gameStarted;
     private bool gamePaused;
+    private bool encounterCompleted;
     private bool pauseSettingsOpened;
     private bool combatLogShouldSnapToBottom;
+    private EncounterSO activeNonCombatEncounter;
     private float gameTimer;
+    private float encounterStartHullPercent = 1f;
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
     private LanguageOption currentLanguage = LanguageOption.RU;
@@ -354,6 +380,12 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
     public ShipEquipmentState CurrentEquipmentState => equipmentState;
+
+    private void OnValidate()
+    {
+        repairHullPercent = Mathf.Clamp01(repairHullPercent);
+        restHullPercent = Mathf.Clamp01(restHullPercent);
+    }
 
     internal void ConfigureServices(
         IPlatformService newPlatformService,
@@ -388,9 +420,61 @@ public class SpaceCombatSceneController : MonoBehaviour
         backgroundParallaxService ??= new BackgroundParallaxService();
     }
 
+    private void EnsureRunManagerReference()
+    {
+        if (runManager != null)
+        {
+            return;
+        }
+
+        runManager = FindAnyObjectByType<RunManager>(FindObjectsInactive.Include);
+        if (runManager != null)
+        {
+            return;
+        }
+
+        GameObject runManagerObject = new GameObject("RunManager");
+        runManager = runManagerObject.AddComponent<RunManager>();
+    }
+
+    private void EnsureRunMapDirectorReference()
+    {
+        if (runMapDirector != null)
+        {
+            return;
+        }
+
+        runMapDirector = FindAnyObjectByType<RunMapDirector>(FindObjectsInactive.Include);
+    }
+
+    private void EnsureRunEventDirectorReference()
+    {
+        if (runEventDirector != null)
+        {
+            return;
+        }
+
+        runEventDirector = FindAnyObjectByType<RunEventDirector>(FindObjectsInactive.Include);
+    }
+
+    private WaveTimelineSO GetActiveTimeline()
+    {
+        if (runManager != null &&
+            runManager.CurrentEncounter != null &&
+            runManager.CurrentEncounter.waveTimeline != null)
+        {
+            return runManager.CurrentEncounter.waveTimeline;
+        }
+
+        return currentTimeline;
+    }
+
     private void Awake()
     {
         EnsureServices();
+        EnsureRunManagerReference();
+        EnsureRunMapDirectorReference();
+        EnsureRunEventDirectorReference();
         ValidateSerializedReferences();
         mainCamera = Camera.main;
         useVirtualJoystick = platformService.ShouldUseVirtualJoystick();
@@ -410,6 +494,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         SpawnPlayer();
         SelectShip(GetInitialShipIndex());
         BuildHud();
+        EnsureEncounterChoiceUi();
+        EnsureNonCombatUi();
         ApplyPerformanceSettings();
         RefreshLocalizedTexts();
 
@@ -487,9 +573,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Debug.LogError("SpaceCombatSceneController: waveText is not assigned.", this);
         }
-        if (currentTimeline == null)
+        if (GetActiveTimeline() == null)
         {
-            Debug.LogError("SpaceCombatSceneController: currentTimeline is not assigned.", this);
+            Debug.LogError("SpaceCombatSceneController: не назначен активный WaveTimelineSO. Укажите Current Timeline для ручного теста или EncounterSO с Wave Timeline через RunManager.", this);
         }
     }
 
@@ -648,6 +734,20 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
+        if (IsNonCombatPanelVisible())
+        {
+            HandleNonCombatInput();
+            UpdateHud();
+            return;
+        }
+
+        if (IsEncounterChoicePanelVisible())
+        {
+            HandleEncounterChoiceInput();
+            UpdateHud();
+            return;
+        }
+
         float deltaTime = Time.deltaTime;
 
         Keyboard keyboard = Keyboard.current;
@@ -669,6 +769,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         UpdatePlayer(deltaTime);
         UpdateCombat(deltaTime);
         UpdateTimelineSpawner(deltaTime);
+        TryCompleteEncounter();
         UpdateBackgroundParallax();
         UpdateEffects(deltaTime);
         UpdateVisuals();
@@ -1630,7 +1731,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void StartRun()
+    private void StartRun(bool resetRunState = true)
     {
         if (availableShips == null || availableShips.Count == 0)
         {
@@ -1638,11 +1739,19 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
         selectedShipIndex = Mathf.Clamp(selectedShipIndex, 0, availableShips.Count - 1);
+        EnsureRunManagerReference();
+        if (resetRunState && runManager != null)
+        {
+            runManager.StartRun();
+        }
 
         ShowStartMenu(false);
+        ShowEncounterChoicePanel(false);
+        ShowNonCombatPanel(false);
         gameStarted = true;
         gameOver = false;
         gamePaused = false;
+        encounterCompleted = false;
         pauseSettingsOpened = false;
         pendingConfirmAction = ConfirmAction.None;
         if (confirmationPanelObject != null)
@@ -1671,9 +1780,30 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
         ResetTimelineRuntime();
         ResetModules();
-        ApplyShipDefinition(availableShips[selectedShipIndex], true);
+        if (resetRunState)
+        {
+            ApplyShipDefinition(availableShips[selectedShipIndex], true);
+        }
+        else
+        {
+            PreparePlayerForNextEncounter();
+        }
+        encounterStartHullPercent = player != null ? player.HullPercent : 1f;
         LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
+    }
+
+    private void PreparePlayerForNextEncounter()
+    {
+        if (player == null || player.Transform == null)
+        {
+            return;
+        }
+
+        player.Transform.position = Vector3.zero;
+        player.Transform.rotation = Quaternion.identity;
+        player.Velocity = Vector2.zero;
+        player.MoveCommandActive = false;
     }
 
     private void ResumeRun()
@@ -1702,15 +1832,429 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void ResetTimelineRuntime()
+    private bool IsEncounterChoicePanelVisible()
     {
-        spawnEventStates.Clear();
-        if (currentTimeline == null || currentTimeline.events == null)
+        return encounterChoicePanelObject != null && encounterChoicePanelObject.activeSelf;
+    }
+
+    private bool IsNonCombatPanelVisible()
+    {
+        return nonCombatPanelObject != null && nonCombatPanelObject.activeSelf;
+    }
+
+    private void HandleNonCombatInput()
+    {
+        Vector2 pointerPosition;
+        if (TryGetPrimaryPointerDown(out pointerPosition) && IsButtonClicked(nonCombatActionButtonView, pointerPosition))
+        {
+            CompleteNonCombatEncounter();
+            return;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null &&
+            (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame))
+        {
+            CompleteNonCombatEncounter();
+        }
+    }
+
+    private void ShowNonCombatEncounter(EncounterSO encounter)
+    {
+        if (encounter == null)
         {
             return;
         }
 
-        for (int i = 0; i < currentTimeline.events.Count; i++)
+        activeNonCombatEncounter = encounter;
+        EnsureNonCombatUi();
+
+        string encounterName = string.IsNullOrWhiteSpace(encounter.displayName) ? encounter.name : encounter.displayName;
+        if (nonCombatTitleText != null)
+        {
+            nonCombatTitleText.text = encounterName + " [" + GetNodeTypeDisplayName(encounter.nodeType) + "]";
+        }
+
+        if (nonCombatBodyText != null)
+        {
+            nonCombatBodyText.text = BuildNonCombatDescription(encounter);
+        }
+
+        if (nonCombatActionButtonView != null && nonCombatActionButtonView.Label != null)
+        {
+            nonCombatActionButtonView.Label.text = GetNonCombatActionText(encounter.nodeType);
+        }
+
+        ShowNonCombatPanel(true);
+    }
+
+    private void ApplyNonCombatPlaceholderEffect(EncounterSO encounter)
+    {
+        if (encounter == null)
+        {
+            return;
+        }
+
+        switch (encounter.nodeType)
+        {
+            case LocationNodeType.Repair:
+                // TODO: заменить бесплатный ремонт системой цены и ресурсов.
+                RestorePlayerHull(repairHullPercent);
+                LogMessage("Ремонт: корпус частично восстановлен.", "warning");
+                break;
+            case LocationNodeType.Rest:
+                RestorePlayerHull(restHullPercent);
+                LogMessage("Отдых: корпус немного восстановлен.", "warning");
+                break;
+            case LocationNodeType.Resource:
+                Debug.Log("SpaceCombatSceneController: ресурсная локация завершена. Экономика будет добавлена позже.", this);
+                LogMessage("Ресурсы собраны. Награда будет подключена позже.", "warning");
+                break;
+            case LocationNodeType.Shop:
+                Debug.Log("SpaceCombatSceneController: магазин открыт как временная заглушка. Инвентарь магазина будет добавлен позже.", this);
+                LogMessage("Магазин пока работает как заглушка.", "warning");
+                break;
+            case LocationNodeType.Event:
+                Debug.Log("SpaceCombatSceneController: событие показано как временная заглушка. Варианты событий будут добавлены позже.", this);
+                LogMessage("Событие обработано как заглушка.", "warning");
+                break;
+        }
+    }
+
+    private void RestorePlayerHull(float percent)
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        float amount = Mathf.Max(0f, percent) * player.MaxHull * Mathf.Max(0.1f, player.RepairMultiplier);
+        player.Hull = Mathf.Min(player.MaxHull, player.Hull + amount);
+    }
+
+    private void CompleteNonCombatEncounter()
+    {
+        EncounterSO encounter = activeNonCombatEncounter;
+        if (encounter == null)
+        {
+            ShowNonCombatPanel(false);
+            ShowEncounterChoicePanel(true);
+            return;
+        }
+
+        ApplyNonCombatPlaceholderEffect(encounter);
+        EncounterResult result = new EncounterResult(
+            encounter.nodeType,
+            player != null ? player.HullPercent : 0f,
+            0f,
+            0f,
+            0);
+
+        CompleteEncounterResult(result);
+        LogMessage("Локация завершена: " + GetNodeTypeDisplayName(encounter.nodeType), "warning");
+        activeNonCombatEncounter = null;
+        ShowNonCombatPanel(false);
+        ShowEncounterChoicePanel(true);
+    }
+
+    private string BuildNonCombatDescription(EncounterSO encounter)
+    {
+        string description = encounter != null ? encounter.shortDescription : string.Empty;
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            description = "Временная небоевая локация. Полная механика будет добавлена позже.";
+        }
+
+        switch (encounter.nodeType)
+        {
+            case LocationNodeType.Repair:
+                return description + "\n\nДействие: восстановить корпус на " + Mathf.RoundToInt(repairHullPercent * 100f) + "%.";
+            case LocationNodeType.Rest:
+                return description + "\n\nДействие: восстановить корпус на " + Mathf.RoundToInt(restHullPercent * 100f) + "%.";
+            case LocationNodeType.Resource:
+                return description + "\n\nРесурсная награда будет подключена позже.";
+            case LocationNodeType.Shop:
+                return description + "\n\nИнвентарь магазина будет подключен позже.";
+            case LocationNodeType.Event:
+                return description + "\n\nВарианты события будут подключены позже.";
+            default:
+                return description;
+        }
+    }
+
+    private static string GetNonCombatActionText(LocationNodeType nodeType)
+    {
+        switch (nodeType)
+        {
+            case LocationNodeType.Repair:
+                return "Ремонт";
+            case LocationNodeType.Rest:
+                return "Отдых";
+            case LocationNodeType.Resource:
+                return "Забрать";
+            case LocationNodeType.Shop:
+            case LocationNodeType.Event:
+            default:
+                return "Продолжить";
+        }
+    }
+
+    private static string GetNodeTypeDisplayName(LocationNodeType nodeType)
+    {
+        switch (nodeType)
+        {
+            case LocationNodeType.Combat:
+                return "Бой";
+            case LocationNodeType.Elite:
+                return "Элита";
+            case LocationNodeType.Shop:
+                return "Магазин";
+            case LocationNodeType.Repair:
+                return "Ремонт";
+            case LocationNodeType.Event:
+                return "Событие";
+            case LocationNodeType.Rest:
+                return "Отдых";
+            case LocationNodeType.Resource:
+                return "Ресурсы";
+            case LocationNodeType.Boss:
+                return "Босс";
+            default:
+                return nodeType.ToString();
+        }
+    }
+
+    private void TryCompleteEncounter()
+    {
+        if (encounterCompleted || gameOver || levelUpPending)
+        {
+            return;
+        }
+
+        WaveTimelineSO activeTimeline = GetActiveTimeline();
+        if (activeTimeline == null || activeTimeline.events == null || activeTimeline.events.Count == 0)
+        {
+            return;
+        }
+
+        if (GetNextTimelineEventTime(gameTimer) >= 0f || enemies.Count > 0)
+        {
+            return;
+        }
+
+        encounterCompleted = true;
+        EncounterResult result = BuildEncounterResult();
+        CompleteEncounterResult(result);
+        LogMessage("Локация завершена.", "warning");
+        ShowEncounterChoicePanel(true);
+    }
+
+    private void CompleteEncounterResult(EncounterResult result)
+    {
+        EnsureRunManagerReference();
+        runManager.CompleteCurrentEncounter(result);
+        EnsureRunEventDirectorReference();
+        if (runEventDirector != null)
+        {
+            runEventDirector.OnEncounterCompleted(result);
+        }
+    }
+
+    private EncounterResult BuildEncounterResult()
+    {
+        LocationNodeType completedNodeType = runManager != null && runManager.CurrentEncounter != null
+            ? runManager.CurrentEncounter.nodeType
+            : LocationNodeType.Combat;
+
+        float hullPercent = player != null ? player.HullPercent : 0f;
+        float damageTaken = Mathf.Clamp01(encounterStartHullPercent - hullPercent);
+
+        return new EncounterResult(
+            completedNodeType,
+            hullPercent,
+            damageTaken,
+            gameTimer,
+            0); // TODO Stage 3+: expose killed enemy count from combat cleanup.
+    }
+
+    private void HandleEncounterChoiceInput()
+    {
+        Vector2 pointerPosition;
+        if (TryGetPrimaryPointerDown(out pointerPosition))
+        {
+            for (int i = 0; i < activeEncounterChoices.Count && i < encounterChoiceButtons.Count; i++)
+            {
+                if (IsButtonClicked(encounterChoiceButtons[i], pointerPosition))
+                {
+                    SelectNextEncounter(activeEncounterChoices[i]);
+                    return;
+                }
+            }
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            return;
+        }
+
+        if (activeEncounterChoices.Count > 0 && keyboard.digit1Key.wasPressedThisFrame)
+        {
+            SelectNextEncounter(activeEncounterChoices[0]);
+        }
+        else if (activeEncounterChoices.Count > 1 && keyboard.digit2Key.wasPressedThisFrame)
+        {
+            SelectNextEncounter(activeEncounterChoices[1]);
+        }
+        else if (activeEncounterChoices.Count > 2 && keyboard.digit3Key.wasPressedThisFrame)
+        {
+            SelectNextEncounter(activeEncounterChoices[2]);
+        }
+    }
+
+    private void SelectNextEncounter(EncounterSO encounter)
+    {
+        if (encounter == null)
+        {
+            return;
+        }
+
+        EnsureRunManagerReference();
+        runManager.SelectEncounter(encounter);
+        ShowEncounterChoicePanel(false);
+        if (ShouldHandleAsNonCombatPlaceholder(encounter))
+        {
+            ShowNonCombatEncounter(encounter);
+            return;
+        }
+
+        StartRun(false);
+    }
+
+    private static bool ShouldHandleAsNonCombatPlaceholder(EncounterSO encounter)
+    {
+        return encounter != null &&
+               encounter.waveTimeline == null &&
+               IsNonCombatNode(encounter.nodeType);
+    }
+
+    private static bool IsNonCombatNode(LocationNodeType nodeType)
+    {
+        return nodeType == LocationNodeType.Shop ||
+               nodeType == LocationNodeType.Repair ||
+               nodeType == LocationNodeType.Event ||
+               nodeType == LocationNodeType.Rest ||
+               nodeType == LocationNodeType.Resource;
+    }
+
+    private void ShowEncounterChoicePanel(bool show)
+    {
+        if (!show)
+        {
+            if (encounterChoicePanelObject != null)
+            {
+                encounterChoicePanelObject.SetActive(false);
+            }
+            activeEncounterChoices.Clear();
+            return;
+        }
+
+        EnsureEncounterChoiceUi();
+        activeEncounterChoices.Clear();
+
+        if (!TryGenerateRunMapChoices(activeEncounterChoices) && testNextEncounters != null)
+        {
+            for (int i = 0; i < testNextEncounters.Count && activeEncounterChoices.Count < 3; i++)
+            {
+                EncounterSO encounter = testNextEncounters[i];
+                if (encounter == null)
+                {
+                    continue;
+                }
+
+                activeEncounterChoices.Add(encounter);
+            }
+        }
+
+        if (activeEncounterChoices.Count == 0)
+        {
+            Debug.LogWarning("SpaceCombatSceneController: не настроены варианты следующих локаций. Заполните Test Next Encounters или настройте RunMapDirector.", this);
+            return;
+        }
+
+        if (encounterChoiceTitleText != null)
+        {
+            encounterChoiceTitleText.text = "Выберите следующую локацию";
+        }
+        if (encounterChoiceBodyText != null)
+        {
+            encounterChoiceBodyText.text = "Маршрут формируется из пула локаций. Если директор не настроен, используется тестовый список.";
+        }
+
+        for (int i = 0; i < encounterChoiceButtons.Count; i++)
+        {
+            bool isActive = i < activeEncounterChoices.Count;
+            UiButtonView button = encounterChoiceButtons[i];
+            if (button == null || button.Rect == null)
+            {
+                continue;
+            }
+
+            button.Rect.gameObject.SetActive(isActive);
+            if (!isActive || button.Label == null)
+            {
+                continue;
+            }
+
+            EncounterSO encounter = activeEncounterChoices[i];
+            string encounterName = string.IsNullOrWhiteSpace(encounter.displayName) ? encounter.name : encounter.displayName;
+            button.Label.text = (i + 1) + ". " + encounterName + " [" + GetNodeTypeDisplayName(encounter.nodeType) + "]";
+        }
+
+        encounterChoicePanelObject.SetActive(true);
+    }
+
+    private void ShowNonCombatPanel(bool show)
+    {
+        if (nonCombatPanelObject != null)
+        {
+            nonCombatPanelObject.SetActive(show);
+        }
+
+        if (!show)
+        {
+            activeNonCombatEncounter = null;
+        }
+    }
+
+    private bool TryGenerateRunMapChoices(List<EncounterSO> results)
+    {
+        EnsureRunMapDirectorReference();
+        if (runMapDirector == null)
+        {
+            return false;
+        }
+
+        int completedEncounterCount = runManager != null ? runManager.CompletedEncounterCount : 0;
+        bool generated = runMapDirector.TryGenerateNextChoices(completedEncounterCount, results);
+        if (!generated)
+        {
+            Debug.LogWarning("SpaceCombatSceneController: RunMapDirector не смог сгенерировать варианты. Используется резервный список Test Next Encounters.", this);
+        }
+
+        return generated;
+    }
+
+    private void ResetTimelineRuntime()
+    {
+        spawnEventStates.Clear();
+        WaveTimelineSO activeTimeline = GetActiveTimeline();
+        if (activeTimeline == null || activeTimeline.events == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < activeTimeline.events.Count; i++)
         {
             spawnEventStates.Add(new SpawnEventRuntimeState());
         }
@@ -3588,6 +4132,113 @@ public class SpaceCombatSceneController : MonoBehaviour
         confirmationPanelObject.SetActive(false);
     }
 
+    private void EnsureEncounterChoiceUi()
+    {
+        if (encounterChoicePanelObject != null)
+        {
+            return;
+        }
+
+        if (hudCanvas == null)
+        {
+            return;
+        }
+
+        encounterChoicePanelObject = new GameObject("EncounterChoicePanel", typeof(RectTransform));
+        encounterChoicePanelObject.transform.SetParent(hudCanvas.transform, false);
+        RectTransform rootRect = encounterChoicePanelObject.GetComponent<RectTransform>();
+        StretchToParent(rootRect);
+
+        Image dim = CreateImage("Dimmer", encounterChoicePanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        StretchToParent(dim.rectTransform);
+
+        Image panel = CreateImage("Panel", encounterChoicePanelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
+        RectTransform panelRect = panel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(560f, 360f);
+        AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
+
+        encounterChoiceTitleText = CreateText("Title", panel.transform, "Выберите следующую локацию", 28, FontStyle.Bold, Color.white);
+        encounterChoiceTitleText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(encounterChoiceTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
+
+        encounterChoiceBodyText = CreateText("Body", panel.transform, string.Empty, 16, FontStyle.Normal, new Color(0.74f, 0.86f, 0.96f));
+        encounterChoiceBodyText.alignment = TextAlignmentOptions.Center;
+        encounterChoiceBodyText.textWrappingMode = TextWrappingModes.Normal;
+        SetAnchoredRect(encounterChoiceBodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(34f, -76f), new Vector2(-34f, -124f));
+
+        encounterChoiceButtons.Clear();
+        for (int i = 0; i < 3; i++)
+        {
+            UiButtonView button = CreateMenuButton(
+                panel.transform,
+                "encounter_choice_" + (i + 1),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 48f - i * 72f),
+                new Vector2(450f, 58f));
+
+            if (button.Label != null)
+            {
+                button.Label.fontSize = 17f;
+                button.Label.textWrappingMode = TextWrappingModes.Normal;
+            }
+
+            encounterChoiceButtons.Add(button);
+        }
+
+        encounterChoicePanelObject.SetActive(false);
+    }
+
+    private void EnsureNonCombatUi()
+    {
+        if (nonCombatPanelObject != null)
+        {
+            return;
+        }
+
+        if (hudCanvas == null)
+        {
+            return;
+        }
+
+        nonCombatPanelObject = new GameObject("NonCombatEncounterPanel", typeof(RectTransform));
+        nonCombatPanelObject.transform.SetParent(hudCanvas.transform, false);
+        RectTransform rootRect = nonCombatPanelObject.GetComponent<RectTransform>();
+        StretchToParent(rootRect);
+
+        Image dim = CreateImage("Dimmer", nonCombatPanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        StretchToParent(dim.rectTransform);
+
+        Image panel = CreateImage("Panel", nonCombatPanelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
+        RectTransform panelRect = panel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(560f, 320f);
+        AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
+
+        nonCombatTitleText = CreateText("Title", panel.transform, "Локация", 28, FontStyle.Bold, Color.white);
+        nonCombatTitleText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(nonCombatTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
+
+        nonCombatBodyText = CreateText("Body", panel.transform, string.Empty, 17, FontStyle.Normal, new Color(0.82f, 0.92f, 1f));
+        nonCombatBodyText.alignment = TextAlignmentOptions.Center;
+        nonCombatBodyText.textWrappingMode = TextWrappingModes.Normal;
+        SetAnchoredRect(nonCombatBodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(38f, -84f), new Vector2(-38f, -214f));
+
+        nonCombatActionButtonView = CreateMenuButton(
+            panel.transform,
+            "non_combat_action",
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -112f),
+            new Vector2(250f, 56f));
+        nonCombatActionButtonView.Label.text = "Продолжить";
+
+        nonCombatPanelObject.SetActive(false);
+    }
+
     private void CreateStartMenu(Transform parent)
     {
         startMenuObject = new GameObject("StartMenu", typeof(RectTransform));
@@ -4667,18 +5318,19 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void EnsureSpawnEventRuntimeStates()
     {
-        if (currentTimeline == null || currentTimeline.events == null)
+        WaveTimelineSO activeTimeline = GetActiveTimeline();
+        if (activeTimeline == null || activeTimeline.events == null)
         {
             spawnEventStates.Clear();
             return;
         }
 
-        while (spawnEventStates.Count < currentTimeline.events.Count)
+        while (spawnEventStates.Count < activeTimeline.events.Count)
         {
             spawnEventStates.Add(new SpawnEventRuntimeState());
         }
 
-        while (spawnEventStates.Count > currentTimeline.events.Count)
+        while (spawnEventStates.Count > activeTimeline.events.Count)
         {
             spawnEventStates.RemoveAt(spawnEventStates.Count - 1);
         }
@@ -4965,7 +5617,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         wave = Mathf.Max(1, 1 + Mathf.FloorToInt(gameTimer / Mathf.Max(1f, timelinePhaseDuration)));
 
         EnsureSpawnEventRuntimeStates();
-        if (currentTimeline == null || currentTimeline.events == null || currentTimeline.events.Count == 0)
+        WaveTimelineSO activeTimeline = GetActiveTimeline();
+        if (activeTimeline == null || activeTimeline.events == null || activeTimeline.events.Count == 0)
         {
             if (gateHintText != null)
             {
@@ -4976,9 +5629,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         int spawnedThisFrame = 0;
-        for (int i = 0; i < currentTimeline.events.Count; i++)
+        for (int i = 0; i < activeTimeline.events.Count; i++)
         {
-            SpawnEvent spawnEvent = currentTimeline.events[i];
+            SpawnEvent spawnEvent = activeTimeline.events[i];
             SpawnEventRuntimeState state = spawnEventStates[i];
             if (spawnEvent == null || spawnEvent.shipData == null || spawnEvent.shipData.shipPrefab == null)
             {
@@ -5064,15 +5717,16 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private float GetNextTimelineEventTime(float now)
     {
-        if (currentTimeline == null || currentTimeline.events == null || currentTimeline.events.Count == 0)
+        WaveTimelineSO activeTimeline = GetActiveTimeline();
+        if (activeTimeline == null || activeTimeline.events == null || activeTimeline.events.Count == 0)
         {
             return -1f;
         }
 
         float nextTime = float.MaxValue;
-        for (int i = 0; i < currentTimeline.events.Count; i++)
+        for (int i = 0; i < activeTimeline.events.Count; i++)
         {
-            SpawnEvent spawnEvent = currentTimeline.events[i];
+            SpawnEvent spawnEvent = activeTimeline.events[i];
             if (spawnEvent == null)
             {
                 continue;
