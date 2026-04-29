@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,19 +6,29 @@ using UnityEngine.UI;
 public sealed class EquipmentUIController : MonoBehaviour
 {
     [Header("Scene Binding")]
+    [Tooltip("Inspector: scene controller")]
     [SerializeField] private SpaceCombatSceneController sceneController;
 
     [Header("UI References")]
+    [Tooltip("Inspector: slot prefab")]
     [SerializeField] private SlotUI slotPrefab;
+    [Tooltip("Inspector: weapon slots container")]
     [SerializeField] private Transform weaponSlotsContainer;
+    [Tooltip("Inspector: module slots container")]
     [SerializeField] private Transform moduleSlotsContainer;
 
     [Header("Responsive Layout")]
+    [Tooltip("Inspector: auto resize slots")]
     [SerializeField] private bool autoResizeSlots = true;
+    [Tooltip("Inspector: panel padding")]
     [SerializeField, Min(0f)] private float panelPadding = 10f;
+    [Tooltip("Inspector: row spacing")]
     [SerializeField, Min(0f)] private float rowSpacing = 8f;
+    [Tooltip("Inspector: slot spacing")]
     [SerializeField, Min(0f)] private float slotSpacing = 10f;
+    [Tooltip("Inspector: min row height")]
     [SerializeField, Min(12f)] private float minRowHeight = 32f;
+    [Tooltip("Inspector: min slot size")]
     [SerializeField, Min(8f)] private float minSlotSize = 16f;
 
     private readonly List<SlotUI> weaponSlots = new List<SlotUI>();

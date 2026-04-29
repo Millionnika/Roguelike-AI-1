@@ -1,17 +1,26 @@
-using TMPro;
+﻿using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 public sealed class SlotUI : MonoBehaviour
 {
+    [Tooltip("Inspector: icon image")]
     [SerializeField] private Image iconImage;
+    [Tooltip("Inspector: key bind text")]
     [SerializeField] private TMP_Text keyBindText;
+    [Tooltip("Inspector: cooldown overlay")]
     [SerializeField] private Image cooldownOverlay;
+    [Tooltip("Inspector: background image")]
     [SerializeField] private Image backgroundImage;
+    [Tooltip("Inspector: placeholder icon")]
     [SerializeField] private Sprite placeholderIcon;
+    [Tooltip("Inspector: equipped icon color")]
     [SerializeField] private Color equippedIconColor = Color.white;
+    [Tooltip("Inspector: empty icon color")]
     [SerializeField] private Color emptyIconColor = new Color(1f, 1f, 1f, 0.25f);
+    [Tooltip("Inspector: equipped background color")]
     [SerializeField] private Color equippedBackgroundColor = new Color(0.09f, 0.19f, 0.28f, 0.95f);
+    [Tooltip("Inspector: empty background color")]
     [SerializeField] private Color emptyBackgroundColor = new Color(0.05f, 0.1f, 0.14f, 0.55f);
 
     private void Awake()

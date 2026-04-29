@@ -1,10 +1,14 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public sealed class ShipThrusterEffect : MonoBehaviour
 {
+    [Tooltip("Inspector: idle intensity")]
     [SerializeField, Range(0f, 1f)] private float idleIntensity = 0.18f;
+    [Tooltip("Inspector: pulse amplitude")]
     [SerializeField, Range(0f, 1f)] private float pulseAmplitude = 0.22f;
+    [Tooltip("Inspector: pulse speed")]
     [SerializeField, Min(0.1f)] private float pulseSpeed = 9f;
+    [Tooltip("Inspector: max scale multiplier")]
     [SerializeField, Min(1f)] private float maxScaleMultiplier = 1.35f;
 
     private SpriteRenderer[] fireRenderers;

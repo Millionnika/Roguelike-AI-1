@@ -16,7 +16,7 @@ internal sealed class CombatUpdateContext
     public Func<string, string> Localize;
     public Action<string, string> LogMessage;
     public Action<ModuleState> UpdateModuleVisual;
-    public Action<WeaponDataSO> PlayWeaponShot;
+    public Action<WeaponDataSO, Vector3, CombatFaction> PlayWeaponShot;
 }
 
 internal readonly struct CombatUpdateResult
@@ -429,7 +429,7 @@ internal sealed class CombatService : ICombatService
 
         if (fired)
         {
-            context.PlayWeaponShot?.Invoke(weapon.Data);
+            context.PlayWeaponShot?.Invoke(weapon.Data, weapon.GetMuzzlePosition(), ownerFaction);
         }
 
         return fired;

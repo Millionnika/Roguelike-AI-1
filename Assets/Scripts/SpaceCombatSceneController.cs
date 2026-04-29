@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using SpaceFrontier.Player;
@@ -10,60 +10,108 @@ using UnityEngine.UI;
 public class SpaceCombatSceneController : MonoBehaviour
 {
     [Header("UI References")]
+    [Tooltip("Inspector: health bar")]
     [SerializeField] private Slider healthBar;
+    [Tooltip("Inspector: score text")]
     [SerializeField] private TMP_Text scoreText;
+    [Tooltip("Inspector: wave text")]
     [SerializeField] private TMP_Text waveText;
+    [Tooltip("Inspector: equipment ui controller")]
     [SerializeField] private EquipmentUIController equipmentUiController;
+    [Tooltip("Inspector: slot ui prefab")]
     [SerializeField] private SlotUI slotUiPrefab;
+    [Tooltip("Inspector: shield hit material")]
     [SerializeField] private Material shieldHitMaterial;
 
     [Header("Data")]
+    [Tooltip("Inspector: available ships")]
     [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
+    [Tooltip("Inspector: current timeline")]
     [SerializeField] public WaveTimelineSO currentTimeline;
 
     [Header("Background Layers")]
+    [Tooltip("Inspector: background layers")]
     [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
 
     [Header("Timeline Spawner")]
+    [Tooltip("Inspector: offscreen viewport margin")]
     [SerializeField, Range(0.01f, 0.5f)] private float offscreenViewportMargin = 0.1f;
+    [Tooltip("Inspector: timeline phase duration")]
     [SerializeField, Min(1f)] private float timelinePhaseDuration = 30f;
+    [Tooltip("Inspector: timeline difficulty per phase")]
     [SerializeField, Min(0f)] private float timelineDifficultyPerPhase = 0.14f;
 
     [Header("Targeting Visuals")]
+    [Tooltip("Inspector: target frame source sprite")]
     [SerializeField] private Sprite targetFrameSourceSprite;
+    [Tooltip("Inspector: target frame color")]
     [SerializeField] private Color targetFrameColor = new Color(0.45f, 0.75f, 1f, 0.95f);
+    [Tooltip("Inspector: target line color")]
     [SerializeField] private Color targetLineColor = new Color(1f, 1f, 1f, 0.58f);
+    [Tooltip("Inspector: target frame padding")]
     [SerializeField, Min(0f)] private float targetFramePadding = 0.35f;
+    [Tooltip("Inspector: target world click padding")]
     [SerializeField, Min(0f)] private float targetWorldClickPadding = 0.25f;
+    [Tooltip("Inspector: target line width")]
     [SerializeField, Min(0.01f)] private float targetLineWidth = 0.035f;
+    [Tooltip("Inspector: target line sorting order")]
     [SerializeField] private int targetLineSortingOrder = 1;
 
     [Header("Shield Visuals")]
-    [Tooltip("Амплитуда пульсации прозрачности щита (fallback, если ShipShieldVisual не назначен).")]
+    [Tooltip("РђРјРїР»РёС‚СѓРґР° РїСѓР»СЊСЃР°С†РёРё РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚Рё С‰РёС‚Р° (fallback, РµСЃР»Рё ShipShieldVisual РЅРµ РЅР°Р·РЅР°С‡РµРЅ).")]
     [SerializeField, Range(0f, 0.6f)] private float shieldPulseAlpha = 0.12f;
-    [Tooltip("Скорость пульсации щита (fallback, если ShipShieldVisual не назначен).")]
+    [Tooltip("РЎРєРѕСЂРѕСЃС‚СЊ РїСѓР»СЊСЃР°С†РёРё С‰РёС‚Р° (fallback, РµСЃР»Рё ShipShieldVisual РЅРµ РЅР°Р·РЅР°С‡РµРЅ).")]
     [SerializeField, Min(0.1f)] private float shieldPulseSpeed = 3.2f;
-    [Tooltip("Дополнительная яркость щита в момент попадания (fallback).")]
+    [Tooltip("Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅР°СЏ СЏСЂРєРѕСЃС‚СЊ С‰РёС‚Р° РІ РјРѕРјРµРЅС‚ РїРѕРїР°РґР°РЅРёСЏ (fallback).")]
     [SerializeField, Range(0f, 2f)] private float shieldHitAlphaBoost = 0.55f;
-    [Tooltip("Сила подкрашивания щита при попадании (fallback).")]
+    [Tooltip("РЎРёР»Р° РїРѕРґРєСЂР°С€РёРІР°РЅРёСЏ С‰РёС‚Р° РїСЂРё РїРѕРїР°РґР°РЅРёРё (fallback).")]
     [SerializeField, Range(0f, 1f)] private float shieldHitTintStrength = 0.65f;
-    [Tooltip("Цвет подсветки щита при попадании (fallback).")]
+    [Tooltip("Р¦РІРµС‚ РїРѕРґСЃРІРµС‚РєРё С‰РёС‚Р° РїСЂРё РїРѕРїР°РґР°РЅРёРё (fallback).")]
     [SerializeField] private Color shieldHitTint = new Color(0.72f, 0.95f, 1f, 1f);
 
     [Header("Camera")]
+    [Tooltip("Inspector: camera default orthographic size")]
     [SerializeField, Min(1f)] private float cameraDefaultOrthographicSize = 9f;
+    [Tooltip("Inspector: camera min orthographic size")]
     [SerializeField, Min(1f)] private float cameraMinOrthographicSize = 5f;
+    [Tooltip("Inspector: camera max orthographic size")]
     [SerializeField, Min(1f)] private float cameraMaxOrthographicSize = 16f;
+    [Tooltip("Inspector: camera zoom step")]
     [SerializeField, Min(0.1f)] private float cameraZoomStep = 1.2f;
+    [Tooltip("Inspector: camera zoom smoothing")]
     [SerializeField, Min(0.1f)] private float cameraZoomSmoothing = 10f;
+    [Tooltip("Inspector: camera follow smoothing")]
     [SerializeField, Min(0.1f)] private float cameraFollowSmoothing = 6f;
+    [Tooltip("Inspector: camera velocity look ahead")]
     [SerializeField, Range(0f, 1f)] private float cameraVelocityLookAhead = 0.15f;
 
     [Header("Audio")]
+    [Tooltip("Inspector: shot base volume")]
     [SerializeField, Range(0f, 1f)] private float shotBaseVolume = 0.85f;
+    [Tooltip("Inspector: shot pitch random range")]
     [SerializeField, Range(0f, 0.5f)] private float shotPitchRandomRange = 0.08f;
+    [Tooltip("Inspector: shot volume random range")]
     [SerializeField, Range(0f, 0.5f)] private float shotVolumeRandomRange = 0.12f;
+    [Tooltip("Inspector: shot audio voices")]
     [SerializeField, Min(1)] private int shotAudioVoices = 4;
+    [Tooltip("Насколько звук врага становится 3D (0 = 2D, 1 = полностью 3D).")]
+    [SerializeField, Range(0f, 1f)] private float enemyShotSpatialBlend = 0.8f;
+    [Tooltip("Дистанция (в юнитах), где выстрел считается близким.")]
+    [SerializeField, Min(0.1f)] private float enemyShotNearDistance = 2.5f;
+    [Tooltip("Дистанция (в юнитах), где выстрел считается далеким.")]
+    [SerializeField, Min(0.2f)] private float enemyShotFarDistance = 18f;
+    [Tooltip("Множитель громкости для ближних выстрелов врага.")]
+    [SerializeField, Range(0f, 2f)] private float enemyShotNearVolumeMultiplier = 1.05f;
+    [Tooltip("Множитель громкости для дальних выстрелов врага.")]
+    [SerializeField, Range(0f, 1f)] private float enemyShotFarVolumeMultiplier = 0.35f;
+    [Tooltip("Максимальный стерео-пан по оси X для выстрелов врага.")]
+    [SerializeField, Range(0f, 1f)] private float enemyShotPanStrength = 0.75f;
+    [Tooltip("Дистанция по X, на которой панорама достигает максимума.")]
+    [SerializeField, Min(0.1f)] private float enemyShotPanDistance = 12f;
+    [Tooltip("Небольшое повышение тона для ближних выстрелов.")]
+    [SerializeField, Range(-0.5f, 0.5f)] private float enemyShotNearPitchOffset = 0.06f;
+    [Tooltip("Небольшое понижение тона для дальних выстрелов.")]
+    [SerializeField, Range(-0.5f, 0.5f)] private float enemyShotFarPitchOffset = -0.08f;
 
     private sealed class SpawnEventRuntimeState
     {
@@ -431,7 +479,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void PlayWeaponShot(WeaponDataSO weaponData)
+    private void PlayWeaponShot(WeaponDataSO weaponData, Vector3 shotWorldPosition, CombatFaction sourceFaction)
     {
         if (weaponData == null || weaponData.fireSound == null || shotAudioSources == null || shotAudioSources.Length == 0)
         {
@@ -447,8 +495,40 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         float randomPitch = 1f + UnityEngine.Random.Range(-shotPitchRandomRange, shotPitchRandomRange);
         float randomVolume = 1f + UnityEngine.Random.Range(-shotVolumeRandomRange, shotVolumeRandomRange);
-        source.pitch = Mathf.Clamp(randomPitch, 0.5f, 2f);
         float volumeScale = Mathf.Clamp01(shotBaseVolume * randomVolume);
+
+        source.spatialBlend = 0f;
+        source.panStereo = 0f;
+        source.rolloffMode = AudioRolloffMode.Linear;
+        source.minDistance = 1f;
+        source.maxDistance = 500f;
+        source.dopplerLevel = 0f;
+        source.spread = 0f;
+        source.transform.position = shotWorldPosition;
+
+        if (sourceFaction == CombatFaction.Enemy && player != null && player.Transform != null)
+        {
+            Vector3 playerPosition = player.Transform.position;
+            float distance = Vector2.Distance(playerPosition, shotWorldPosition);
+            float nearDistance = Mathf.Max(0.1f, enemyShotNearDistance);
+            float farDistance = Mathf.Max(nearDistance + 0.1f, enemyShotFarDistance);
+            float distanceLerp = Mathf.InverseLerp(nearDistance, farDistance, distance);
+
+            float distanceVolume = Mathf.Lerp(enemyShotNearVolumeMultiplier, enemyShotFarVolumeMultiplier, distanceLerp);
+            volumeScale *= Mathf.Clamp(distanceVolume, 0f, 2f);
+
+            float pitchOffset = Mathf.Lerp(enemyShotNearPitchOffset, enemyShotFarPitchOffset, distanceLerp);
+            randomPitch += pitchOffset;
+
+            float panByX = Mathf.Clamp((shotWorldPosition.x - playerPosition.x) / Mathf.Max(0.1f, enemyShotPanDistance), -1f, 1f);
+            source.panStereo = panByX * Mathf.Clamp01(enemyShotPanStrength);
+            source.spatialBlend = Mathf.Clamp01(enemyShotSpatialBlend);
+            source.minDistance = nearDistance;
+            source.maxDistance = farDistance;
+            source.spread = 25f;
+        }
+
+        source.pitch = Mathf.Clamp(randomPitch, 0.5f, 2f);
         source.PlayOneShot(weaponData.fireSound, volumeScale);
     }
 
@@ -754,9 +834,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         availableShips.Add(CreateRuntimeShipData(
             "Aegis",
             "Balanced Frigate",
-            "Сбалансированный фрегат",
+            "РЎР±Р°Р»Р°РЅСЃРёСЂРѕРІР°РЅРЅС‹Р№ С„СЂРµРіР°С‚",
             "Universal hull with reliable capacitor and solid survivability. Good first choice for learning the combat loop.",
-            "Универсальный корпус с надежной энергетикой и хорошей живучестью.",
+            "РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РєРѕСЂРїСѓСЃ СЃ РЅР°РґРµР¶РЅРѕР№ СЌРЅРµСЂРіРµС‚РёРєРѕР№ Рё С…РѕСЂРѕС€РµР№ Р¶РёРІСѓС‡РµСЃС‚СЊСЋ.",
             ShipClass.Medium,
             6.5f,
             11f,
@@ -778,9 +858,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         availableShips.Add(CreateRuntimeShipData(
             "Bulwark",
             "Heavy Cruiser",
-            "Тяжёлый крейсер",
+            "РўСЏР¶С‘Р»С‹Р№ РєСЂРµР№СЃРµСЂ",
             "Slow but durable platform with the best shields and armor. Repairs are stronger and capacitor is deep enough for long fights.",
-            "Медленный, но очень прочный корабль с мощными щитами и бронёй.",
+            "РњРµРґР»РµРЅРЅС‹Р№, РЅРѕ РѕС‡РµРЅСЊ РїСЂРѕС‡РЅС‹Р№ РєРѕСЂР°Р±Р»СЊ СЃ РјРѕС‰РЅС‹РјРё С‰РёС‚Р°РјРё Рё Р±СЂРѕРЅС‘Р№.",
             ShipClass.Heavy,
             5.4f,
             8.2f,
@@ -802,9 +882,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         availableShips.Add(CreateRuntimeShipData(
             "Raptor",
             "Strike Interceptor",
-            "Ударный перехватчик",
+            "РЈРґР°СЂРЅС‹Р№ РїРµСЂРµС…РІР°С‚С‡РёРє",
             "Fast hunter with stronger volleys and snappier capacitor recovery. Lower defenses reward mobility and target focus.",
-            "Быстрый охотник с повышенным уроном. Требует мобильности и приоритета целей.",
+            "Р‘С‹СЃС‚СЂС‹Р№ РѕС…РѕС‚РЅРёРє СЃ РїРѕРІС‹С€РµРЅРЅС‹Рј СѓСЂРѕРЅРѕРј. РўСЂРµР±СѓРµС‚ РјРѕР±РёР»СЊРЅРѕСЃС‚Рё Рё РїСЂРёРѕСЂРёС‚РµС‚Р° С†РµР»РµР№.",
             ShipClass.Light,
             8f,
             13.4f,
@@ -1494,24 +1574,24 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
             if (startMenuStatsText != null)
             {
+                string speedLabel = Localize("stat_speed");
+                string shieldLabel = Localize("stat_shield");
+                string armorLabel = Localize("stat_armor");
+                string hullLabel = Localize("stat_hull");
+                string capacitorLabel = Localize("stat_capacitor");
+                string rechargeLabel = Localize("stat_recharge");
+                string weaponSlotsLabel = Localize("stat_weapon_slots");
+                string moduleSlotsLabel = Localize("stat_module_slots");
+
                 startMenuStatsText.text =
-                (currentLanguage == LanguageOption.RU
-                    ? "Скорость: " + ship.maxSpeed.ToString("0.0") +
-                      "    Щит: " + Mathf.RoundToInt(ship.maxShield) +
-                      "    Броня: " + Mathf.RoundToInt(ship.maxArmor) +
-                      "    Корпус: " + Mathf.RoundToInt(ship.maxHull) +
-                      "\nЭнергия: " + Mathf.RoundToInt(ship.capacitor) +
-                      "    Перезаряд: " + ship.capacitorRechargeTime.ToString("0") + "с" +
-                      "    Слоты оружия: " + Mathf.Max(0, ship.weaponSlotCount) +
-                      "    Слоты модулей: " + Mathf.Max(0, ship.moduleSlotCount)
-                    : "Speed: " + ship.maxSpeed.ToString("0.0") +
-                      "    Shield: " + Mathf.RoundToInt(ship.maxShield) +
-                      "    Armor: " + Mathf.RoundToInt(ship.maxArmor) +
-                      "    Hull: " + Mathf.RoundToInt(ship.maxHull) +
-                      "\nCapacitor: " + Mathf.RoundToInt(ship.capacitor) +
-                      "    Recharge: " + ship.capacitorRechargeTime.ToString("0") + "s" +
-                      "    Weapon slots: " + Mathf.Max(0, ship.weaponSlotCount) +
-                      "    Module slots: " + Mathf.Max(0, ship.moduleSlotCount));
+                    speedLabel + ": " + ship.maxSpeed.ToString("0.0") +
+                    "    " + shieldLabel + ": " + Mathf.RoundToInt(ship.maxShield) +
+                    "    " + armorLabel + ": " + Mathf.RoundToInt(ship.maxArmor) +
+                    "    " + hullLabel + ": " + Mathf.RoundToInt(ship.maxHull) +
+                    "\n" + capacitorLabel + ": " + Mathf.RoundToInt(ship.capacitor) +
+                    "    " + rechargeLabel + ": " + ship.capacitorRechargeTime.ToString("0") + "s" +
+                    "    " + weaponSlotsLabel + ": " + Mathf.Max(0, ship.weaponSlotCount) +
+                    "    " + moduleSlotsLabel + ": " + Mathf.Max(0, ship.moduleSlotCount);
             }
             if (startMenuPreviewImage != null)
             {
@@ -1551,16 +1631,16 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
             if (shipCardViews[i].Stats != null)
             {
+                string shieldShort = Localize("stat_shield");
+                string armorShort = Localize("stat_armor");
+                string speedShort = Localize("stat_speed");
+                string gunsShort = Localize("stat_guns");
+
                 shipCardViews[i].Stats.text =
-                (currentLanguage == LanguageOption.RU
-                    ? "Щит " + Mathf.RoundToInt(cardShip.maxShield) +
-                      "  Броня " + Mathf.RoundToInt(cardShip.maxArmor) +
-                      "\nСкорость " + cardShip.maxSpeed.ToString("0.0") +
-                      "  Пушки " + Mathf.Max(0, cardShip.weaponSlotCount)
-                    : "Shield " + Mathf.RoundToInt(cardShip.maxShield) +
-                      "  Armor " + Mathf.RoundToInt(cardShip.maxArmor) +
-                      "\nSpeed " + cardShip.maxSpeed.ToString("0.0") +
-                      "  Guns " + Mathf.Max(0, cardShip.weaponSlotCount));
+                    shieldShort + " " + Mathf.RoundToInt(cardShip.maxShield) +
+                    "  " + armorShort + " " + Mathf.RoundToInt(cardShip.maxArmor) +
+                    "\n" + speedShort + " " + cardShip.maxSpeed.ToString("0.0") +
+                    "  " + gunsShort + " " + Mathf.Max(0, cardShip.weaponSlotCount);
             }
         }
 
@@ -3156,7 +3236,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         panelRect.sizeDelta = new Vector2(420f, 300f);
         AddOutline(panel.gameObject, new Color(0.55f, 0.18f, 0.18f, 1f));
 
-        TMP_Text title = CreateText("Title", panel.transform, currentLanguage == LanguageOption.RU ? "КОРАБЛЬ УНИЧТОЖЕН" : "SHIP DESTROYED", 28, FontStyle.Bold, new Color(1f, 0.42f, 0.36f));
+        TMP_Text title = CreateText("Title", panel.transform, Localize("status_gameover"), 28, FontStyle.Bold, new Color(1f, 0.42f, 0.36f));
         title.alignment = TextAlignmentOptions.Center;
         SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -24f), new Vector2(-20f, -64f));
 
@@ -3441,13 +3521,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (settingsBackButtonView != null) settingsBackButtonView.Label.text = Localize("back");
         if (languageRuButtonView != null) languageRuButtonView.Label.text = Localize("lang_ru");
         if (languageEngButtonView != null) languageEngButtonView.Label.text = Localize("lang_eng");
-        if (retryButtonView != null) retryButtonView.Label.text = currentLanguage == LanguageOption.RU ? "Повторить" : "Retry";
-        if (gameOverMenuButtonView != null) gameOverMenuButtonView.Label.text = currentLanguage == LanguageOption.RU ? "В меню" : "Main menu";
-        if (gameOverExitButtonView != null) gameOverExitButtonView.Label.text = currentLanguage == LanguageOption.RU ? "Выйти" : "Exit";
+        if (retryButtonView != null) retryButtonView.Label.text = Localize("retry");
+        if (gameOverMenuButtonView != null) gameOverMenuButtonView.Label.text = Localize("pause_to_menu");
+        if (gameOverExitButtonView != null) gameOverExitButtonView.Label.text = Localize("menu_exit");
         if (pauseResumeButtonView != null) pauseResumeButtonView.Label.text = Localize("menu_continue");
         if (pauseSettingsButtonView != null) pauseSettingsButtonView.Label.text = Localize("menu_settings");
         if (pauseMenuButtonView != null) pauseMenuButtonView.Label.text = Localize("pause_to_menu");
-        if (pauseHudButtonView != null) pauseHudButtonView.Label.text = currentLanguage == LanguageOption.RU ? "МЕНЮ" : "MENU";
+        if (pauseHudButtonView != null) pauseHudButtonView.Label.text = Localize("menu_short");
         for (int i = 0; i < fpsButtonViews.Length; i++)
         {
             if (fpsButtonViews[i] != null)
@@ -4402,9 +4482,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             if (gateHintText != null)
             {
                 gateHintText.transform.parent.gameObject.SetActive(true);
-                gateHintText.text = currentLanguage == LanguageOption.RU
-                    ? "Таймлайн волн не назначен."
-                    : "Wave timeline is not assigned.";
+                gateHintText.text = Localize("timeline_missing");
             }
             return;
         }
@@ -4486,16 +4564,12 @@ public class SpaceCombatSceneController : MonoBehaviour
             float nextEventTime = GetNextTimelineEventTime(gameTimer);
             if (nextEventTime < 0f)
             {
-                gateHintText.text = currentLanguage == LanguageOption.RU
-                    ? "Таймлайн завершён."
-                    : "Timeline complete.";
+                gateHintText.text = Localize("timeline_complete");
             }
             else
             {
                 float timeLeft = Mathf.Max(0f, nextEventTime - gameTimer);
-                gateHintText.text = currentLanguage == LanguageOption.RU
-                    ? "Следующий эвент через " + timeLeft.ToString("0.0") + "с"
-                    : "Next event in " + timeLeft.ToString("0.0") + "s";
+                gateHintText.text = Localize("timeline_next_event") + timeLeft.ToString("0.0") + Localize("seconds_short");
             }
         }
     }
