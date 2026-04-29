@@ -19,6 +19,7 @@ internal sealed class EnemyShip
     public Transform Transform;
     public SpriteRenderer BodyRenderer;
     public SpriteRenderer ShieldRenderer;
+    public ShipShieldVisual ShieldVisual;
     public SpriteRenderer TargetRenderer;
     public SpriteRenderer ThrusterRenderer;
     public ShipThrusterEffect ThrusterEffect;
@@ -29,6 +30,15 @@ internal sealed class EnemyShip
     public float ReengageDistance;
     public float DistanceResponsiveness;
     public float RetreatSpeedMultiplier;
+    public float PrimaryWeaponRange;
+    public float HoldDistanceTolerance;
+    public float OutOfRangeApproachFactor = 0.95f;
+    public float LowDurabilityRetreatThreshold = 0.35f;
+    public float LowDurabilityRetreatDistanceBonus = 1.2f;
+    public float LowDurabilityRetreatSpeedMultiplier = 1.35f;
+    public float StrafeJitterAmplitude = 0.22f;
+    public float StrafeJitterFrequency = 1.35f;
+    public float StrafeJitterPhase;
     public float AttackCooldown;
     public float AttackTimer;
     public float Damage;

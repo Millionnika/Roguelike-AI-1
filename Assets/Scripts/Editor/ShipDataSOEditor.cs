@@ -10,6 +10,7 @@ public sealed class ShipDataSOEditor : Editor
 
         DrawIdentitySection();
         DrawMovementSection();
+        DrawEnemyAiSection();
         DrawSurvivabilitySection();
         DrawLoadoutSection();
         DrawVisualSection();
@@ -36,6 +37,23 @@ public sealed class ShipDataSOEditor : Editor
         EditorGUILayout.PropertyField(serializedObject.FindProperty("acceleration"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("rotationSpeed"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("drag"));
+        EditorGUILayout.Space(6f);
+    }
+
+    private void DrawEnemyAiSection()
+    {
+        EditorGUILayout.LabelField("Enemy AI Distance", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyBehaviorPreset"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyPreferredDistance"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyPreferredDistanceFromRange"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyPreferredDistanceVariance"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyDistanceTolerance"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyOutOfRangeApproachFactor"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyLowDurabilityRetreatThreshold"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyLowDurabilityRetreatDistanceBonus"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyLowDurabilityRetreatSpeedMultiplier"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyStrafeJitterAmplitude"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("enemyStrafeJitterFrequency"));
         EditorGUILayout.Space(6f);
     }
 

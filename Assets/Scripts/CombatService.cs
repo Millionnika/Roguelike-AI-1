@@ -10,13 +10,15 @@ internal sealed class CombatUpdateContext
     public List<ModuleState> Modules;
     public ShipEquipmentState EquipmentState;
     public EnemyShip TargetEnemy;
+    public bool HasPlayerTarget;
+    public Vector3 PlayerTargetPosition;
     public Transform ProjectileRoot;
     public IPoolService PoolService;
     public int Wave;
     public Func<string, string> Localize;
     public Action<string, string> LogMessage;
     public Action<ModuleState> UpdateModuleVisual;
-    public Action<WeaponDataSO> PlayWeaponShot;
+    public Action<WeaponDataSO, Vector3, CombatFaction> PlayWeaponShot;
 }
 
 internal readonly struct CombatUpdateResult
@@ -34,6 +36,8 @@ internal readonly struct CombatUpdateResult
 internal sealed class CombatService : ICombatService
 {
     private const string WeaponDebugPrefix = "[WeaponDebug]";
+    private const float EnemyBaseCollisionRadiusFallback = 0.38f;
+    private static readonly Collider2D[] EnemyMovementCollisionBuffer = new Collider2D[16];
     private bool levelUpRequested;
 
     public CombatUpdateResult UpdateFrame(CombatUpdateContext context, float deltaTime)
@@ -156,35 +160,164 @@ internal sealed class CombatService : ICombatService
         }
 
         Vector3 radialDirection = awayFromPlayer / currentDistance;
+
+        float shieldMax = Mathf.Max(0f, enemy.MaxShield);
+        float armorMax = Mathf.Max(0f, enemy.MaxArmor);
+        float hullMax = Mathf.Max(0.01f, enemy.MaxHull);
+        float durabilityNow = Mathf.Max(0f, enemy.Shield) + Mathf.Max(0f, enemy.Armor) + Mathf.Max(0f, enemy.Hull);
+        float durabilityMax = Mathf.Max(0.01f, shieldMax + armorMax + hullMax);
+        float durabilityPercent = durabilityNow / durabilityMax;
+        bool lowDurability = durabilityPercent <= Mathf.Clamp01(enemy.LowDurabilityRetreatThreshold);
+
+        float desiredDistance = Mathf.Max(0.1f, enemy.OrbitDistance);
+        if (lowDurability)
+        {
+            desiredDistance += Mathf.Max(0f, enemy.LowDurabilityRetreatDistanceBonus);
+        }
+
         float retreatDistance = Mathf.Max(0.1f, enemy.RetreatDistance);
         float reengageDistance = Mathf.Max(retreatDistance + 0.1f, enemy.ReengageDistance);
-        if (currentDistance < retreatDistance)
+        if (currentDistance < retreatDistance || (lowDurability && currentDistance < desiredDistance))
         {
             enemy.Retreating = true;
         }
-        else if (currentDistance > reengageDistance)
+        else if (currentDistance > reengageDistance && !lowDurability)
         {
             enemy.Retreating = false;
         }
 
-        float desiredDistance = Mathf.Max(reengageDistance, enemy.OrbitDistance);
-        float distanceError = desiredDistance - currentDistance;
+        float holdTolerance = Mathf.Max(0.05f, enemy.HoldDistanceTolerance);
+        float weaponRange = Mathf.Max(0.1f, enemy.PrimaryWeaponRange);
+        float mustApproachDistance = weaponRange * Mathf.Clamp(enemy.OutOfRangeApproachFactor, 0.5f, 1.2f);
+        bool outOfFireRange = currentDistance > mustApproachDistance;
+
         float responsiveness = Mathf.Max(0.1f, enemy.DistanceResponsiveness);
-        float radialSpeed = distanceError * responsiveness;
+        float radialSpeed = 0f;
+
         if (enemy.Retreating)
         {
-            float panicSpeed = enemy.DriftSpeed * Mathf.Max(1f, enemy.RetreatSpeedMultiplier);
-            radialSpeed = Mathf.Max(radialSpeed, panicSpeed);
+            float retreatBoost = lowDurability ? Mathf.Max(1f, enemy.LowDurabilityRetreatSpeedMultiplier) : 1f;
+            float panicSpeed = enemy.DriftSpeed * Mathf.Max(1f, enemy.RetreatSpeedMultiplier) * retreatBoost;
+            float retreatError = Mathf.Max(0f, desiredDistance - currentDistance);
+            radialSpeed = Mathf.Max(panicSpeed * 0.55f, retreatError * responsiveness);
+        }
+        else if (outOfFireRange)
+        {
+            float approachError = currentDistance - desiredDistance;
+            radialSpeed = -Mathf.Clamp(
+                approachError * responsiveness,
+                enemy.DriftSpeed * 0.35f,
+                enemy.DriftSpeed * 1.25f);
+        }
+        else if (currentDistance < desiredDistance - holdTolerance)
+        {
+            float closeError = (desiredDistance - holdTolerance) - currentDistance;
+            radialSpeed = Mathf.Clamp(
+                closeError * responsiveness,
+                enemy.DriftSpeed * 0.2f,
+                enemy.DriftSpeed);
         }
 
-        float maxRadialSpeed = enemy.DriftSpeed * (enemy.Retreating ? Mathf.Max(1.2f, enemy.RetreatSpeedMultiplier) : 1.15f);
-        radialSpeed = Mathf.Clamp(radialSpeed, -maxRadialSpeed, maxRadialSpeed);
-        enemy.Transform.position += radialDirection * radialSpeed * deltaTime;
+        float maxRetreat = enemy.DriftSpeed * Mathf.Max(1.2f, enemy.RetreatSpeedMultiplier) * (lowDurability ? Mathf.Max(1f, enemy.LowDurabilityRetreatSpeedMultiplier) : 1f);
+        float maxApproach = enemy.DriftSpeed * 1.25f;
+        radialSpeed = Mathf.Clamp(radialSpeed, -maxApproach, maxRetreat);
+        MoveEnemyWithBaseCollision(enemy, radialDirection * radialSpeed * deltaTime);
 
-        enemy.OrbitAngle += enemy.OrbitSpeed * deltaTime;
+        float jitterAmplitude = Mathf.Max(0f, enemy.StrafeJitterAmplitude);
+        float jitterFrequency = Mathf.Max(0.1f, enemy.StrafeJitterFrequency);
+        float jitter = Mathf.Sin(Time.time * jitterFrequency + enemy.StrafeJitterPhase) * jitterAmplitude;
+        enemy.OrbitAngle += (enemy.OrbitSpeed + jitter * 0.45f) * deltaTime;
         Vector3 tangent = new Vector3(-Mathf.Sin(enemy.OrbitAngle), Mathf.Cos(enemy.OrbitAngle), 0f);
-        float tangentScale = enemy.Retreating ? 0.35f : 1f;
-        enemy.Transform.position += tangent * enemy.DriftSpeed * tangentScale * deltaTime;
+        float tangentScale = enemy.Retreating ? 0.45f : 1f + jitter * 0.3f;
+        MoveEnemyWithBaseCollision(enemy, tangent * enemy.DriftSpeed * Mathf.Max(0.2f, tangentScale) * deltaTime);
+    }
+
+    private static void MoveEnemyWithBaseCollision(EnemyShip enemy, Vector3 delta)
+    {
+        if (enemy == null || enemy.Transform == null || delta.sqrMagnitude <= 0.000001f)
+        {
+            return;
+        }
+
+        Vector3 current = enemy.Transform.position;
+        Vector3 target = current + delta;
+        float radius = ResolveCollisionRadius(enemy.Transform);
+
+        if (!IsBlockedByBase(target, radius, enemy.Transform))
+        {
+            enemy.Transform.position = target;
+            return;
+        }
+
+        Vector3 xOnly = current + new Vector3(delta.x, 0f, 0f);
+        Vector3 yOnly = current + new Vector3(0f, delta.y, 0f);
+        bool xFree = !IsBlockedByBase(xOnly, radius, enemy.Transform);
+        bool yFree = !IsBlockedByBase(yOnly, radius, enemy.Transform);
+
+        if (xFree && yFree)
+        {
+            enemy.Transform.position = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y) ? xOnly : yOnly;
+            return;
+        }
+
+        if (xFree)
+        {
+            enemy.Transform.position = xOnly;
+            return;
+        }
+
+        if (yFree)
+        {
+            enemy.Transform.position = yOnly;
+        }
+    }
+
+    private static float ResolveCollisionRadius(Transform root)
+    {
+        if (root == null)
+        {
+            return EnemyBaseCollisionRadiusFallback;
+        }
+
+        Collider2D collider = root.GetComponentInChildren<Collider2D>();
+        if (collider != null)
+        {
+            Bounds bounds = collider.bounds;
+            float extent = Mathf.Max(bounds.extents.x, bounds.extents.y);
+            if (extent > 0.01f)
+            {
+                return extent * 0.9f;
+            }
+        }
+
+        return EnemyBaseCollisionRadiusFallback;
+    }
+
+    private static bool IsBlockedByBase(Vector3 position, float radius, Transform selfRoot)
+    {
+        int hitCount = Physics2D.OverlapCircleNonAlloc(position, Mathf.Max(0.1f, radius), EnemyMovementCollisionBuffer);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D collider = EnemyMovementCollisionBuffer[i];
+            if (collider == null || collider.isTrigger)
+            {
+                continue;
+            }
+
+            Transform colliderRoot = collider.transform.root;
+            if (selfRoot != null && colliderRoot == selfRoot)
+            {
+                continue;
+            }
+
+            EnemyBaseLair baseLair = collider.GetComponentInParent<EnemyBaseLair>();
+            if (baseLair != null && baseLair.IsAlive)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryFireEnemyWeapons(CombatUpdateContext context, EnemyShip enemy, Vector3 playerPosition, float deltaTime)
@@ -315,13 +448,14 @@ internal sealed class CombatService : ICombatService
                 context.EquipmentState.WeaponTimers[i] = weapon.CooldownRemaining;
             }
 
-            if (!weaponGroupActive || context.TargetEnemy == null || !context.TargetEnemy.IsAlive())
+            if (!weaponGroupActive || !context.HasPlayerTarget)
             {
                 continue;
             }
 
-            AimWeaponAt(weapon, context.TargetEnemy.Transform.position, deltaTime);
-            if (!weapon.CanFireAt(context.TargetEnemy.Transform.position))
+            Vector3 targetPosition = context.PlayerTargetPosition;
+            AimWeaponAt(weapon, targetPosition, deltaTime);
+            if (!weapon.CanFireAt(targetPosition))
             {
                 continue;
             }
@@ -350,7 +484,7 @@ internal sealed class CombatService : ICombatService
                 weapon,
                 shotDirection,
                 shotDamage,
-                context.TargetEnemy.Transform.position,
+                targetPosition,
                 null);
 
             if (!fired)
@@ -420,7 +554,7 @@ internal sealed class CombatService : ICombatService
 
         if (useProjectile)
         {
-            fired = SpawnProjectile(context, weapon, ownerFaction, shotDirection, shotDamage);
+            fired = SpawnProjectile(context, weapon, ownerFaction, shotDirection, shotDamage, fallbackTargetPosition);
         }
         else
         {
@@ -429,7 +563,7 @@ internal sealed class CombatService : ICombatService
 
         if (fired)
         {
-            context.PlayWeaponShot?.Invoke(weapon.Data);
+            context.PlayWeaponShot?.Invoke(weapon.Data, weapon.GetMuzzlePosition(), ownerFaction);
         }
 
         return fired;
@@ -440,7 +574,8 @@ internal sealed class CombatService : ICombatService
         WeaponInstance weapon,
         CombatFaction ownerFaction,
         Vector2 shotDirection,
-        float shotDamage)
+        float shotDamage,
+        Vector3 fallbackTargetPosition)
     {
         if (context.PoolService == null || context.ProjectileRoot == null)
         {
@@ -494,6 +629,7 @@ internal sealed class CombatService : ICombatService
             sourceFaction: ownerFaction,
             sourceWeaponData: weapon.Data,
             startDirection: shotDirection,
+            preferredTargetPoint: fallbackTargetPosition,
             projectileDamage: shotDamage,
             projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
             projectileMaxDistance: maxDistance,
