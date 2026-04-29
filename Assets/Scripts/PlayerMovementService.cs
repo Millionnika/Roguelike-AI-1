@@ -66,6 +66,8 @@ internal sealed class PlayerMovementService : IMovementService
     private const float ClickMaxTravel = 0.45f;
     private const float ClickStopDistance = 0.25f;
     private const float RotationVelocityThreshold = 0.18f;
+    private const float BaseCollisionRadiusFallback = 0.42f;
+    private static readonly Collider2D[] BaseCollisionBuffer = new Collider2D[16];
 
     private Vector2 velocitySmoothRef;
     private bool wasPointerPressed;
@@ -114,7 +116,8 @@ internal sealed class PlayerMovementService : IMovementService
         float maxSpeed = Mathf.Max(0.1f, player.Speed * Mathf.Max(0.1f, player.SpeedMultiplier));
         player.Velocity = Vector2.SmoothDamp(player.Velocity, desiredVelocity, ref velocitySmoothRef, smoothTime, maxSpeed, deltaTime);
         player.Velocity = Vector2.Lerp(player.Velocity, Vector2.zero, Mathf.Clamp01(player.Drag * deltaTime));
-        player.Transform.position += (Vector3)(player.Velocity * deltaTime);
+        Vector3 movementDelta = (Vector3)(player.Velocity * deltaTime);
+        MoveWithBaseCollision(player, movementDelta);
 
         if (player.Velocity.sqrMagnitude > RotationVelocityThreshold * RotationVelocityThreshold)
         {
@@ -204,5 +207,95 @@ internal sealed class PlayerMovementService : IMovementService
         player.MoveCommandActive = false;
         player.Velocity = Vector2.zero;
         velocitySmoothRef = Vector2.zero;
+    }
+
+    private static void MoveWithBaseCollision(PlayerShip player, Vector3 delta)
+    {
+        if (player == null || player.Transform == null || delta.sqrMagnitude <= 0.000001f)
+        {
+            return;
+        }
+
+        Vector3 current = player.Transform.position;
+        Vector3 target = current + delta;
+        float radius = ResolveCollisionRadius(player.Transform);
+
+        if (!IsBlockedByBase(target, radius, player.Transform))
+        {
+            player.Transform.position = target;
+            return;
+        }
+
+        Vector3 xOnly = current + new Vector3(delta.x, 0f, 0f);
+        Vector3 yOnly = current + new Vector3(0f, delta.y, 0f);
+        bool xFree = !IsBlockedByBase(xOnly, radius, player.Transform);
+        bool yFree = !IsBlockedByBase(yOnly, radius, player.Transform);
+
+        if (xFree && yFree)
+        {
+            player.Transform.position = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y) ? xOnly : yOnly;
+            return;
+        }
+
+        if (xFree)
+        {
+            player.Transform.position = xOnly;
+            return;
+        }
+
+        if (yFree)
+        {
+            player.Transform.position = yOnly;
+            return;
+        }
+
+        player.Velocity = Vector2.zero;
+    }
+
+    private static float ResolveCollisionRadius(Transform root)
+    {
+        if (root == null)
+        {
+            return BaseCollisionRadiusFallback;
+        }
+
+        Collider2D collider = root.GetComponentInChildren<Collider2D>();
+        if (collider != null)
+        {
+            Bounds bounds = collider.bounds;
+            float extent = Mathf.Max(bounds.extents.x, bounds.extents.y);
+            if (extent > 0.01f)
+            {
+                return extent * 0.9f;
+            }
+        }
+
+        return BaseCollisionRadiusFallback;
+    }
+
+    private static bool IsBlockedByBase(Vector3 position, float radius, Transform selfRoot)
+    {
+        int hitCount = Physics2D.OverlapCircleNonAlloc(position, Mathf.Max(0.1f, radius), BaseCollisionBuffer);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D collider = BaseCollisionBuffer[i];
+            if (collider == null || collider.isTrigger)
+            {
+                continue;
+            }
+
+            if (selfRoot != null && collider.transform.root == selfRoot)
+            {
+                continue;
+            }
+
+            EnemyBaseLair baseLair = collider.GetComponentInParent<EnemyBaseLair>();
+            if (baseLair != null && baseLair.IsAlive)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

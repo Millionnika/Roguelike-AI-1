@@ -15,6 +15,16 @@ internal sealed class SpaceCombatUiFactory : ISpaceCombatUiFactory
         return image;
     }
 
+    public RawImage CreateRawImage(string objectName, Transform parent, Texture texture, Color color)
+    {
+        GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(RawImage));
+        go.transform.SetParent(parent, false);
+        RawImage image = go.GetComponent<RawImage>();
+        image.texture = texture;
+        image.color = color;
+        return image;
+    }
+
     public TMP_Text CreateText(string objectName, Transform parent, Font uiFont, string content, int fontSize, FontStyle fontStyle, Color color)
     {
         GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI));

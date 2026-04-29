@@ -29,6 +29,12 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private float missileSpeedCurrent;
     private float missileAcceleration;
     private float missileTimer;
+    private float missileLaunchSpeedMultiplier;
+    private float missileLaunchDuration;
+    private float missileAimPauseDuration;
+    private float missileAimPauseSpeedMultiplier;
+    private float missileBoostSpeedMultiplier;
+    private float missileBoostAcceleration;
     private Vector2 preferredTargetPoint;
     private Transform missileTarget;
     private readonly List<Collider2D> ignoredOwnerColliders = new List<Collider2D>();
@@ -74,7 +80,13 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         missileWobbleAmplitude = weaponData != null ? Mathf.Max(0f, weaponData.missileWobbleAmplitude) : 0f;
         missileWobbleFrequency = weaponData != null ? Mathf.Max(0f, weaponData.missileWobbleFrequency) : 0f;
         missileAcceleration = weaponData != null ? Mathf.Max(0f, weaponData.missileAcceleration) : 0f;
-        missileSpeedCurrent = speed;
+        missileLaunchSpeedMultiplier = weaponData != null ? Mathf.Max(0.01f, weaponData.missileLaunchSpeedMultiplier) : 0.35f;
+        missileLaunchDuration = weaponData != null ? Mathf.Max(0f, weaponData.missileLaunchDuration) : 0.2f;
+        missileAimPauseDuration = weaponData != null ? Mathf.Max(0f, weaponData.missileAimPauseDuration) : 0.12f;
+        missileAimPauseSpeedMultiplier = weaponData != null ? Mathf.Max(0f, weaponData.missileAimPauseSpeedMultiplier) : 0.05f;
+        missileBoostSpeedMultiplier = weaponData != null ? Mathf.Max(0.1f, weaponData.missileBoostSpeedMultiplier) : 2.8f;
+        missileBoostAcceleration = weaponData != null ? Mathf.Max(0f, weaponData.missileBoostAcceleration) : 42f;
+        missileSpeedCurrent = isMissile ? speed * missileLaunchSpeedMultiplier : speed;
         if (isMissile)
         {
             AcquireMissileTarget();
@@ -181,7 +193,38 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         }
 
         direction = steerDirection.sqrMagnitude > 0.0001f ? steerDirection.normalized : direction;
-        missileSpeedCurrent = Mathf.Max(0.1f, missileSpeedCurrent + missileAcceleration * deltaTime);
+
+        float phaseOneEnd = missileLaunchDuration;
+        float phaseTwoEnd = phaseOneEnd + missileAimPauseDuration;
+        float targetSpeed;
+        float acceleration;
+
+        if (missileTimer <= phaseOneEnd)
+        {
+            targetSpeed = speed * missileLaunchSpeedMultiplier;
+            acceleration = Mathf.Max(0f, missileAcceleration);
+        }
+        else if (missileTimer <= phaseTwoEnd)
+        {
+            targetSpeed = speed * missileAimPauseSpeedMultiplier;
+            acceleration = Mathf.Max(0f, missileBoostAcceleration);
+        }
+        else
+        {
+            targetSpeed = speed * missileBoostSpeedMultiplier;
+            acceleration = Mathf.Max(0f, missileBoostAcceleration);
+        }
+
+        if (acceleration <= 0.0001f)
+        {
+            missileSpeedCurrent = targetSpeed;
+        }
+        else
+        {
+            missileSpeedCurrent = Mathf.MoveTowards(missileSpeedCurrent, targetSpeed, acceleration * deltaTime);
+        }
+
+        missileSpeedCurrent = Mathf.Max(0f, missileSpeedCurrent);
 
         MoveProjectile(direction * missileSpeedCurrent, deltaTime);
 

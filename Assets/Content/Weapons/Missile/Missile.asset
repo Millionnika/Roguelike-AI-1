@@ -28,12 +28,18 @@ MonoBehaviour:
   projectileVisualScale: 0.16
   missileTurnSpeed: 240
   missileSeekRadius: 18
-  missileWobbleAmplitude: 0.08
+  missileWobbleAmplitude: 0
   missileWobbleFrequency: 8
   missileAcceleration: 0.6
+  missileLaunchSpeedMultiplier: 0.35
+  missileLaunchDuration: 0.22
+  missileAimPauseDuration: 0.14
+  missileAimPauseSpeedMultiplier: 0.03
+  missileBoostSpeedMultiplier: 2.9
+  missileBoostAcceleration: 46
   fireRate: 0.45
   capacitorPerShot: 9
   requiredClass: 0
   icon: {fileID: 0}
   visualPrefab: {fileID: 0}
-  fireSound: {fileID: 0}
+  fireSound: {fileID: 8300000, guid: 606d91d801d3736449900c3075805664, type: 3}

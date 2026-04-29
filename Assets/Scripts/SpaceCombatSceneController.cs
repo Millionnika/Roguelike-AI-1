@@ -61,6 +61,42 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField, Min(0.01f)] private float targetLineWidth = 0.035f;
     [Tooltip("Inspector: target line sorting order")]
     [SerializeField] private int targetLineSortingOrder = 1;
+    [Tooltip("Inspector: use dashed target line")]
+    [SerializeField] private bool targetLineDashed;
+    [Tooltip("Inspector: target line dash size")]
+    [SerializeField, Min(0.02f)] private float targetLineDashSize = 0.35f;
+    [Tooltip("Inspector: target line gap size")]
+    [SerializeField, Min(0.01f)] private float targetLineGapSize = 0.2f;
+
+    [Header("Move Command Visuals")]
+    [Tooltip("Inspector: move command line color")]
+    [SerializeField] private Color moveCommandLineColor = new Color(0.55f, 0.9f, 1f, 0.45f);
+    [Tooltip("Inspector: move command line width")]
+    [SerializeField, Min(0.01f)] private float moveCommandLineWidth = 0.03f;
+    [Tooltip("Inspector: move command line sorting order")]
+    [SerializeField] private int moveCommandLineSortingOrder = 0;
+    [Tooltip("Inspector: use dashed move command line")]
+    [SerializeField] private bool moveCommandLineDashed = true;
+    [Tooltip("Inspector: move command line dash size")]
+    [SerializeField, Min(0.02f)] private float moveCommandLineDashSize = 0.26f;
+    [Tooltip("Inspector: move command line gap size")]
+    [SerializeField, Min(0.01f)] private float moveCommandLineGapSize = 0.17f;
+    [Tooltip("Inspector: move command marker sprite (optional)")]
+    [SerializeField] private Sprite moveCommandMarkerSprite;
+    [Tooltip("Inspector: move command marker color")]
+    [SerializeField] private Color moveCommandMarkerColor = new Color(0.78f, 0.95f, 1f, 0.95f);
+    [Tooltip("Inspector: move command marker world size")]
+    [SerializeField, Min(0.05f)] private float moveCommandMarkerSize = 0.28f;
+
+    [Header("Minimap")]
+    [Tooltip("Inspector: enable minimap runtime UI")]
+    [SerializeField] private bool minimapEnabled = true;
+    [Tooltip("Inspector: minimap camera orthographic size")]
+    [SerializeField, Min(2f)] private float minimapOrthoSize = 20f;
+    [Tooltip("Inspector: minimap panel size in pixels")]
+    [SerializeField, Min(96f)] private float minimapPanelSize = 200f;
+    [Tooltip("Inspector: minimap background tint")]
+    [SerializeField] private Color minimapBackgroundColor = new Color(0.03f, 0.08f, 0.14f, 0.82f);
 
     [Header("Shield Visuals")]
     [Tooltip("РђРјРїР»РёС‚СѓРґР° РїСѓР»СЊСЃР°С†РёРё РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚Рё С‰РёС‚Р° (fallback, РµСЃР»Рё ShipShieldVisual РЅРµ РЅР°Р·РЅР°С‡РµРЅ).")]
@@ -161,6 +197,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Camera mainCamera;
     private PlayerShip player;
     private EnemyShip targetEnemy;
+    private EnemyBaseLair targetBase;
     private Transform worldRoot;
     private Transform starRoot;
     private Transform enemyRoot;
@@ -172,7 +209,15 @@ public class SpaceCombatSceneController : MonoBehaviour
     private SpriteRenderer targetFrameRenderer;
     private Sprite runtimeTargetFrameSprite;
     private LineRenderer targetLineRenderer;
+    private LineRenderer moveCommandLineRenderer;
     private Material targetingMaterial;
+    private Texture2D dashedLineTexture;
+    private GameObject moveCommandMarkerObject;
+    private SpriteRenderer moveCommandMarkerRenderer;
+    private Camera minimapCamera;
+    private RenderTexture minimapRenderTexture;
+    private RawImage minimapRawImage;
+    private RectTransform minimapPanelRect;
 
     private Canvas hudCanvas;
     private TMP_Text combatLogText;
@@ -296,6 +341,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private int enemySpawnSequence;
     private float targetCameraOrthographicSize;
     private readonly List<SpawnEventRuntimeState> spawnEventStates = new List<SpawnEventRuntimeState>();
+    private readonly Collider2D[] targetSelectionBuffer = new Collider2D[24];
 
     private enum ConfirmAction
     {
@@ -405,6 +451,23 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (targetingMaterial != null)
         {
             Destroy(targetingMaterial);
+        }
+        if (dashedLineTexture != null)
+        {
+            Destroy(dashedLineTexture);
+        }
+        if (minimapRenderTexture != null)
+        {
+            if (minimapRawImage != null && minimapRawImage.texture == minimapRenderTexture)
+            {
+                minimapRawImage.texture = null;
+            }
+            minimapRenderTexture.Release();
+            Destroy(minimapRenderTexture);
+        }
+        if (minimapCamera != null)
+        {
+            Destroy(minimapCamera.gameObject);
         }
     }
 
@@ -780,6 +843,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             Vector3 targetPosition = new Vector3(current.x, current.y, -10f) + new Vector3(lookAhead.x, lookAhead.y, 0f);
             mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, targetPosition, cameraFollowSmoothing * Time.deltaTime);
         }
+
+        UpdateMinimapCamera();
     }
 
     private void ConfigureCamera()
@@ -789,6 +854,81 @@ public class SpaceCombatSceneController : MonoBehaviour
         mainCamera.orthographicSize = targetCameraOrthographicSize;
         mainCamera.clearFlags = CameraClearFlags.SolidColor;
         mainCamera.backgroundColor = new Color(0.01f, 0.03f, 0.05f);
+    }
+
+    private void EnsureMinimap(Transform uiRoot)
+    {
+        if (!minimapEnabled || uiRoot == null)
+        {
+            if (minimapPanelRect != null)
+            {
+                minimapPanelRect.gameObject.SetActive(false);
+            }
+            return;
+        }
+
+        Transform minimapPanel = uiRoot.Find("MinimapPanel");
+        if (minimapPanel == null)
+        {
+            minimapPanelRect = null;
+            minimapRawImage = null;
+            return;
+        }
+
+        minimapPanelRect = minimapPanel.GetComponent<RectTransform>();
+        if (minimapPanelRect != null)
+        {
+            minimapPanelRect.gameObject.SetActive(true);
+        }
+        minimapRawImage = minimapPanel.GetComponentInChildren<RawImage>(true);
+
+        if (minimapCamera == null)
+        {
+            GameObject minimapCameraObject = new GameObject("MinimapCamera");
+            minimapCameraObject.transform.SetParent(transform, false);
+            minimapCamera = minimapCameraObject.AddComponent<Camera>();
+            minimapCamera.orthographic = true;
+            minimapCamera.orthographicSize = minimapOrthoSize;
+            minimapCamera.clearFlags = CameraClearFlags.SolidColor;
+            minimapCamera.backgroundColor = new Color(0.01f, 0.04f, 0.08f, 1f);
+            minimapCamera.cullingMask = ~0;
+            minimapCamera.nearClipPlane = 0.1f;
+            minimapCamera.farClipPlane = 200f;
+            minimapCamera.depth = -50f;
+        }
+
+        int rtSize = Mathf.RoundToInt(Mathf.Clamp(minimapPanelSize * 1.2f, 128f, 1024f));
+        if (minimapRenderTexture == null || minimapRenderTexture.width != rtSize || minimapRenderTexture.height != rtSize)
+        {
+            if (minimapRenderTexture != null)
+            {
+                minimapRenderTexture.Release();
+                Destroy(minimapRenderTexture);
+            }
+
+            minimapRenderTexture = new RenderTexture(rtSize, rtSize, 16, RenderTextureFormat.ARGB32);
+            minimapRenderTexture.name = "Minimap_RT";
+            minimapRenderTexture.Create();
+        }
+
+        minimapCamera.targetTexture = minimapRenderTexture;
+        if (minimapRawImage != null)
+        {
+            minimapRawImage.texture = minimapRenderTexture;
+        }
+    }
+
+    private void UpdateMinimapCamera()
+    {
+        if (!minimapEnabled || minimapCamera == null || player == null || player.Transform == null)
+        {
+            return;
+        }
+
+        minimapCamera.orthographicSize = minimapOrthoSize;
+        Vector3 playerPosition = player.Transform.position;
+        minimapCamera.transform.position = new Vector3(playerPosition.x, playerPosition.y, -40f);
+        minimapCamera.transform.rotation = Quaternion.identity;
     }
 
     private string Localize(string key)
@@ -1514,6 +1654,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameTimer = 0f;
         enemySpawnSequence = 0;
         targetEnemy = null;
+        targetBase = null;
         activePerks.Clear();
         perkPanelObject.SetActive(false);
         ShowGameOverPanel(false);
@@ -1815,9 +1956,63 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         enemies.Add(enemy);
-        if (targetEnemy == null)
+        if (targetEnemy == null && targetBase == null)
         {
             targetEnemy = enemy;
+        }
+    }
+
+    public bool SpawnEnemyFromExternalShipData(ShipDataSO shipData, Vector3 position)
+    {
+        if (shipData == null || shipData.shipPrefab == null)
+        {
+            return false;
+        }
+
+        SpawnEnemyFromTimeline(shipData, position);
+        return true;
+    }
+
+    public bool SpawnEnemyFromExternalPrefab(GameObject enemyPrefab, Vector3 position)
+    {
+        if (enemyPrefab == null || availableShips == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < availableShips.Count; i++)
+        {
+            ShipDataSO ship = availableShips[i];
+            if (ship == null || ship.shipPrefab == null)
+            {
+                continue;
+            }
+
+            if (ship.shipPrefab == enemyPrefab)
+            {
+                SpawnEnemyFromTimeline(ship, position);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void AddExternalExperience(int amount)
+    {
+        if (player == null || amount <= 0)
+        {
+            return;
+        }
+
+        player.AddExperience(amount);
+        while (player.Experience >= player.ExperienceToNext && player.ExperienceToNext > 0)
+        {
+            BeginLevelUp();
+            if (levelUpPending)
+            {
+                break;
+            }
         }
     }
 
@@ -1965,9 +2160,14 @@ public class SpaceCombatSceneController : MonoBehaviour
             ? Mathf.Max(enemyWeapon.maxRange, enemyWeapon.projectileMaxDistance)
             : 5.2f;
         weaponRange = Mathf.Max(4.5f, weaponRange);
-        float preferredDistance = Mathf.Clamp(weaponRange * UnityEngine.Random.Range(0.68f, 0.82f), 3.9f, 7.5f);
-        float retreatDistance = Mathf.Max(2.8f, preferredDistance * 0.72f);
-        float reengageDistance = Mathf.Max(retreatDistance + 0.6f, preferredDistance * 0.94f);
+        float preferredDistanceBase = shipData.enemyPreferredDistance > 0f
+            ? shipData.enemyPreferredDistance
+            : weaponRange * shipData.enemyPreferredDistanceFromRange;
+        float preferredDistance = preferredDistanceBase + UnityEngine.Random.Range(-shipData.enemyPreferredDistanceVariance, shipData.enemyPreferredDistanceVariance);
+        preferredDistance = Mathf.Clamp(preferredDistance, 2.4f, weaponRange * 0.94f);
+        float distanceTolerance = Mathf.Max(0.05f, shipData.enemyDistanceTolerance);
+        float retreatDistance = Mathf.Max(1.6f, preferredDistance - distanceTolerance * 1.35f);
+        float reengageDistance = Mathf.Max(retreatDistance + 0.2f, preferredDistance + distanceTolerance);
 
         EnemyShip enemy = new EnemyShip
         {
@@ -1986,6 +2186,15 @@ public class SpaceCombatSceneController : MonoBehaviour
             ReengageDistance = reengageDistance,
             DistanceResponsiveness = UnityEngine.Random.Range(1.25f, 1.75f),
             RetreatSpeedMultiplier = UnityEngine.Random.Range(1.8f, 2.35f),
+            PrimaryWeaponRange = weaponRange,
+            HoldDistanceTolerance = distanceTolerance,
+            OutOfRangeApproachFactor = shipData.enemyOutOfRangeApproachFactor,
+            LowDurabilityRetreatThreshold = shipData.enemyLowDurabilityRetreatThreshold,
+            LowDurabilityRetreatDistanceBonus = shipData.enemyLowDurabilityRetreatDistanceBonus,
+            LowDurabilityRetreatSpeedMultiplier = shipData.enemyLowDurabilityRetreatSpeedMultiplier,
+            StrafeJitterAmplitude = shipData.enemyStrafeJitterAmplitude,
+            StrafeJitterFrequency = shipData.enemyStrafeJitterFrequency,
+            StrafeJitterPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
             AttackCooldown = weaponCooldown,
             AttackTimer = UnityEngine.Random.Range(0f, 0.7f),
             Damage = enemyDamage,
@@ -2334,6 +2543,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (HasAuthoredInspectorHud(uiRoot))
         {
             BindAuthoredInspectorHud(uiRoot);
+            EnsureMinimap(uiRoot);
             return;
         }
 
@@ -2364,6 +2574,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             CreateVirtualJoystick(uiRoot);
         }
+
+        EnsureMinimap(uiRoot);
     }
 
     private Transform ResolveInspectorUiRoot()
@@ -4179,7 +4391,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
 
             Bounds bounds;
-            if (!TryCalculateTargetBounds(enemy, out bounds))
+            if (!TryCalculateTargetBounds(enemy.Transform, out bounds))
             {
                 continue;
             }
@@ -4200,7 +4412,14 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (selectedEnemy == null)
         {
-            return false;
+            EnemyBaseLair selectedBase = TrySelectBaseAtWorldPoint(worldPosition);
+            if (selectedBase == null)
+            {
+                return false;
+            }
+
+            SelectTargetBase(selectedBase);
+            return true;
         }
 
         SelectTargetEnemy(selectedEnemy);
@@ -4214,9 +4433,66 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
+        targetBase = null;
         targetEnemy = enemy;
         UpdateTargetState();
         LogMessage(Localize("log_target_locked") + enemy.Id);
+    }
+
+    private EnemyBaseLair TrySelectBaseAtWorldPoint(Vector3 worldPosition)
+    {
+        int hitCount = Physics2D.OverlapPointNonAlloc(worldPosition, targetSelectionBuffer);
+        EnemyBaseLair selectedBase = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D collider = targetSelectionBuffer[i];
+            if (collider == null)
+            {
+                continue;
+            }
+
+            EnemyBaseLair baseLair = collider.GetComponentInParent<EnemyBaseLair>();
+            if (baseLair == null || !baseLair.IsAlive)
+            {
+                continue;
+            }
+
+            Bounds bounds;
+            if (!TryCalculateTargetBounds(baseLair.transform, out bounds))
+            {
+                continue;
+            }
+
+            bounds.Expand(new Vector3(targetWorldClickPadding, targetWorldClickPadding, 0f));
+            if (!bounds.Contains(worldPosition))
+            {
+                continue;
+            }
+
+            float distance = ((Vector2)bounds.center - (Vector2)worldPosition).sqrMagnitude;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                selectedBase = baseLair;
+            }
+        }
+
+        return selectedBase;
+    }
+
+    private void SelectTargetBase(EnemyBaseLair baseLair)
+    {
+        if (baseLair == null || !baseLair.IsAlive)
+        {
+            return;
+        }
+
+        targetEnemy = null;
+        targetBase = baseLair;
+        UpdateTargetState();
+        LogMessage(Localize("log_target_locked") + baseLair.name);
     }
 
     private bool IsGameplayHudBlocked(Vector2 screenPosition)
@@ -4535,6 +4811,9 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateCombat(float deltaTime)
     {
+        Vector3 targetPoint = Vector3.zero;
+        bool hasPlayerTarget = TryGetPlayerTargetPosition(out targetPoint);
+
         CombatUpdateContext context = new CombatUpdateContext
         {
             Player = player,
@@ -4542,6 +4821,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             Modules = modules,
             EquipmentState = equipmentState,
             TargetEnemy = targetEnemy,
+            HasPlayerTarget = hasPlayerTarget,
+            PlayerTargetPosition = targetPoint,
             ProjectileRoot = projectileRoot,
             PoolService = poolService,
             Wave = wave,
@@ -4932,19 +5213,21 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateTargetingVisuals()
     {
-        bool hasTarget = targetEnemy != null && targetEnemy.IsAlive() && player != null && player.Transform != null;
+        Transform targetTransform = null;
+        bool hasTarget = player != null && player.Transform != null && TryGetCurrentTargetTransform(out targetTransform);
         if (!hasTarget)
         {
             SetTargetingVisualsActive(false);
+            UpdateMoveCommandVisuals();
             return;
         }
 
         EnsureTargetingVisuals();
 
         Bounds targetBounds;
-        if (!TryCalculateTargetBounds(targetEnemy, out targetBounds))
+        if (!TryCalculateTargetBounds(targetTransform, out targetBounds))
         {
-            targetBounds = new Bounds(targetEnemy.Transform.position, Vector3.one);
+            targetBounds = new Bounds(targetTransform.position, Vector3.one);
         }
 
         if (targetFrameRenderer != null && targetFrameRenderer.sprite != null)
@@ -4965,19 +5248,23 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (targetLineRenderer != null)
         {
-            targetLineRenderer.gameObject.SetActive(true);
-            targetLineRenderer.startColor = targetLineColor;
-            targetLineRenderer.endColor = targetLineColor;
-            targetLineRenderer.startWidth = targetLineWidth;
-            targetLineRenderer.endWidth = targetLineWidth;
-            targetLineRenderer.sortingOrder = targetLineSortingOrder;
             Vector3 start = player.Transform.position;
             Vector3 end = targetBounds.center;
             start.z = 0f;
             end.z = 0f;
-            targetLineRenderer.SetPosition(0, start);
-            targetLineRenderer.SetPosition(1, end);
+            ConfigureLineRenderer(
+                targetLineRenderer,
+                targetLineColor,
+                targetLineWidth,
+                targetLineSortingOrder,
+                targetLineDashed,
+                targetLineDashSize,
+                targetLineGapSize,
+                start,
+                end);
         }
+
+        UpdateMoveCommandVisuals();
     }
 
     private void EnsureTargetingVisuals()
@@ -5008,6 +5295,144 @@ public class SpaceCombatSceneController : MonoBehaviour
             targetLineRenderer.numCapVertices = 4;
             targetLineRenderer.sortingOrder = targetLineSortingOrder;
             targetLineRenderer.material = GetTargetingMaterial();
+        }
+    }
+
+    private void EnsureMoveCommandVisuals()
+    {
+        Transform parent = worldRoot != null ? worldRoot : transform;
+        if (moveCommandLineRenderer == null)
+        {
+            GameObject lineObject = new GameObject("MoveCommandLine");
+            lineObject.transform.SetParent(parent, false);
+            moveCommandLineRenderer = lineObject.AddComponent<LineRenderer>();
+            moveCommandLineRenderer.positionCount = 2;
+            moveCommandLineRenderer.useWorldSpace = true;
+            moveCommandLineRenderer.alignment = LineAlignment.View;
+            moveCommandLineRenderer.textureMode = LineTextureMode.Stretch;
+            moveCommandLineRenderer.numCapVertices = 4;
+            moveCommandLineRenderer.sortingOrder = moveCommandLineSortingOrder;
+            moveCommandLineRenderer.material = GetTargetingMaterial();
+            moveCommandLineRenderer.gameObject.SetActive(false);
+        }
+
+        if (moveCommandMarkerObject == null)
+        {
+            moveCommandMarkerObject = new GameObject("MoveCommandMarker");
+            moveCommandMarkerObject.transform.SetParent(parent, false);
+            moveCommandMarkerRenderer = moveCommandMarkerObject.AddComponent<SpriteRenderer>();
+            moveCommandMarkerRenderer.sortingOrder = moveCommandLineSortingOrder + 1;
+            moveCommandMarkerObject.SetActive(false);
+        }
+    }
+
+    private void UpdateMoveCommandVisuals()
+    {
+        if (player == null || player.Transform == null)
+        {
+            return;
+        }
+
+        EnsureMoveCommandVisuals();
+
+        bool show = player.MoveCommandActive;
+        if (!show)
+        {
+            if (moveCommandLineRenderer != null) moveCommandLineRenderer.gameObject.SetActive(false);
+            if (moveCommandMarkerObject != null) moveCommandMarkerObject.SetActive(false);
+            return;
+        }
+
+        Vector3 start = player.Transform.position;
+        Vector3 end = player.MoveCommandTarget;
+        start.z = 0f;
+        end.z = 0f;
+
+        if (moveCommandLineRenderer != null)
+        {
+            ConfigureLineRenderer(
+                moveCommandLineRenderer,
+                moveCommandLineColor,
+                moveCommandLineWidth,
+                moveCommandLineSortingOrder,
+                moveCommandLineDashed,
+                moveCommandLineDashSize,
+                moveCommandLineGapSize,
+                start,
+                end);
+        }
+
+        if (moveCommandMarkerObject != null && moveCommandMarkerRenderer != null)
+        {
+            moveCommandMarkerObject.SetActive(true);
+            moveCommandMarkerObject.transform.position = end;
+            moveCommandMarkerObject.transform.rotation = Quaternion.identity;
+
+            Sprite markerSprite = moveCommandMarkerSprite != null ? moveCommandMarkerSprite : circleSprite;
+            moveCommandMarkerRenderer.sprite = markerSprite;
+            moveCommandMarkerRenderer.color = moveCommandMarkerColor;
+            moveCommandMarkerRenderer.sortingOrder = moveCommandLineSortingOrder + 1;
+
+            float scale = moveCommandMarkerSize;
+            if (markerSprite != null)
+            {
+                Vector3 spriteSize = markerSprite.bounds.size;
+                float baseSize = Mathf.Max(spriteSize.x, spriteSize.y, 0.001f);
+                scale = moveCommandMarkerSize / baseSize;
+            }
+
+            moveCommandMarkerObject.transform.localScale = Vector3.one * Mathf.Max(0.01f, scale);
+        }
+    }
+
+    private void ConfigureLineRenderer(
+        LineRenderer renderer,
+        Color color,
+        float width,
+        int sortingOrder,
+        bool dashed,
+        float dashSize,
+        float gapSize,
+        Vector3 start,
+        Vector3 end)
+    {
+        if (renderer == null)
+        {
+            return;
+        }
+
+        renderer.gameObject.SetActive(true);
+        renderer.startColor = color;
+        renderer.endColor = color;
+        renderer.startWidth = width;
+        renderer.endWidth = width;
+        renderer.sortingOrder = sortingOrder;
+        renderer.SetPosition(0, start);
+        renderer.SetPosition(1, end);
+
+        if (renderer.material == null)
+        {
+            renderer.material = GetTargetingMaterial();
+        }
+
+        if (renderer.material == null)
+        {
+            return;
+        }
+
+        if (dashed)
+        {
+            renderer.textureMode = LineTextureMode.Tile;
+            renderer.material.mainTexture = GetDashedLineTexture();
+            float segment = Mathf.Max(0.01f, dashSize + gapSize);
+            float lineLength = Vector3.Distance(start, end);
+            renderer.material.mainTextureScale = new Vector2(Mathf.Max(1f, lineLength / segment), 1f);
+        }
+        else
+        {
+            renderer.textureMode = LineTextureMode.Stretch;
+            renderer.material.mainTexture = null;
+            renderer.material.mainTextureScale = Vector2.one;
         }
     }
 
@@ -5045,6 +5470,22 @@ public class SpaceCombatSceneController : MonoBehaviour
         return targetingMaterial;
     }
 
+    private Texture2D GetDashedLineTexture()
+    {
+        if (dashedLineTexture != null)
+        {
+            return dashedLineTexture;
+        }
+
+        dashedLineTexture = new Texture2D(2, 1, TextureFormat.RGBA32, false);
+        dashedLineTexture.filterMode = FilterMode.Point;
+        dashedLineTexture.wrapMode = TextureWrapMode.Repeat;
+        dashedLineTexture.SetPixel(0, 0, Color.white);
+        dashedLineTexture.SetPixel(1, 0, new Color(1f, 1f, 1f, 0f));
+        dashedLineTexture.Apply();
+        return dashedLineTexture;
+    }
+
     private void SetTargetingVisualsActive(bool active)
     {
         if (targetFrameObject != null)
@@ -5057,15 +5498,15 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private static bool TryCalculateTargetBounds(EnemyShip enemy, out Bounds bounds)
+    private static bool TryCalculateTargetBounds(Transform targetRoot, out Bounds bounds)
     {
         bounds = default;
-        if (enemy == null || enemy.Transform == null)
+        if (targetRoot == null)
         {
             return false;
         }
 
-        SpriteRenderer[] renderers = enemy.Transform.GetComponentsInChildren<SpriteRenderer>(false);
+        SpriteRenderer[] renderers = targetRoot.GetComponentsInChildren<SpriteRenderer>(false);
         bool hasBounds = false;
         for (int i = 0; i < renderers.Length; i++)
         {
@@ -5091,7 +5532,32 @@ public class SpaceCombatSceneController : MonoBehaviour
             return true;
         }
 
-        bounds = new Bounds(enemy.Transform.position, Vector3.one);
+        Collider2D[] colliders = targetRoot.GetComponentsInChildren<Collider2D>(false);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider2D collider = colliders[i];
+            if (collider == null)
+            {
+                continue;
+            }
+
+            if (!hasBounds)
+            {
+                bounds = collider.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(collider.bounds);
+            }
+        }
+
+        if (hasBounds)
+        {
+            return true;
+        }
+
+        bounds = new Bounds(targetRoot.position, Vector3.one);
         return true;
     }
 
@@ -5120,7 +5586,16 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             capacitorValueText.text = FormatBarValue(player.Capacitor, player.MaxCapacitor);
         }
-        targetDisplayText.text = Localize("target_label") + (targetEnemy != null ? targetEnemy.Id + " (" + targetEnemy.Type + ")" : Localize("target_none_name"));
+        string targetDisplayName = Localize("target_none_name");
+        if (targetEnemy != null && targetEnemy.IsAlive())
+        {
+            targetDisplayName = targetEnemy.Id + " (" + targetEnemy.Type + ")";
+        }
+        else if (targetBase != null && targetBase.IsAlive)
+        {
+            targetDisplayName = targetBase.name;
+        }
+        targetDisplayText.text = Localize("target_label") + targetDisplayName;
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
             ? availableShips[selectedShipIndex].displayName
             : "-";
@@ -5128,8 +5603,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         levelText.text = Localize("level_label") + player.Level;
         experienceText.text = Localize("xp_label") + player.Experience + " / " + player.ExperienceToNext;
 
-        targetPanel.gameObject.SetActive(targetEnemy != null && targetEnemy.IsAlive());
-        if (targetEnemy != null && targetEnemy.IsAlive())
+        bool hasEnemyTarget = targetEnemy != null && targetEnemy.IsAlive();
+        bool hasBaseTarget = targetBase != null && targetBase.IsAlive;
+        targetPanel.gameObject.SetActive(hasEnemyTarget || hasBaseTarget);
+        if (hasEnemyTarget)
         {
             targetNameText.text = targetEnemy.Id + "  " + targetEnemy.Type;
             targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, targetEnemy.Transform.position).ToString("0.0") + " km";
@@ -5139,6 +5616,23 @@ public class SpaceCombatSceneController : MonoBehaviour
             if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(targetEnemy.Shield, targetEnemy.MaxShield);
             if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(targetEnemy.Armor, targetEnemy.MaxArmor);
             if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(targetEnemy.Hull, targetEnemy.MaxHull);
+        }
+        else if (hasBaseTarget)
+        {
+            ShipDurabilityState state = targetBase.CurrentDurability;
+            targetNameText.text = targetBase.name + "  BASE";
+            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, targetBase.transform.position).ToString("0.0") + " km";
+
+            float shieldPercent = state.MaxShield <= 0f ? 0f : state.Shield / Mathf.Max(0.01f, state.MaxShield);
+            float armorPercent = state.MaxArmor <= 0f ? 0f : state.Armor / Mathf.Max(0.01f, state.MaxArmor);
+            float hullPercent = state.MaxHull <= 0f ? 0f : state.Hull / Mathf.Max(0.01f, state.MaxHull);
+
+            SetFillWidth(targetShieldFill.rectTransform, shieldPercent, 252f);
+            SetFillWidth(targetArmorFill.rectTransform, armorPercent, 252f);
+            SetFillWidth(targetHullFill.rectTransform, hullPercent, 252f);
+            if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(state.Shield, state.MaxShield);
+            if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(state.Armor, state.MaxArmor);
+            if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(state.Hull, state.MaxHull);
         }
 
         SetFillWidth(playerShieldFill.rectTransform, player.ShieldPercent, 180f);
@@ -5259,6 +5753,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             targetEnemy = null;
         }
+        if (targetBase != null && !targetBase.IsAlive)
+        {
+            targetBase = null;
+        }
 
         for (int i = 0; i < enemies.Count; i++)
         {
@@ -5267,6 +5765,36 @@ public class SpaceCombatSceneController : MonoBehaviour
                 enemies[i].TargetRenderer.gameObject.SetActive(enemies[i] == targetEnemy);
             }
         }
+    }
+
+    private bool TryGetCurrentTargetTransform(out Transform targetTransform)
+    {
+        if (targetEnemy != null && targetEnemy.IsAlive() && targetEnemy.Transform != null)
+        {
+            targetTransform = targetEnemy.Transform;
+            return true;
+        }
+
+        if (targetBase != null && targetBase.IsAlive)
+        {
+            targetTransform = targetBase.transform;
+            return true;
+        }
+
+        targetTransform = null;
+        return false;
+    }
+
+    private bool TryGetPlayerTargetPosition(out Vector3 targetPosition)
+    {
+        if (TryGetCurrentTargetTransform(out Transform targetTransform))
+        {
+            targetPosition = targetTransform.position;
+            return true;
+        }
+
+        targetPosition = Vector3.zero;
+        return false;
     }
 
     private void UpdateModuleVisual(ModuleState module)

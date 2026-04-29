@@ -1,6 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum EnemyBehaviorPreset
+{
+    Custom = 0,
+    Aggressive = 1,
+    Balanced = 2,
+    Cautious = 3
+}
+
 [CreateAssetMenu(menuName = "Roguelike/Ship Data", fileName = "ShipData")]
 public sealed class ShipDataSO : ScriptableObject
 {
@@ -12,9 +20,9 @@ public sealed class ShipDataSO : ScriptableObject
     [Tooltip("Описание корабля (EN).")]
     [TextArea(2, 5)] public string description = "Universal hull profile.";
     [Tooltip("Роль/класс корабля для русской локализации.")]
-    public string roleRu = "Р РЋР В±Р В°Р В»Р В°Р Р…РЎРѓР С‘РЎР‚Р С•Р Р†Р В°Р Р…Р Р…РЎвЂ№Р в„– РЎвЂћРЎР‚Р ВµР С–Р В°РЎвЂљ";
+    public string roleRu = "Пользовательский корпус";
     [Tooltip("Описание корабля (RU).")]
-    [TextArea(2, 5)] public string descriptionRu = "Р Р€Р Р…Р С‘Р Р†Р ВµРЎР‚РЎРѓР В°Р В»РЎРЉР Р…РЎвЂ№Р в„– Р С”Р С•РЎР‚Р С—РЎС“РЎРѓ.";
+    [TextArea(2, 5)] public string descriptionRu = "Создано через Ship Factory.";
     [Tooltip("Ограничение по классу корабля для совместимости вооружения.")]
     public ShipClass shipClass = ShipClass.Medium;
 
@@ -27,6 +35,30 @@ public sealed class ShipDataSO : ScriptableObject
     public float rotationSpeed = 8.5f;
     [Tooltip("Коэффициент торможения/сопротивления.")]
     public float drag = 1.6f;
+
+    [Header("Enemy AI Distance")]
+    [Tooltip("Готовый пресет поведения врага. Custom = использовать ручные поля ниже.")]
+    public EnemyBehaviorPreset enemyBehaviorPreset = EnemyBehaviorPreset.Custom;
+    [Tooltip("Желаемая дистанция боя для врагов этого корпуса. 0 = авто от дальности оружия.")]
+    [Min(0f)] public float enemyPreferredDistance = 0f;
+    [Tooltip("Доля от дальности оружия для авто-дистанции (если enemyPreferredDistance = 0).")]
+    [Range(0.3f, 0.98f)] public float enemyPreferredDistanceFromRange = 0.78f;
+    [Tooltip("Случайное отклонение желаемой дистанции (живость поведения).")]
+    [Min(0f)] public float enemyPreferredDistanceVariance = 0.45f;
+    [Tooltip("Допуск удержания дистанции: в пределах этого окна враг не дергается вперед.")]
+    [Min(0.05f)] public float enemyDistanceTolerance = 0.35f;
+    [Tooltip("Порог (в доле дальности оружия), после которого враг обязан сближаться для выстрела.")]
+    [Range(0.5f, 1.2f)] public float enemyOutOfRangeApproachFactor = 0.95f;
+    [Tooltip("Порог суммарной прочности (щит+броня+корпус), ниже которого враг начинает осторожно отступать.")]
+    [Range(0f, 1f)] public float enemyLowDurabilityRetreatThreshold = 0.35f;
+    [Tooltip("Дополнительная дистанция отступления при низкой прочности.")]
+    [Min(0f)] public float enemyLowDurabilityRetreatDistanceBonus = 1.2f;
+    [Tooltip("Дополнительный множитель скорости отступления при низкой прочности.")]
+    [Range(1f, 3f)] public float enemyLowDurabilityRetreatSpeedMultiplier = 1.35f;
+    [Tooltip("Сила микроколебаний орбиты для более живого движения.")]
+    [Range(0f, 1f)] public float enemyStrafeJitterAmplitude = 0.22f;
+    [Tooltip("Частота микроколебаний орбиты.")]
+    [Range(0.1f, 4f)] public float enemyStrafeJitterFrequency = 1.35f;
 
     [Header("Survivability")]
     [Tooltip("Максимум щита.")]
@@ -70,13 +102,73 @@ public sealed class ShipDataSO : ScriptableObject
 
     private void OnValidate()
     {
+        ApplyEnemyBehaviorPreset();
+
         weaponSlotCount = Mathf.Max(0, weaponSlotCount);
         moduleSlotCount = Mathf.Max(0, moduleSlotCount);
         startingWeapons ??= new List<WeaponDataSO>();
         startingModules ??= new List<ModuleDataSO>();
         capacitorRechargeRate = Mathf.Max(0.1f, capacitorRechargeRate);
+
+        enemyPreferredDistance = Mathf.Max(0f, enemyPreferredDistance);
+        enemyPreferredDistanceFromRange = Mathf.Clamp(enemyPreferredDistanceFromRange, 0.3f, 0.98f);
+        enemyPreferredDistanceVariance = Mathf.Max(0f, enemyPreferredDistanceVariance);
+        enemyDistanceTolerance = Mathf.Max(0.05f, enemyDistanceTolerance);
+        enemyOutOfRangeApproachFactor = Mathf.Clamp(enemyOutOfRangeApproachFactor, 0.5f, 1.2f);
+        enemyLowDurabilityRetreatThreshold = Mathf.Clamp01(enemyLowDurabilityRetreatThreshold);
+        enemyLowDurabilityRetreatDistanceBonus = Mathf.Max(0f, enemyLowDurabilityRetreatDistanceBonus);
+        enemyLowDurabilityRetreatSpeedMultiplier = Mathf.Clamp(enemyLowDurabilityRetreatSpeedMultiplier, 1f, 3f);
+        enemyStrafeJitterAmplitude = Mathf.Clamp01(enemyStrafeJitterAmplitude);
+        enemyStrafeJitterFrequency = Mathf.Clamp(enemyStrafeJitterFrequency, 0.1f, 4f);
+
         Resize(startingWeapons, weaponSlotCount);
         Resize(startingModules, moduleSlotCount);
+    }
+
+    private void ApplyEnemyBehaviorPreset()
+    {
+        switch (enemyBehaviorPreset)
+        {
+            case EnemyBehaviorPreset.Aggressive:
+                enemyPreferredDistanceFromRange = 0.68f;
+                enemyPreferredDistanceVariance = 0.35f;
+                enemyDistanceTolerance = 0.28f;
+                enemyOutOfRangeApproachFactor = 0.98f;
+                enemyLowDurabilityRetreatThreshold = 0.18f;
+                enemyLowDurabilityRetreatDistanceBonus = 0.65f;
+                enemyLowDurabilityRetreatSpeedMultiplier = 1.15f;
+                enemyStrafeJitterAmplitude = 0.26f;
+                enemyStrafeJitterFrequency = 1.7f;
+                break;
+
+            case EnemyBehaviorPreset.Balanced:
+                enemyPreferredDistanceFromRange = 0.82f;
+                enemyPreferredDistanceVariance = 0.55f;
+                enemyDistanceTolerance = 0.45f;
+                enemyOutOfRangeApproachFactor = 0.92f;
+                enemyLowDurabilityRetreatThreshold = 0.38f;
+                enemyLowDurabilityRetreatDistanceBonus = 1.6f;
+                enemyLowDurabilityRetreatSpeedMultiplier = 1.45f;
+                enemyStrafeJitterAmplitude = 0.24f;
+                enemyStrafeJitterFrequency = 1.4f;
+                break;
+
+            case EnemyBehaviorPreset.Cautious:
+                enemyPreferredDistanceFromRange = 0.9f;
+                enemyPreferredDistanceVariance = 0.42f;
+                enemyDistanceTolerance = 0.52f;
+                enemyOutOfRangeApproachFactor = 0.86f;
+                enemyLowDurabilityRetreatThreshold = 0.52f;
+                enemyLowDurabilityRetreatDistanceBonus = 2.2f;
+                enemyLowDurabilityRetreatSpeedMultiplier = 1.7f;
+                enemyStrafeJitterAmplitude = 0.2f;
+                enemyStrafeJitterFrequency = 1.15f;
+                break;
+
+            case EnemyBehaviorPreset.Custom:
+            default:
+                break;
+        }
     }
 
     private static void Resize<T>(List<T> list, int targetCount)

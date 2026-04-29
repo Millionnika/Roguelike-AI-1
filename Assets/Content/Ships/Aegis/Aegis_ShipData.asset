@@ -20,10 +20,21 @@ MonoBehaviour:
   descriptionRu: "\u0421\u043E\u0437\u0434\u0430\u043D\u043E \u0447\u0435\u0440\u0435\u0437
     Ship Factory."
   shipClass: 0
+  enemyBehaviorPreset: 2
   maxSpeed: 6.5
   acceleration: 11
   rotationSpeed: 8.5
   drag: 1.6
+  enemyPreferredDistance: 0
+  enemyPreferredDistanceFromRange: 0.82
+  enemyPreferredDistanceVariance: 0.55
+  enemyDistanceTolerance: 0.45
+  enemyOutOfRangeApproachFactor: 0.92
+  enemyLowDurabilityRetreatThreshold: 0.38
+  enemyLowDurabilityRetreatDistanceBonus: 1.6
+  enemyLowDurabilityRetreatSpeedMultiplier: 1.45
+  enemyStrafeJitterAmplitude: 0.24
+  enemyStrafeJitterFrequency: 1.4
   maxShield: 4300
   maxArmor: 3200
   maxHull: 2200
@@ -32,7 +43,7 @@ MonoBehaviour:
   capacitorRechargeRate: 1.4
   scoreReward: 40
   weaponSlotCount: 3
-  moduleSlotCount: 2
+  moduleSlotCount: 3
   damageMultiplier: 1
   repairMultiplier: 1
   shipPrefab: {fileID: 2101523389554617440, guid: e86f7f022e04de648a0fa89836d72841, type: 3}
@@ -41,6 +52,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
   - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
   startingModules:
+  - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
