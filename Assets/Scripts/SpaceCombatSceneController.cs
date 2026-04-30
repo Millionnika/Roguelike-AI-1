@@ -31,6 +31,14 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Tooltip("Компонент, отвечающий за основную камеру боя: настройку, следование за игроком и zoom. Если поле пустое, контроллер найдет компонент на сцене или добавит его автоматически.")]
     [SerializeField] private CombatCameraController combatCameraController;
     [Header("Локации")]
+    [Tooltip("Контроллер run/encounter flow: выбор локаций, завершение encounter, небоевые заглушки и связь с RunManager.")]
+    [SerializeField] private EncounterFlowController encounterFlowController;
+    [Tooltip("Контроллер runtime-спавна WaveTimelineSO: таймер, волны, паттерны и позиции спавна за экраном.")]
+    [SerializeField] private TimelineSpawnController timelineSpawnController;
+    [Tooltip("Компонент, создающий и настраивающий вражеские корабли из ShipDataSO. Список врагов остается в SpaceCombatSceneController.")]
+    [SerializeField] private EnemySpawner enemySpawner;
+    [Tooltip("Компонент, отвечающий за выбор текущей цели, рамку/линию цели и активацию TargetRing на выбранном враге.")]
+    [SerializeField] private TargetingController targetingController;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
@@ -47,54 +55,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private List<ShipDataSO> availableShips = new List<ShipDataSO>();
     [Tooltip("Ручной таймлайн для тестирования боя. Используется как резервный вариант, если RunManager не имеет выбранной EncounterSO с WaveTimelineSO.")]
     [SerializeField] public WaveTimelineSO currentTimeline;
-    [Tooltip("Runtime-менеджер забега. Если поле пустое, контроллер найдет существующий RunManager в сцене или создаст временный объект.")]
-    [SerializeField] private RunManager runManager;
-    [Tooltip("Директор генерации следующих локаций. Если не назначен или не настроен, используется список Test Next Encounters.")]
-    [SerializeField] private RunMapDirector runMapDirector;
-    [Tooltip("Директор темпа забега. Получает результаты завершенных локаций и влияет на будущие веса выбора, если назначен и настроен.")]
-    [SerializeField] private RunEventDirector runEventDirector;
-    [Tooltip("Резервный список тестовых следующих локаций. Используется, если RunMapDirector отсутствует или не смог сгенерировать варианты.")]
-    [SerializeField] private List<EncounterSO> testNextEncounters = new List<EncounterSO>();
-
-    [Header("Небоевые локации")]
-    [Tooltip("Доля максимального корпуса, восстанавливаемая в Repair-локации. 0.2 означает 20% от MaxHull. Позже будет заменено системой цены ремонта.")]
-    [SerializeField, Range(0f, 1f)] private float repairHullPercent = 0.2f;
-    [Tooltip("Доля максимального корпуса, восстанавливаемая в Rest-локации. 0.1 означает 10% от MaxHull.")]
-    [SerializeField, Range(0f, 1f)] private float restHullPercent = 0.1f;
+    [SerializeField, HideInInspector] private List<EncounterSO> testNextEncounters = new List<EncounterSO>();
 
     [Header("Background Layers")]
     [Tooltip("Inspector: background layers")]
     [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
-
-    [Header("Timeline Spawner")]
-    [Tooltip("Inspector: offscreen viewport margin")]
-    [SerializeField, Range(0.01f, 0.5f)] private float offscreenViewportMargin = 0.1f;
-    [Tooltip("Inspector: timeline phase duration")]
-    [SerializeField, Min(1f)] private float timelinePhaseDuration = 30f;
-    [Tooltip("Inspector: timeline difficulty per phase")]
-    [SerializeField, Min(0f)] private float timelineDifficultyPerPhase = 0.14f;
-
-    [Header("Targeting Visuals")]
-    [Tooltip("Inspector: target frame source sprite")]
-    [SerializeField] private Sprite targetFrameSourceSprite;
-    [Tooltip("Inspector: target frame color")]
-    [SerializeField] private Color targetFrameColor = new Color(0.45f, 0.75f, 1f, 0.95f);
-    [Tooltip("Inspector: target line color")]
-    [SerializeField] private Color targetLineColor = new Color(1f, 1f, 1f, 0.58f);
-    [Tooltip("Inspector: target frame padding")]
-    [SerializeField, Min(0f)] private float targetFramePadding = 0.35f;
-    [Tooltip("Inspector: target world click padding")]
-    [SerializeField, Min(0f)] private float targetWorldClickPadding = 0.25f;
-    [Tooltip("Inspector: target line width")]
-    [SerializeField, Min(0.01f)] private float targetLineWidth = 0.035f;
-    [Tooltip("Inspector: target line sorting order")]
-    [SerializeField] private int targetLineSortingOrder = 1;
-    [Tooltip("Inspector: use dashed target line")]
-    [SerializeField] private bool targetLineDashed;
-    [Tooltip("Inspector: target line dash size")]
-    [SerializeField, Min(0.02f)] private float targetLineDashSize = 0.35f;
-    [Tooltip("Inspector: target line gap size")]
-    [SerializeField, Min(0.01f)] private float targetLineGapSize = 0.2f;
 
     [Header("Move Command Visuals")]
     [Tooltip("Inspector: move command line color")]
@@ -138,12 +103,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Tooltip("Р¦РІРµС‚ РїРѕРґСЃРІРµС‚РєРё С‰РёС‚Р° РїСЂРё РїРѕРїР°РґР°РЅРёРё (fallback).")]
     [SerializeField] private Color shieldHitTint = new Color(0.72f, 0.95f, 1f, 1f);
 
-    private sealed class SpawnEventRuntimeState
-    {
-        public bool oneShotExecuted;
-        public float continuousAccumulator;
-    }
-
     private enum StartMenuPage
     {
         Main,
@@ -164,7 +123,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
-    private readonly List<EncounterSO> activeEncounterChoices = new List<EncounterSO>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
@@ -180,8 +138,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private Camera mainCamera;
     private PlayerShip player;
-    private EnemyShip targetEnemy;
-    private EnemyBaseLair targetBase;
     private Transform worldRoot;
     private Transform starRoot;
     private Transform enemyRoot;
@@ -189,10 +145,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Transform gateTransform;
     private Transform weaponSlotsRoot;
     private GameObject playerVisualInstance;
-    private GameObject targetFrameObject;
-    private SpriteRenderer targetFrameRenderer;
-    private Sprite runtimeTargetFrameSprite;
-    private LineRenderer targetLineRenderer;
     private LineRenderer moveCommandLineRenderer;
     private Material targetingMaterial;
     private Texture2D dashedLineTexture;
@@ -303,10 +255,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool gameOver;
     private bool gameStarted;
     private bool gamePaused;
-    private bool encounterCompleted;
     private bool pauseSettingsOpened;
-    private EncounterSO activeNonCombatEncounter;
-    private float gameTimer;
     private float encounterStartHullPercent = 1f;
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
@@ -319,8 +268,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject runtimeStarLayerPrefab;
     private GameObject runtimeNebulaLayerPrefab;
     private int enemySpawnSequence;
-    private readonly List<SpawnEventRuntimeState> spawnEventStates = new List<SpawnEventRuntimeState>();
-    private readonly Collider2D[] targetSelectionBuffer = new Collider2D[24];
 
     private enum ConfirmAction
     {
@@ -336,8 +283,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void OnValidate()
     {
-        repairHullPercent = Mathf.Clamp01(repairHullPercent);
-        restHullPercent = Mathf.Clamp01(restHullPercent);
     }
 
     internal void ConfigureServices(
@@ -475,74 +420,122 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void EnsureRunManagerReference()
+    private void EnsureEncounterFlowController()
     {
-        if (runManager != null)
+        if (encounterFlowController == null)
         {
-            return;
+            encounterFlowController = GetComponent<EncounterFlowController>();
         }
 
-        runManager = FindAnyObjectByType<RunManager>(FindObjectsInactive.Include);
-        if (runManager != null)
+        if (encounterFlowController == null)
         {
-            return;
+            encounterFlowController = FindAnyObjectByType<EncounterFlowController>(FindObjectsInactive.Include);
         }
 
-        GameObject runManagerObject = new GameObject("RunManager");
-        runManager = runManagerObject.AddComponent<RunManager>();
+        if (encounterFlowController == null)
+        {
+            encounterFlowController = gameObject.AddComponent<EncounterFlowController>();
+        }
+
+        encounterFlowController.ImportFallbackEncounters(testNextEncounters);
+        encounterFlowController.Initialize(StartSelectedCombatEncounter, GetPlayerHullPercent, RestorePlayerHull, LogMessage);
     }
 
-    private void EnsureRunMapDirectorReference()
+    private void EnsureTimelineSpawnController()
     {
-        if (runMapDirector != null)
+        if (timelineSpawnController == null)
         {
-            return;
+            timelineSpawnController = GetComponent<TimelineSpawnController>();
         }
 
-        runMapDirector = FindAnyObjectByType<RunMapDirector>(FindObjectsInactive.Include);
+        if (timelineSpawnController == null)
+        {
+            timelineSpawnController = FindAnyObjectByType<TimelineSpawnController>(FindObjectsInactive.Include);
+        }
+
+        if (timelineSpawnController == null)
+        {
+            timelineSpawnController = gameObject.AddComponent<TimelineSpawnController>();
+        }
+
+        timelineSpawnController.SetCamera(mainCamera != null ? mainCamera : Camera.main);
+        timelineSpawnController.SetSpawnEnemyCallback(SpawnEnemyFromTimeline);
     }
 
-    private void EnsureRunEventDirectorReference()
+    private void EnsureEnemySpawner()
     {
-        if (runEventDirector != null)
+        if (enemySpawner == null)
         {
-            return;
+            enemySpawner = GetComponent<EnemySpawner>();
         }
 
-        runEventDirector = FindAnyObjectByType<RunEventDirector>(FindObjectsInactive.Include);
+        if (enemySpawner == null)
+        {
+            enemySpawner = FindAnyObjectByType<EnemySpawner>(FindObjectsInactive.Include);
+        }
+
+        if (enemySpawner == null)
+        {
+            enemySpawner = gameObject.AddComponent<EnemySpawner>();
+        }
+
+        enemySpawner.Initialize(poolService, enemyRoot, shieldHitMaterial, ringSprite, OnEnemyDamageApplied, AttachWeaponVisual);
+    }
+
+    private void EnsureTargetingController()
+    {
+        if (targetingController == null)
+        {
+            targetingController = GetComponent<TargetingController>();
+        }
+
+        if (targetingController == null)
+        {
+            targetingController = FindAnyObjectByType<TargetingController>(FindObjectsInactive.Include);
+        }
+
+        if (targetingController == null)
+        {
+            targetingController = gameObject.AddComponent<TargetingController>();
+        }
+
+        targetingController.Initialize(player, enemies, worldRoot, mainCamera != null ? mainCamera : Camera.main, LogMessage, Localize);
+    }
+
+    private float GetPlayerHullPercent()
+    {
+        return player != null ? player.HullPercent : 0f;
     }
 
     private WaveTimelineSO GetActiveTimeline()
     {
-        if (runManager != null &&
-            runManager.CurrentEncounter != null &&
-            runManager.CurrentEncounter.waveTimeline != null)
-        {
-            return runManager.CurrentEncounter.waveTimeline;
-        }
-
-        return currentTimeline;
+        return encounterFlowController != null
+            ? encounterFlowController.GetActiveTimeline(currentTimeline)
+            : currentTimeline;
     }
 
     private void Awake()
     {
         EnsureServices();
-        EnsureRunManagerReference();
-        EnsureRunMapDirectorReference();
-        EnsureRunEventDirectorReference();
         EnsureCombatAudioController();
         EnsureCombatLogPresenter();
         EnsureCombatCameraController();
         EnsureEncounterChoicePresenter();
         EnsureNonCombatEncounterPresenter();
+        EnsureEncounterFlowController();
+        EnsureTimelineSpawnController();
         ValidateSerializedReferences();
         useVirtualJoystick = platformService.ShouldUseVirtualJoystick();
         CreateSprites();
         CreateStarterShips();
         BuildWorld();
+        EnsureEnemySpawner();
+        EnsureTargetingController();
         SpawnPlayer();
         EnsureCombatAudioController();
         EnsureCombatCameraController();
+        EnsureTimelineSpawnController();
+        EnsureTargetingController();
         SelectShip(GetInitialShipIndex());
         BuildHud();
         EnsureEncounterChoiceUi();
@@ -580,10 +573,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (runtimeNebulaLayerPrefab != null)
         {
             Destroy(runtimeNebulaLayerPrefab);
-        }
-        if (runtimeTargetFrameSprite != null)
-        {
-            Destroy(runtimeTargetFrameSprite);
         }
         if (targetingMaterial != null)
         {
@@ -1710,19 +1699,20 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
         selectedShipIndex = Mathf.Clamp(selectedShipIndex, 0, availableShips.Count - 1);
-        EnsureRunManagerReference();
-        if (resetRunState && runManager != null)
+        EnsureEncounterFlowController();
+        if (resetRunState && encounterFlowController != null)
         {
-            runManager.StartRun();
+            encounterFlowController.StartRun();
         }
 
         ShowStartMenu(false);
-        ShowEncounterChoicePanel(false);
-        ShowNonCombatPanel(false);
+        if (encounterFlowController != null)
+        {
+            encounterFlowController.ResetEncounterCompletionState();
+        }
         gameStarted = true;
         gameOver = false;
         gamePaused = false;
-        encounterCompleted = false;
         pauseSettingsOpened = false;
         pendingConfirmAction = ConfirmAction.None;
         if (confirmationPanelObject != null)
@@ -1731,10 +1721,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
         levelUpPending = false;
         wave = 1;
-        gameTimer = 0f;
         enemySpawnSequence = 0;
-        targetEnemy = null;
-        targetBase = null;
+        targetingController?.ClearTarget();
         activePerks.Clear();
         perkPanelObject.SetActive(false);
         ShowGameOverPanel(false);
@@ -1752,7 +1740,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
         }
-        ResetTimelineRuntime();
+        if (timelineSpawnController != null)
+        {
+            timelineSpawnController.ResetRuntime();
+            wave = timelineSpawnController.CurrentWave;
+        }
         ResetModules();
         if (resetRunState)
         {
@@ -1808,20 +1800,20 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private bool IsEncounterChoicePanelVisible()
     {
-        return encounterChoicePresenter != null && encounterChoicePresenter.IsVisible;
+        return encounterFlowController != null && encounterFlowController.IsEncounterChoiceVisible;
     }
 
     private bool IsNonCombatPanelVisible()
     {
-        return nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.IsVisible;
+        return encounterFlowController != null && encounterFlowController.IsNonCombatVisible;
     }
 
     private void HandleNonCombatInput()
     {
         Vector2 pointerPosition;
         if (TryGetPrimaryPointerDown(out pointerPosition) &&
-            nonCombatEncounterPresenter != null &&
-            nonCombatEncounterPresenter.TryActivateAt(pointerPosition))
+            encounterFlowController != null &&
+            encounterFlowController.TryHandleNonCombatPointer(pointerPosition))
         {
             return;
         }
@@ -1830,55 +1822,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (keyboard != null &&
             (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame))
         {
-            CompleteNonCombatEncounter();
-        }
-    }
-
-    private void ShowNonCombatEncounter(EncounterSO encounter)
-    {
-        if (encounter == null)
-        {
-            return;
-        }
-
-        activeNonCombatEncounter = encounter;
-        EnsureNonCombatUi();
-        if (nonCombatEncounterPresenter != null)
-        {
-            nonCombatEncounterPresenter.Show(encounter, BuildNonCombatDescription(encounter), CompleteNonCombatEncounter);
-        }
-    }
-
-    private void ApplyNonCombatPlaceholderEffect(EncounterSO encounter)
-    {
-        if (encounter == null)
-        {
-            return;
-        }
-
-        switch (encounter.nodeType)
-        {
-            case LocationNodeType.Repair:
-                // TODO: заменить бесплатный ремонт системой цены и ресурсов.
-                RestorePlayerHull(repairHullPercent);
-                LogMessage("Ремонт: корпус частично восстановлен.", "warning");
-                break;
-            case LocationNodeType.Rest:
-                RestorePlayerHull(restHullPercent);
-                LogMessage("Отдых: корпус немного восстановлен.", "warning");
-                break;
-            case LocationNodeType.Resource:
-                Debug.Log("SpaceCombatSceneController: ресурсная локация завершена. Экономика будет добавлена позже.", this);
-                LogMessage("Ресурсы собраны. Награда будет подключена позже.", "warning");
-                break;
-            case LocationNodeType.Shop:
-                Debug.Log("SpaceCombatSceneController: магазин открыт как временная заглушка. Инвентарь магазина будет добавлен позже.", this);
-                LogMessage("Магазин пока работает как заглушка.", "warning");
-                break;
-            case LocationNodeType.Event:
-                Debug.Log("SpaceCombatSceneController: событие показано как временная заглушка. Варианты событий будут добавлены позже.", this);
-                LogMessage("Событие обработано как заглушка.", "warning");
-                break;
+            encounterFlowController?.CompleteActiveNonCombatEncounter();
         }
     }
 
@@ -1893,140 +1837,41 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.Hull = Mathf.Min(player.MaxHull, player.Hull + amount);
     }
 
-    private void CompleteNonCombatEncounter()
-    {
-        EncounterSO encounter = activeNonCombatEncounter;
-        if (encounter == null)
-        {
-            ShowNonCombatPanel(false);
-            ShowEncounterChoicePanel(true);
-            return;
-        }
-
-        ApplyNonCombatPlaceholderEffect(encounter);
-        EncounterResult result = new EncounterResult(
-            encounter.nodeType,
-            player != null ? player.HullPercent : 0f,
-            0f,
-            0f,
-            0);
-
-        CompleteEncounterResult(result);
-        LogMessage("Локация завершена: " + GetNodeTypeDisplayName(encounter.nodeType), "warning");
-        activeNonCombatEncounter = null;
-        ShowNonCombatPanel(false);
-        ShowEncounterChoicePanel(true);
-    }
-
-    private string BuildNonCombatDescription(EncounterSO encounter)
-    {
-        string description = encounter != null ? encounter.shortDescription : string.Empty;
-        if (string.IsNullOrWhiteSpace(description))
-        {
-            description = "Временная небоевая локация. Полная механика будет добавлена позже.";
-        }
-
-        switch (encounter.nodeType)
-        {
-            case LocationNodeType.Repair:
-                return description + "\n\nДействие: восстановить корпус на " + Mathf.RoundToInt(repairHullPercent * 100f) + "%.";
-            case LocationNodeType.Rest:
-                return description + "\n\nДействие: восстановить корпус на " + Mathf.RoundToInt(restHullPercent * 100f) + "%.";
-            case LocationNodeType.Resource:
-                return description + "\n\nРесурсная награда будет подключена позже.";
-            case LocationNodeType.Shop:
-                return description + "\n\nИнвентарь магазина будет подключен позже.";
-            case LocationNodeType.Event:
-                return description + "\n\nВарианты события будут подключены позже.";
-            default:
-                return description;
-        }
-    }
-
-    private static string GetNodeTypeDisplayName(LocationNodeType nodeType)
-    {
-        switch (nodeType)
-        {
-            case LocationNodeType.Combat:
-                return "Бой";
-            case LocationNodeType.Elite:
-                return "Элита";
-            case LocationNodeType.Shop:
-                return "Магазин";
-            case LocationNodeType.Repair:
-                return "Ремонт";
-            case LocationNodeType.Event:
-                return "Событие";
-            case LocationNodeType.Rest:
-                return "Отдых";
-            case LocationNodeType.Resource:
-                return "Ресурсы";
-            case LocationNodeType.Boss:
-                return "Босс";
-            default:
-                return nodeType.ToString();
-        }
-    }
-
     private void TryCompleteEncounter()
     {
-        if (encounterCompleted || gameOver || levelUpPending)
+        if (gameOver || levelUpPending || encounterFlowController == null)
         {
             return;
         }
 
-        WaveTimelineSO activeTimeline = GetActiveTimeline();
-        if (activeTimeline == null || activeTimeline.events == null || activeTimeline.events.Count == 0)
+        bool timelineFinished = timelineSpawnController != null && timelineSpawnController.IsTimelineFinished;
+        LocationNodeType completedNodeType = LocationNodeType.Combat;
+        RunManager flowRunManager = encounterFlowController.RunManager;
+        if (flowRunManager != null && flowRunManager.CurrentEncounter != null)
         {
-            return;
+            completedNodeType = flowRunManager.CurrentEncounter.nodeType;
         }
-
-        if (GetNextTimelineEventTime(gameTimer) >= 0f || enemies.Count > 0)
-        {
-            return;
-        }
-
-        encounterCompleted = true;
-        EncounterResult result = BuildEncounterResult();
-        CompleteEncounterResult(result);
-        LogMessage("Локация завершена.", "warning");
-        ShowEncounterChoicePanel(true);
-    }
-
-    private void CompleteEncounterResult(EncounterResult result)
-    {
-        EnsureRunManagerReference();
-        runManager.CompleteCurrentEncounter(result);
-        EnsureRunEventDirectorReference();
-        if (runEventDirector != null)
-        {
-            runEventDirector.OnEncounterCompleted(result);
-        }
-    }
-
-    private EncounterResult BuildEncounterResult()
-    {
-        LocationNodeType completedNodeType = runManager != null && runManager.CurrentEncounter != null
-            ? runManager.CurrentEncounter.nodeType
-            : LocationNodeType.Combat;
 
         float hullPercent = player != null ? player.HullPercent : 0f;
         float damageTaken = Mathf.Clamp01(encounterStartHullPercent - hullPercent);
-
-        return new EncounterResult(
+        EncounterCompletionContext context = new EncounterCompletionContext(
             completedNodeType,
             hullPercent,
             damageTaken,
-            gameTimer,
-            0); // TODO Stage 3+: expose killed enemy count from combat cleanup.
+            timelineSpawnController != null ? timelineSpawnController.GameTimer : 0f,
+            0, // TODO Stage 3+: expose killed enemy count from combat cleanup.
+            timelineFinished,
+            enemies.Count);
+
+        encounterFlowController.TryCompleteCombatEncounter(context);
     }
 
     private void HandleEncounterChoiceInput()
     {
         Vector2 pointerPosition;
         if (TryGetPrimaryPointerDown(out pointerPosition) &&
-            encounterChoicePresenter != null &&
-            encounterChoicePresenter.TrySelectAt(pointerPosition))
+            encounterFlowController != null &&
+            encounterFlowController.TryHandleChoicePointer(pointerPosition))
         {
             return;
         }
@@ -2037,140 +1882,23 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (keyboard.digit1Key.wasPressedThisFrame && encounterChoicePresenter != null)
+        if (keyboard.digit1Key.wasPressedThisFrame)
         {
-            encounterChoicePresenter.SelectByIndex(0);
+            encounterFlowController?.TrySelectChoiceIndex(0);
         }
-        else if (keyboard.digit2Key.wasPressedThisFrame && encounterChoicePresenter != null)
+        else if (keyboard.digit2Key.wasPressedThisFrame)
         {
-            encounterChoicePresenter.SelectByIndex(1);
+            encounterFlowController?.TrySelectChoiceIndex(1);
         }
-        else if (keyboard.digit3Key.wasPressedThisFrame && encounterChoicePresenter != null)
+        else if (keyboard.digit3Key.wasPressedThisFrame)
         {
-            encounterChoicePresenter.SelectByIndex(2);
+            encounterFlowController?.TrySelectChoiceIndex(2);
         }
     }
 
-    private void SelectNextEncounter(EncounterSO encounter)
+    private void StartSelectedCombatEncounter(EncounterSO encounter)
     {
-        if (encounter == null)
-        {
-            return;
-        }
-
-        EnsureRunManagerReference();
-        runManager.SelectEncounter(encounter);
-        ShowEncounterChoicePanel(false);
-        if (ShouldHandleAsNonCombatPlaceholder(encounter))
-        {
-            ShowNonCombatEncounter(encounter);
-            return;
-        }
-
         StartRun(false);
-    }
-
-    private static bool ShouldHandleAsNonCombatPlaceholder(EncounterSO encounter)
-    {
-        return encounter != null &&
-               encounter.waveTimeline == null &&
-               IsNonCombatNode(encounter.nodeType);
-    }
-
-    private static bool IsNonCombatNode(LocationNodeType nodeType)
-    {
-        return nodeType == LocationNodeType.Shop ||
-               nodeType == LocationNodeType.Repair ||
-               nodeType == LocationNodeType.Event ||
-               nodeType == LocationNodeType.Rest ||
-               nodeType == LocationNodeType.Resource;
-    }
-
-    private void ShowEncounterChoicePanel(bool show)
-    {
-        if (!show)
-        {
-            if (encounterChoicePresenter != null)
-            {
-                encounterChoicePresenter.Hide();
-            }
-            activeEncounterChoices.Clear();
-            return;
-        }
-
-        EnsureEncounterChoiceUi();
-        activeEncounterChoices.Clear();
-
-        if (!TryGenerateRunMapChoices(activeEncounterChoices) && testNextEncounters != null)
-        {
-            for (int i = 0; i < testNextEncounters.Count && activeEncounterChoices.Count < 3; i++)
-            {
-                EncounterSO encounter = testNextEncounters[i];
-                if (encounter == null)
-                {
-                    continue;
-                }
-
-                activeEncounterChoices.Add(encounter);
-            }
-        }
-
-        if (activeEncounterChoices.Count == 0)
-        {
-            Debug.LogWarning("SpaceCombatSceneController: не настроены варианты следующих локаций. Заполните Test Next Encounters или настройте RunMapDirector.", this);
-            return;
-        }
-
-        if (encounterChoicePresenter != null)
-        {
-            encounterChoicePresenter.ShowChoices(activeEncounterChoices, SelectNextEncounter);
-        }
-    }
-
-    private void ShowNonCombatPanel(bool show)
-    {
-        if (!show && nonCombatEncounterPresenter != null)
-        {
-            nonCombatEncounterPresenter.Hide();
-        }
-
-        if (!show)
-        {
-            activeNonCombatEncounter = null;
-        }
-    }
-
-    private bool TryGenerateRunMapChoices(List<EncounterSO> results)
-    {
-        EnsureRunMapDirectorReference();
-        if (runMapDirector == null)
-        {
-            return false;
-        }
-
-        int completedEncounterCount = runManager != null ? runManager.CompletedEncounterCount : 0;
-        bool generated = runMapDirector.TryGenerateNextChoices(completedEncounterCount, results);
-        if (!generated)
-        {
-            Debug.LogWarning("SpaceCombatSceneController: RunMapDirector не смог сгенерировать варианты. Используется резервный список Test Next Encounters.", this);
-        }
-
-        return generated;
-    }
-
-    private void ResetTimelineRuntime()
-    {
-        spawnEventStates.Clear();
-        WaveTimelineSO activeTimeline = GetActiveTimeline();
-        if (activeTimeline == null || activeTimeline.events == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < activeTimeline.events.Count; i++)
-        {
-            spawnEventStates.Add(new SpawnEventRuntimeState());
-        }
     }
 
     private void ResetModules()
@@ -2388,35 +2116,39 @@ public class SpaceCombatSceneController : MonoBehaviour
         BindModuleSlots();
     }
 
-    private float GetTimelineLevelScale()
-    {
-        return 1f + (wave - 1) * timelineDifficultyPerPhase;
-    }
-
     private string NextEnemyId()
     {
         enemySpawnSequence++;
         return "E-" + enemySpawnSequence.ToString("0000");
     }
 
-    private void SpawnEnemyFromTimeline(ShipDataSO shipData, Vector3 position)
+    private bool SpawnEnemyFromTimeline(ShipDataSO shipData, Vector3 position, float levelScale)
     {
         if (shipData == null || shipData.shipPrefab == null)
         {
-            return;
+            return false;
         }
 
-        EnemyShip enemy = CreateEnemy(NextEnemyId(), shipData, position, GetTimelineLevelScale());
+        EnemyShip enemy = CreateEnemy(NextEnemyId(), shipData, position, levelScale);
         if (enemy == null)
         {
-            return;
+            return false;
         }
 
         enemies.Add(enemy);
-        if (targetEnemy == null && targetBase == null)
+        EnsureTargetingController();
+        if (targetingController != null && !targetingController.HasPlayerTarget)
         {
-            targetEnemy = enemy;
+            targetingController.SetTargetEnemy(enemy);
         }
+
+        return true;
+    }
+
+    private void SpawnEnemyFromTimeline(ShipDataSO shipData, Vector3 position)
+    {
+        float levelScale = timelineSpawnController != null ? timelineSpawnController.GetLevelScale() : 1f;
+        SpawnEnemyFromTimeline(shipData, position, levelScale);
     }
 
     public bool SpawnEnemyFromExternalShipData(ShipDataSO shipData, Vector3 position)
@@ -2473,263 +2205,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void ExecuteOneShotPattern(SpawnEvent spawnEvent)
-    {
-        if (spawnEvent == null || spawnEvent.shipData == null)
-        {
-            return;
-        }
-
-        int count = Mathf.Max(0, spawnEvent.count);
-        if (count <= 0)
-        {
-            return;
-        }
-
-        switch (spawnEvent.pattern)
-        {
-            case SpawnPatternType.Burst:
-                ExecuteBurstPattern(spawnEvent.shipData, count);
-                break;
-            case SpawnPatternType.Ring:
-                ExecuteRingPattern(spawnEvent.shipData, count);
-                break;
-            case SpawnPatternType.Wall:
-                ExecuteWallPattern(spawnEvent.shipData, count);
-                break;
-            case SpawnPatternType.Continuous:
-            default:
-                break;
-        }
-    }
-
-    private void ExecuteBurstPattern(ShipDataSO shipData, int count)
-    {
-        Vector3 center = GetRandomOffscreenSpawnPosition();
-        const float scatterRadius = 1.1f;
-        for (int i = 0; i < count; i++)
-        {
-            Vector2 offset = UnityEngine.Random.insideUnitCircle * scatterRadius;
-            SpawnEnemyFromTimeline(shipData, center + new Vector3(offset.x, offset.y, 0f));
-        }
-    }
-
-    private void ExecuteRingPattern(ShipDataSO shipData, int count)
-    {
-        Camera camera = mainCamera != null ? mainCamera : Camera.main;
-        if (camera == null || player == null || player.Transform == null)
-        {
-            return;
-        }
-
-        float depth = Mathf.Abs(camera.transform.position.z);
-        Vector3 min = camera.ViewportToWorldPoint(new Vector3(0f, 0f, depth));
-        Vector3 max = camera.ViewportToWorldPoint(new Vector3(1f, 1f, depth));
-        float radius = Vector2.Distance(min, max) * 0.55f;
-        Vector3 center = player.Transform.position;
-        float startAngle = UnityEngine.Random.value * Mathf.PI * 2f;
-
-        for (int i = 0; i < count; i++)
-        {
-            float angle = startAngle + ((Mathf.PI * 2f) * i / Mathf.Max(1, count));
-            Vector3 position = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius;
-            SpawnEnemyFromTimeline(shipData, position);
-        }
-    }
-
-    private void ExecuteWallPattern(ShipDataSO shipData, int count)
-    {
-        int side = UnityEngine.Random.Range(0, 4);
-        for (int i = 0; i < count; i++)
-        {
-            float t = count <= 1 ? 0.5f : i / (float)(count - 1);
-            SpawnEnemyFromTimeline(shipData, GetOffscreenSpawnPoint(side, t, offscreenViewportMargin));
-        }
-    }
-
     private EnemyShip CreateEnemy(string id, ShipDataSO shipData, Vector3 position, float levelScale)
     {
-        if (shipData == null || shipData.shipPrefab == null)
-        {
-            Debug.LogError("SpaceCombatSceneController: ShipDataSO or ship prefab is missing for enemy " + id + ".");
-            return null;
-        }
-
-        string typeName = string.IsNullOrEmpty(shipData.displayName) ? shipData.name : shipData.displayName;
-        GameObject enemyPrefab = shipData.shipPrefab;
-
-        GameObject enemyObject = poolService.Get(enemyPrefab, enemyRoot);
-        if (enemyObject == null)
-        {
-            return null;
-        }
-
-        enemyObject.name = id;
-        enemyObject.transform.position = position;
-        AssignEnemyIdentity(enemyObject);
-
-        SpriteRenderer bodyRenderer = enemyObject.GetComponentInChildren<SpriteRenderer>(true);
-        SpriteRenderer shieldRenderer = FindChildSpriteRenderer(enemyObject.transform, "Shield");
-        if (shieldRenderer == null)
-        {
-            shieldRenderer = FindChildSpriteRendererContaining(enemyObject.transform, "shield");
-        }
-        if (shieldRenderer == null)
-        {
-            shieldRenderer = FindChildSpriteRendererContaining(enemyObject.transform, "aura");
-        }
-        SpriteRenderer targetRenderer = FindChildSpriteRenderer(enemyObject.transform, "TargetRing");
-        if (targetRenderer != null)
-        {
-            targetRenderer.gameObject.SetActive(false);
-        }
-        SpriteRenderer thrusterRenderer = FindChildSpriteRenderer(enemyObject.transform, "Thruster");
-        ShipThrusterEffect thrusterEffect = EnsureThrusterEffect(enemyObject);
-
-        float shieldValue = Mathf.Max(1f, shipData.maxShield * levelScale);
-        float armorValue = Mathf.Max(1f, shipData.maxArmor * levelScale);
-        float hullValue = Mathf.Max(1f, shipData.maxHull * levelScale);
-        float enemyMoveSpeed = Mathf.Max(0.5f, shipData.maxSpeed * 0.22f) + levelScale * 0.2f;
-        List<WeaponDataSO> compatibleWeapons = new List<WeaponDataSO>();
-        if (shipData.startingWeapons != null)
-        {
-            for (int i = 0; i < shipData.startingWeapons.Count; i++)
-            {
-                WeaponDataSO slotWeapon = shipData.startingWeapons[i];
-                if (slotWeapon == null || !CanShipUseWeapon(shipData.shipClass, slotWeapon))
-                {
-                    continue;
-                }
-
-                compatibleWeapons.Add(slotWeapon);
-            }
-        }
-
-        WeaponDataSO enemyWeapon = compatibleWeapons.Count > 0 ? compatibleWeapons[0] : GetPrimaryWeapon(shipData);
-        float enemyDamage = enemyWeapon != null
-            ? Mathf.Max(1f, enemyWeapon.damage * Mathf.Max(0.1f, shipData.damageMultiplier) * levelScale)
-            : Mathf.Max(6f, 10f * levelScale);
-
-        float weaponCooldown = enemyWeapon != null
-            ? Mathf.Max(0.05f, enemyWeapon.cooldown > 0f ? enemyWeapon.cooldown : enemyWeapon.fireRate)
-            : UnityEngine.Random.Range(1.15f, 1.8f);
-        float weaponRange = enemyWeapon != null
-            ? Mathf.Max(enemyWeapon.maxRange, enemyWeapon.projectileMaxDistance)
-            : 5.2f;
-        weaponRange = Mathf.Max(4.5f, weaponRange);
-        float preferredDistanceBase = shipData.enemyPreferredDistance > 0f
-            ? shipData.enemyPreferredDistance
-            : weaponRange * shipData.enemyPreferredDistanceFromRange;
-        float preferredDistance = preferredDistanceBase + UnityEngine.Random.Range(-shipData.enemyPreferredDistanceVariance, shipData.enemyPreferredDistanceVariance);
-        preferredDistance = Mathf.Clamp(preferredDistance, 2.4f, weaponRange * 0.94f);
-        float distanceTolerance = Mathf.Max(0.05f, shipData.enemyDistanceTolerance);
-        float retreatDistance = Mathf.Max(1.6f, preferredDistance - distanceTolerance * 1.35f);
-        float reengageDistance = Mathf.Max(retreatDistance + 0.2f, preferredDistance + distanceTolerance);
-
-        EnemyShip enemy = new EnemyShip
-        {
-            Id = id,
-            Type = typeName,
-            Transform = enemyObject.transform,
-            BodyRenderer = bodyRenderer,
-            ShieldRenderer = shieldRenderer,
-            TargetRenderer = targetRenderer,
-            ThrusterRenderer = thrusterRenderer,
-            ThrusterEffect = thrusterEffect,
-            OrbitDistance = preferredDistance,
-            OrbitAngle = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
-            OrbitSpeed = UnityEngine.Random.Range(0.4f, 0.95f),
-            RetreatDistance = retreatDistance,
-            ReengageDistance = reengageDistance,
-            DistanceResponsiveness = UnityEngine.Random.Range(1.25f, 1.75f),
-            RetreatSpeedMultiplier = UnityEngine.Random.Range(1.8f, 2.35f),
-            PrimaryWeaponRange = weaponRange,
-            HoldDistanceTolerance = distanceTolerance,
-            OutOfRangeApproachFactor = shipData.enemyOutOfRangeApproachFactor,
-            LowDurabilityRetreatThreshold = shipData.enemyLowDurabilityRetreatThreshold,
-            LowDurabilityRetreatDistanceBonus = shipData.enemyLowDurabilityRetreatDistanceBonus,
-            LowDurabilityRetreatSpeedMultiplier = shipData.enemyLowDurabilityRetreatSpeedMultiplier,
-            StrafeJitterAmplitude = shipData.enemyStrafeJitterAmplitude,
-            StrafeJitterFrequency = shipData.enemyStrafeJitterFrequency,
-            StrafeJitterPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
-            AttackCooldown = weaponCooldown,
-            AttackTimer = UnityEngine.Random.Range(0f, 0.7f),
-            Damage = enemyDamage,
-            ScoreValue = shipData.scoreReward > 0 ? shipData.scoreReward : 40,
-            DriftSpeed = enemyMoveSpeed,
-            MaxShield = shieldValue,
-            Shield = shieldValue,
-            MaxArmor = armorValue,
-            Armor = armorValue,
-            MaxHull = hullValue,
-            Hull = hullValue,
-            WeaponDamageMultiplier = Mathf.Max(0.1f, shipData.damageMultiplier) * levelScale,
-            Prefab = enemyPrefab,
-            BaseBodyColor = bodyRenderer != null ? bodyRenderer.color : Color.white,
-            BaseShieldColor = shieldRenderer != null && shieldRenderer.color.a > 0.001f ? shieldRenderer.color : shipData.auraColor
-        };
-        enemy.ShieldVisual = EnsureShieldVisual(enemyObject, enemy.ShieldRenderer, enemy.BaseShieldColor, enemies.Count * 0.47f);
-
-        if (compatibleWeapons.Count == 0 && enemyWeapon != null)
-        {
-            compatibleWeapons.Add(enemyWeapon);
-        }
-
-        ShipDamageReceiver receiver = enemyObject.GetComponent<ShipDamageReceiver>();
-        if (receiver == null)
-        {
-            receiver = enemyObject.AddComponent<ShipDamageReceiver>();
-        }
-        receiver.Initialize(
-            CombatFaction.Enemy,
-            () => new ShipDurabilityState
-            {
-                MaxShield = enemy.MaxShield,
-                Shield = enemy.Shield,
-                MaxArmor = enemy.MaxArmor,
-                Armor = enemy.Armor,
-                MaxHull = enemy.MaxHull,
-                Hull = enemy.Hull
-            },
-            state =>
-            {
-                enemy.MaxShield = state.MaxShield;
-                enemy.Shield = state.Shield;
-                enemy.MaxArmor = state.MaxArmor;
-                enemy.Armor = state.Armor;
-                enemy.MaxHull = state.MaxHull;
-                enemy.Hull = state.Hull;
-            });
-        receiver.DamageApplied += (info, result) => OnEnemyDamageApplied(enemy, info, result);
-        enemy.DamageReceiver = receiver;
-        enemy.TeamMember = enemyObject.GetComponent<TeamMember>();
-
-        for (int i = 0; i < compatibleWeapons.Count; i++)
-        {
-            WeaponDataSO weapon = compatibleWeapons[i];
-            if (weapon == null)
-            {
-                continue;
-            }
-
-            WeaponInstance instance = new WeaponInstance(
-                weapon,
-                enemyObject.transform,
-                FindWeaponMuzzle(enemyObject.transform, i),
-                CombatFaction.Enemy,
-                enemyObject);
-
-            if (instance.BeginFire())
-            {
-                // Warmup then reset to randomized readiness.
-                instance.Tick(UnityEngine.Random.Range(0f, instance.EffectiveCooldown));
-            }
-
-            enemy.WeaponInstances.Add(instance);
-            AttachWeaponVisual(weapon, instance.MuzzleTransform);
-        }
-
-        return enemy;
+        EnsureEnemySpawner();
+        return enemySpawner != null
+            ? enemySpawner.SpawnEnemy(id, shipData, position, levelScale, enemies.Count)
+            : null;
     }
 
     private static void RefreshWeaponVisuals(List<WeaponDataSO> weapons, List<Transform> muzzles)
@@ -2805,32 +2286,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         return null;
-    }
-
-    private static void AssignEnemyIdentity(GameObject enemyObject)
-    {
-        if (enemyObject == null)
-        {
-            return;
-        }
-
-        try
-        {
-            enemyObject.tag = "Enemy";
-        }
-        catch (UnityException)
-        {
-            // Enemy tag may be absent in project settings.
-        }
-
-        TeamMember teamMember = enemyObject.GetComponent<TeamMember>();
-        if (teamMember == null)
-        {
-            teamMember = enemyObject.AddComponent<TeamMember>();
-        }
-        teamMember.SetFaction(CombatFaction.Enemy);
-
-        CombatLayerUtility.ApplyShipLayer(enemyObject, CombatFaction.Enemy);
     }
 
     private static Transform FindWeaponMuzzle(Transform root, int index)
@@ -4917,9 +4372,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             if (RectTransformUtility.RectangleContainsScreenPoint(row.RootTransform, screenPosition, null))
             {
                 EnemyShip enemy = row.Enemy;
-                if (enemy != null && enemy.IsAlive())
+                if (enemy != null && enemy.IsAlive() && targetingController != null && targetingController.TrySelectFromOverview(enemy))
                 {
-                    SelectTargetEnemy(enemy);
                     return true;
                 }
             }
@@ -4931,120 +4385,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool TrySelectEnemyFromWorld(Vector2 screenPosition)
     {
         Vector3 worldPosition = ScreenToWorldPosition(screenPosition);
-        EnemyShip selectedEnemy = null;
-        float bestDistanceSqr = float.MaxValue;
-
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            EnemyShip enemy = enemies[i];
-            if (enemy == null || !enemy.IsAlive())
-            {
-                continue;
-            }
-
-            Bounds bounds;
-            if (!TryCalculateTargetBounds(enemy.Transform, out bounds))
-            {
-                continue;
-            }
-
-            bounds.Expand(new Vector3(targetWorldClickPadding, targetWorldClickPadding, 0f));
-            if (!bounds.Contains(worldPosition))
-            {
-                continue;
-            }
-
-            float distanceSqr = ((Vector2)bounds.center - (Vector2)worldPosition).sqrMagnitude;
-            if (distanceSqr < bestDistanceSqr)
-            {
-                bestDistanceSqr = distanceSqr;
-                selectedEnemy = enemy;
-            }
-        }
-
-        if (selectedEnemy == null)
-        {
-            EnemyBaseLair selectedBase = TrySelectBaseAtWorldPoint(worldPosition);
-            if (selectedBase == null)
-            {
-                return false;
-            }
-
-            SelectTargetBase(selectedBase);
-            return true;
-        }
-
-        SelectTargetEnemy(selectedEnemy);
-        return true;
-    }
-
-    private void SelectTargetEnemy(EnemyShip enemy)
-    {
-        if (enemy == null || !enemy.IsAlive())
-        {
-            return;
-        }
-
-        targetBase = null;
-        targetEnemy = enemy;
-        UpdateTargetState();
-        LogMessage(Localize("log_target_locked") + enemy.Id);
-    }
-
-    private EnemyBaseLair TrySelectBaseAtWorldPoint(Vector3 worldPosition)
-    {
-        int hitCount = Physics2D.OverlapPointNonAlloc(worldPosition, targetSelectionBuffer);
-        EnemyBaseLair selectedBase = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            Collider2D collider = targetSelectionBuffer[i];
-            if (collider == null)
-            {
-                continue;
-            }
-
-            EnemyBaseLair baseLair = collider.GetComponentInParent<EnemyBaseLair>();
-            if (baseLair == null || !baseLair.IsAlive)
-            {
-                continue;
-            }
-
-            Bounds bounds;
-            if (!TryCalculateTargetBounds(baseLair.transform, out bounds))
-            {
-                continue;
-            }
-
-            bounds.Expand(new Vector3(targetWorldClickPadding, targetWorldClickPadding, 0f));
-            if (!bounds.Contains(worldPosition))
-            {
-                continue;
-            }
-
-            float distance = ((Vector2)bounds.center - (Vector2)worldPosition).sqrMagnitude;
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                selectedBase = baseLair;
-            }
-        }
-
-        return selectedBase;
-    }
-
-    private void SelectTargetBase(EnemyBaseLair baseLair)
-    {
-        if (baseLair == null || !baseLair.IsAlive)
-        {
-            return;
-        }
-
-        targetEnemy = null;
-        targetBase = baseLair;
-        UpdateTargetState();
-        LogMessage(Localize("log_target_locked") + baseLair.name);
+        return targetingController != null && targetingController.TrySelectFromWorld(worldPosition);
     }
 
     private bool IsGameplayHudBlocked(Vector2 screenPosition)
@@ -5217,72 +4558,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         return runtimeNebulaLayerPrefab;
     }
 
-    private void EnsureSpawnEventRuntimeStates()
-    {
-        WaveTimelineSO activeTimeline = GetActiveTimeline();
-        if (activeTimeline == null || activeTimeline.events == null)
-        {
-            spawnEventStates.Clear();
-            return;
-        }
-
-        while (spawnEventStates.Count < activeTimeline.events.Count)
-        {
-            spawnEventStates.Add(new SpawnEventRuntimeState());
-        }
-
-        while (spawnEventStates.Count > activeTimeline.events.Count)
-        {
-            spawnEventStates.RemoveAt(spawnEventStates.Count - 1);
-        }
-    }
-
-    private Vector3 GetRandomOffscreenSpawnPosition()
-    {
-        int side = UnityEngine.Random.Range(0, 4);
-        float t = UnityEngine.Random.value;
-        return GetOffscreenSpawnPoint(side, t, offscreenViewportMargin);
-    }
-
-    private Vector3 GetOffscreenSpawnPoint(int side, float edgeLerp, float viewportMargin)
-    {
-        Camera camera = mainCamera != null ? mainCamera : Camera.main;
-        if (camera == null)
-        {
-            return player != null ? player.Transform.position : Vector3.zero;
-        }
-
-        float margin = Mathf.Max(0.01f, viewportMargin);
-        float t = Mathf.Clamp01(edgeLerp);
-        float depth = Mathf.Abs(camera.transform.position.z);
-
-        float x;
-        float y;
-        switch (Mathf.Abs(side) % 4)
-        {
-            case 0: // top
-                x = Mathf.Lerp(-margin, 1f + margin, t);
-                y = 1f + margin;
-                break;
-            case 1: // bottom
-                x = Mathf.Lerp(-margin, 1f + margin, t);
-                y = -margin;
-                break;
-            case 2: // left
-                x = -margin;
-                y = Mathf.Lerp(-margin, 1f + margin, t);
-                break;
-            default: // right
-                x = 1f + margin;
-                y = Mathf.Lerp(-margin, 1f + margin, t);
-                break;
-        }
-
-        Vector3 world = camera.ViewportToWorldPoint(new Vector3(x, y, depth));
-        world.z = 0f;
-        return world;
-    }
-
     private static SpriteRenderer FindChildSpriteRenderer(Transform root, string childName)
     {
         if (root == null)
@@ -5365,7 +4640,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void UpdateCombat(float deltaTime)
     {
         Vector3 targetPoint = Vector3.zero;
-        bool hasPlayerTarget = TryGetPlayerTargetPosition(out targetPoint);
+        bool hasPlayerTarget = targetingController != null && targetingController.TryGetPlayerTargetPosition(out targetPoint);
         if (combatAudioController != null)
         {
             combatAudioController.SetPlayerTransform(player != null ? player.Transform : null);
@@ -5380,7 +4655,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             Enemies = enemies,
             Modules = modules,
             EquipmentState = equipmentState,
-            TargetEnemy = targetEnemy,
+            TargetEnemy = targetingController != null ? targetingController.TargetEnemy : null,
             HasPlayerTarget = hasPlayerTarget,
             PlayerTargetPosition = targetPoint,
             ProjectileRoot = projectileRoot,
@@ -5393,7 +4668,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         };
 
         CombatUpdateResult result = combatService.UpdateFrame(context, deltaTime);
-        targetEnemy = result.TargetEnemy;
+        if (targetingController != null)
+        {
+            targetingController.SetTargetEnemy(result.TargetEnemy);
+        }
 
         if (result.LevelUpRequested)
         {
@@ -5520,12 +4798,19 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateTimelineSpawner(float deltaTime)
     {
-        float previousTime = gameTimer;
-        gameTimer += Mathf.Max(0f, deltaTime);
-        wave = Mathf.Max(1, 1 + Mathf.FloorToInt(gameTimer / Mathf.Max(1f, timelinePhaseDuration)));
-
-        EnsureSpawnEventRuntimeStates();
         WaveTimelineSO activeTimeline = GetActiveTimeline();
+        if (timelineSpawnController == null)
+        {
+            return;
+        }
+
+        timelineSpawnController.SetCamera(mainCamera != null ? mainCamera : Camera.main);
+        timelineSpawnController.Tick(
+            deltaTime,
+            activeTimeline,
+            player != null && player.Transform != null ? player.Transform.position : Vector3.zero);
+        wave = timelineSpawnController.CurrentWave;
+
         if (activeTimeline == null || activeTimeline.events == null || activeTimeline.events.Count == 0)
         {
             if (gateHintText != null)
@@ -5536,150 +4821,26 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        int spawnedThisFrame = 0;
-        for (int i = 0; i < activeTimeline.events.Count; i++)
+        if (timelineSpawnController.SpawnedThisFrame > 0)
         {
-            SpawnEvent spawnEvent = activeTimeline.events[i];
-            SpawnEventRuntimeState state = spawnEventStates[i];
-            if (spawnEvent == null || spawnEvent.shipData == null || spawnEvent.shipData.shipPrefab == null)
-            {
-                continue;
-            }
-
-            float startTime = Mathf.Max(0f, spawnEvent.startTime);
-            int count = Mathf.Max(0, spawnEvent.count);
-            if (count <= 0)
-            {
-                continue;
-            }
-
-            if (spawnEvent.pattern == SpawnPatternType.Continuous)
-            {
-                float duration = Mathf.Max(0f, spawnEvent.duration);
-                if (duration <= 0f)
-                {
-                    continue;
-                }
-
-                float endTime = startTime + duration;
-                float activeStart = Mathf.Max(previousTime, startTime);
-                float activeEnd = Mathf.Min(gameTimer, endTime);
-                if (activeEnd <= activeStart)
-                {
-                    continue;
-                }
-
-                state.continuousAccumulator += (activeEnd - activeStart) * count;
-                int spawnCount = Mathf.FloorToInt(state.continuousAccumulator);
-                if (spawnCount <= 0)
-                {
-                    continue;
-                }
-
-                state.continuousAccumulator -= spawnCount;
-                for (int spawnIndex = 0; spawnIndex < spawnCount; spawnIndex++)
-                {
-                    SpawnEnemyFromTimeline(spawnEvent.shipData, GetRandomOffscreenSpawnPosition());
-                    spawnedThisFrame++;
-                }
-
-                continue;
-            }
-
-            if (state.oneShotExecuted || gameTimer < startTime)
-            {
-                continue;
-            }
-
-            int enemyCountBefore = enemies.Count;
-            ExecuteOneShotPattern(spawnEvent);
-            state.oneShotExecuted = true;
-            int spawnedInPattern = enemies.Count - enemyCountBefore;
-            if (spawnedInPattern > 0)
-            {
-                spawnedThisFrame += spawnedInPattern;
-            }
-        }
-
-        if (spawnedThisFrame > 0)
-        {
-            UpdateTargetState();
+            targetingController?.UpdateTargetState();
             LogMessage(Localize("log_hostiles") + enemies.Count);
         }
 
         if (gateHintText != null)
         {
             gateHintText.transform.parent.gameObject.SetActive(true);
-            float nextEventTime = GetNextTimelineEventTime(gameTimer);
+            float nextEventTime = timelineSpawnController.NextEventTime;
             if (nextEventTime < 0f)
             {
                 gateHintText.text = Localize("timeline_complete");
             }
             else
             {
-                float timeLeft = Mathf.Max(0f, nextEventTime - gameTimer);
+                float timeLeft = Mathf.Max(0f, nextEventTime - timelineSpawnController.GameTimer);
                 gateHintText.text = Localize("timeline_next_event") + timeLeft.ToString("0.0") + Localize("seconds_short");
             }
         }
-    }
-
-    private float GetNextTimelineEventTime(float now)
-    {
-        WaveTimelineSO activeTimeline = GetActiveTimeline();
-        if (activeTimeline == null || activeTimeline.events == null || activeTimeline.events.Count == 0)
-        {
-            return -1f;
-        }
-
-        float nextTime = float.MaxValue;
-        for (int i = 0; i < activeTimeline.events.Count; i++)
-        {
-            SpawnEvent spawnEvent = activeTimeline.events[i];
-            if (spawnEvent == null)
-            {
-                continue;
-            }
-
-            float startTime = Mathf.Max(0f, spawnEvent.startTime);
-            if (spawnEvent.pattern == SpawnPatternType.Continuous)
-            {
-                float duration = Mathf.Max(0f, spawnEvent.duration);
-                if (duration <= 0f)
-                {
-                    continue;
-                }
-
-                float endTime = startTime + duration;
-                if (now <= endTime)
-                {
-                    if (now < startTime)
-                    {
-                        nextTime = Mathf.Min(nextTime, startTime);
-                    }
-                    else
-                    {
-                        return now;
-                    }
-                }
-                continue;
-            }
-
-            if (i < spawnEventStates.Count && spawnEventStates[i].oneShotExecuted)
-            {
-                continue;
-            }
-
-            if (now < startTime)
-            {
-                nextTime = Mathf.Min(nextTime, startTime);
-            }
-            else
-            {
-                return now;
-            }
-        }
-
-        return nextTime == float.MaxValue ? -1f : nextTime;
     }
 
     private void UpdateEffects(float deltaTime)
@@ -5745,14 +4906,10 @@ public class SpaceCombatSceneController : MonoBehaviour
                 enemy.ThrusterEffect.SetIntensity(0.55f + enemy.AttackFlashTimer * 0.35f);
             }
 
-            if (enemy.TargetRenderer != null)
-            {
-                enemy.TargetRenderer.gameObject.SetActive(enemy == targetEnemy);
-                enemy.TargetRenderer.transform.Rotate(0f, 0f, 65f * Time.deltaTime);
-            }
         }
 
-        UpdateTargetingVisuals();
+        targetingController?.TickVisuals();
+        UpdateMoveCommandVisuals();
     }
 
     private void ApplyShieldVisual(SpriteRenderer renderer, Color baseColor, float shieldPercent, float hitFlash, float pulseOffset)
@@ -5771,93 +4928,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         shieldColor.a = Mathf.Clamp01(alpha);
         renderer.color = shieldColor;
         renderer.enabled = shieldColor.a > 0.001f;
-    }
-
-    private void UpdateTargetingVisuals()
-    {
-        Transform targetTransform = null;
-        bool hasTarget = player != null && player.Transform != null && TryGetCurrentTargetTransform(out targetTransform);
-        if (!hasTarget)
-        {
-            SetTargetingVisualsActive(false);
-            UpdateMoveCommandVisuals();
-            return;
-        }
-
-        EnsureTargetingVisuals();
-
-        Bounds targetBounds;
-        if (!TryCalculateTargetBounds(targetTransform, out targetBounds))
-        {
-            targetBounds = new Bounds(targetTransform.position, Vector3.one);
-        }
-
-        if (targetFrameRenderer != null && targetFrameRenderer.sprite != null)
-        {
-            Vector3 size = targetBounds.size + new Vector3(targetFramePadding, targetFramePadding, 0f);
-            size.x = Mathf.Max(0.6f, size.x);
-            size.y = Mathf.Max(0.6f, size.y);
-            Vector3 spriteSize = targetFrameRenderer.sprite.bounds.size;
-            targetFrameObject.SetActive(true);
-            targetFrameObject.transform.position = new Vector3(targetBounds.center.x, targetBounds.center.y, 0f);
-            targetFrameObject.transform.rotation = Quaternion.identity;
-            targetFrameObject.transform.localScale = new Vector3(
-                spriteSize.x > 0.001f ? size.x / spriteSize.x : 1f,
-                spriteSize.y > 0.001f ? size.y / spriteSize.y : 1f,
-                1f);
-            targetFrameRenderer.color = targetFrameColor;
-        }
-
-        if (targetLineRenderer != null)
-        {
-            Vector3 start = player.Transform.position;
-            Vector3 end = targetBounds.center;
-            start.z = 0f;
-            end.z = 0f;
-            ConfigureLineRenderer(
-                targetLineRenderer,
-                targetLineColor,
-                targetLineWidth,
-                targetLineSortingOrder,
-                targetLineDashed,
-                targetLineDashSize,
-                targetLineGapSize,
-                start,
-                end);
-        }
-
-        UpdateMoveCommandVisuals();
-    }
-
-    private void EnsureTargetingVisuals()
-    {
-        Transform parent = worldRoot != null ? worldRoot : transform;
-        if (targetFrameObject == null)
-        {
-            targetFrameObject = new GameObject("TargetFrame");
-            targetFrameObject.transform.SetParent(parent, false);
-            targetFrameRenderer = targetFrameObject.AddComponent<SpriteRenderer>();
-            targetFrameRenderer.sortingOrder = 40;
-        }
-
-        if (targetFrameRenderer != null && targetFrameRenderer.sprite == null)
-        {
-            targetFrameRenderer.sprite = GetTargetFrameSprite();
-        }
-
-        if (targetLineRenderer == null)
-        {
-            GameObject lineObject = new GameObject("TargetLine");
-            lineObject.transform.SetParent(parent, false);
-            targetLineRenderer = lineObject.AddComponent<LineRenderer>();
-            targetLineRenderer.positionCount = 2;
-            targetLineRenderer.useWorldSpace = true;
-            targetLineRenderer.alignment = LineAlignment.View;
-            targetLineRenderer.textureMode = LineTextureMode.Stretch;
-            targetLineRenderer.numCapVertices = 4;
-            targetLineRenderer.sortingOrder = targetLineSortingOrder;
-            targetLineRenderer.material = GetTargetingMaterial();
-        }
     }
 
     private void EnsureMoveCommandVisuals()
@@ -5998,28 +5068,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private Sprite GetTargetFrameSprite()
-    {
-        if (runtimeTargetFrameSprite != null)
-        {
-            return runtimeTargetFrameSprite;
-        }
-
-        if (targetFrameSourceSprite == null || targetFrameSourceSprite.texture == null)
-        {
-            return null;
-        }
-
-        Texture2D texture = targetFrameSourceSprite.texture;
-        runtimeTargetFrameSprite = Sprite.Create(
-            texture,
-            new Rect(0f, 0f, texture.width, texture.height),
-            new Vector2(0.5f, 0.5f),
-            targetFrameSourceSprite.pixelsPerUnit);
-        runtimeTargetFrameSprite.name = "TargetFrame_Runtime";
-        return runtimeTargetFrameSprite;
-    }
-
     private Material GetTargetingMaterial()
     {
         if (targetingMaterial != null)
@@ -6048,92 +5096,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         return dashedLineTexture;
     }
 
-    private void SetTargetingVisualsActive(bool active)
-    {
-        if (targetFrameObject != null)
-        {
-            targetFrameObject.SetActive(active);
-        }
-        if (targetLineRenderer != null)
-        {
-            targetLineRenderer.gameObject.SetActive(active);
-        }
-    }
-
-    private static bool TryCalculateTargetBounds(Transform targetRoot, out Bounds bounds)
-    {
-        bounds = default;
-        if (targetRoot == null)
-        {
-            return false;
-        }
-
-        SpriteRenderer[] renderers = targetRoot.GetComponentsInChildren<SpriteRenderer>(false);
-        bool hasBounds = false;
-        for (int i = 0; i < renderers.Length; i++)
-        {
-            SpriteRenderer renderer = renderers[i];
-            if (renderer == null || renderer.sprite == null || IsNonTargetBodyRenderer(renderer))
-            {
-                continue;
-            }
-
-            if (!hasBounds)
-            {
-                bounds = renderer.bounds;
-                hasBounds = true;
-            }
-            else
-            {
-                bounds.Encapsulate(renderer.bounds);
-            }
-        }
-
-        if (hasBounds)
-        {
-            return true;
-        }
-
-        Collider2D[] colliders = targetRoot.GetComponentsInChildren<Collider2D>(false);
-        for (int i = 0; i < colliders.Length; i++)
-        {
-            Collider2D collider = colliders[i];
-            if (collider == null)
-            {
-                continue;
-            }
-
-            if (!hasBounds)
-            {
-                bounds = collider.bounds;
-                hasBounds = true;
-            }
-            else
-            {
-                bounds.Encapsulate(collider.bounds);
-            }
-        }
-
-        if (hasBounds)
-        {
-            return true;
-        }
-
-        bounds = new Bounds(targetRoot.position, Vector3.one);
-        return true;
-    }
-
-    private static bool IsNonTargetBodyRenderer(SpriteRenderer renderer)
-    {
-        string lowerName = renderer.name.ToLowerInvariant();
-        return lowerName.Contains("target") ||
-               lowerName.Contains("aura") ||
-               lowerName.Contains("shield") ||
-               lowerName.Contains("thruster") ||
-               lowerName.Contains("engine_fire") ||
-               lowerName.Contains("enginefire");
-    }
-
     private void UpdateHud()
     {
         if (combatLogPresenter != null)
@@ -6151,13 +5113,15 @@ public class SpaceCombatSceneController : MonoBehaviour
             capacitorValueText.text = FormatBarValue(player.Capacitor, player.MaxCapacitor);
         }
         string targetDisplayName = Localize("target_none_name");
-        if (targetEnemy != null && targetEnemy.IsAlive())
+        EnemyShip hudTargetEnemy = targetingController != null ? targetingController.TargetEnemy : null;
+        EnemyBaseLair hudTargetBase = targetingController != null ? targetingController.TargetBase : null;
+        if (hudTargetEnemy != null && hudTargetEnemy.IsAlive())
         {
-            targetDisplayName = targetEnemy.Id + " (" + targetEnemy.Type + ")";
+            targetDisplayName = hudTargetEnemy.Id + " (" + hudTargetEnemy.Type + ")";
         }
-        else if (targetBase != null && targetBase.IsAlive)
+        else if (hudTargetBase != null && hudTargetBase.IsAlive)
         {
-            targetDisplayName = targetBase.name;
+            targetDisplayName = hudTargetBase.name;
         }
         targetDisplayText.text = Localize("target_label") + targetDisplayName;
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
@@ -6167,25 +5131,25 @@ public class SpaceCombatSceneController : MonoBehaviour
         levelText.text = Localize("level_label") + player.Level;
         experienceText.text = Localize("xp_label") + player.Experience + " / " + player.ExperienceToNext;
 
-        bool hasEnemyTarget = targetEnemy != null && targetEnemy.IsAlive();
-        bool hasBaseTarget = targetBase != null && targetBase.IsAlive;
+        bool hasEnemyTarget = hudTargetEnemy != null && hudTargetEnemy.IsAlive();
+        bool hasBaseTarget = hudTargetBase != null && hudTargetBase.IsAlive;
         targetPanel.gameObject.SetActive(hasEnemyTarget || hasBaseTarget);
         if (hasEnemyTarget)
         {
-            targetNameText.text = targetEnemy.Id + "  " + targetEnemy.Type;
-            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, targetEnemy.Transform.position).ToString("0.0") + " km";
-            SetFillWidth(targetShieldFill.rectTransform, targetEnemy.ShieldPercent, 252f);
-            SetFillWidth(targetArmorFill.rectTransform, targetEnemy.ArmorPercent, 252f);
-            SetFillWidth(targetHullFill.rectTransform, targetEnemy.HullPercent, 252f);
-            if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(targetEnemy.Shield, targetEnemy.MaxShield);
-            if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(targetEnemy.Armor, targetEnemy.MaxArmor);
-            if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(targetEnemy.Hull, targetEnemy.MaxHull);
+            targetNameText.text = hudTargetEnemy.Id + "  " + hudTargetEnemy.Type;
+            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, hudTargetEnemy.Transform.position).ToString("0.0") + " km";
+            SetFillWidth(targetShieldFill.rectTransform, hudTargetEnemy.ShieldPercent, 252f);
+            SetFillWidth(targetArmorFill.rectTransform, hudTargetEnemy.ArmorPercent, 252f);
+            SetFillWidth(targetHullFill.rectTransform, hudTargetEnemy.HullPercent, 252f);
+            if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(hudTargetEnemy.Shield, hudTargetEnemy.MaxShield);
+            if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(hudTargetEnemy.Armor, hudTargetEnemy.MaxArmor);
+            if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(hudTargetEnemy.Hull, hudTargetEnemy.MaxHull);
         }
         else if (hasBaseTarget)
         {
-            ShipDurabilityState state = targetBase.CurrentDurability;
-            targetNameText.text = targetBase.name + "  BASE";
-            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, targetBase.transform.position).ToString("0.0") + " km";
+            ShipDurabilityState state = hudTargetBase.CurrentDurability;
+            targetNameText.text = hudTargetBase.name + "  BASE";
+            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, hudTargetBase.transform.position).ToString("0.0") + " km";
 
             float shieldPercent = state.MaxShield <= 0f ? 0f : state.Shield / Mathf.Max(0.01f, state.MaxShield);
             float armorPercent = state.MaxArmor <= 0f ? 0f : state.Armor / Mathf.Max(0.01f, state.MaxArmor);
@@ -6286,60 +5250,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             SetFillWidth(enemyRows[i].HullFill.rectTransform, enemy.HullPercent, 110f);
 
             Image background = enemyRows[i].RootTransform.GetComponent<Image>();
-            background.color = enemy == targetEnemy
+            background.color = targetingController != null && enemy == targetingController.TargetEnemy
                 ? new Color(0.12f, 0.3f, 0.42f, 1f)
                 : new Color(0.06f, 0.11f, 0.16f, 0.95f);
         }
-    }
-
-    private void UpdateTargetState()
-    {
-        if (targetEnemy != null && !targetEnemy.IsAlive())
-        {
-            targetEnemy = null;
-        }
-        if (targetBase != null && !targetBase.IsAlive)
-        {
-            targetBase = null;
-        }
-
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            if (enemies[i].TargetRenderer != null)
-            {
-                enemies[i].TargetRenderer.gameObject.SetActive(enemies[i] == targetEnemy);
-            }
-        }
-    }
-
-    private bool TryGetCurrentTargetTransform(out Transform targetTransform)
-    {
-        if (targetEnemy != null && targetEnemy.IsAlive() && targetEnemy.Transform != null)
-        {
-            targetTransform = targetEnemy.Transform;
-            return true;
-        }
-
-        if (targetBase != null && targetBase.IsAlive)
-        {
-            targetTransform = targetBase.transform;
-            return true;
-        }
-
-        targetTransform = null;
-        return false;
-    }
-
-    private bool TryGetPlayerTargetPosition(out Vector3 targetPosition)
-    {
-        if (TryGetCurrentTargetTransform(out Transform targetTransform))
-        {
-            targetPosition = targetTransform.position;
-            return true;
-        }
-
-        targetPosition = Vector3.zero;
-        return false;
     }
 
     private void UpdateModuleVisual(ModuleState module)
