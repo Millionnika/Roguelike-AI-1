@@ -21,6 +21,20 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private EquipmentUIController equipmentUiController;
     [Tooltip("Inspector: slot ui prefab")]
     [SerializeField] private SlotUI slotUiPrefab;
+    [Header("Аудио боя")]
+    [Tooltip("Компонент, отвечающий за звук выстрелов оружия. Если поле пустое, контроллер найдет компонент на сцене или добавит его автоматически.")]
+    [SerializeField] private CombatAudioController combatAudioController;
+    [Header("Журнал боя")]
+    [Tooltip("Компонент, отвечающий за хранение и отображение журнала боя. Если поле пустое, контроллер найдет компонент на сцене или добавит его автоматически.")]
+    [SerializeField] private CombatLogPresenter combatLogPresenter;
+    [Header("Камера боя")]
+    [Tooltip("Компонент, отвечающий за основную камеру боя: настройку, следование за игроком и zoom. Если поле пустое, контроллер найдет компонент на сцене или добавит его автоматически.")]
+    [SerializeField] private CombatCameraController combatCameraController;
+    [Header("Локации")]
+    [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
+    [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
+    [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
+    [SerializeField] private NonCombatEncounterPresenter nonCombatEncounterPresenter;
     [Tooltip("Inspector: shield hit material")]
     [SerializeField] private Material shieldHitMaterial;
     [Tooltip("Если включено, встроенное старт-меню отключается и бой начинается сразу после загрузки сцены.")]
@@ -124,50 +138,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Tooltip("Р¦РІРµС‚ РїРѕРґСЃРІРµС‚РєРё С‰РёС‚Р° РїСЂРё РїРѕРїР°РґР°РЅРёРё (fallback).")]
     [SerializeField] private Color shieldHitTint = new Color(0.72f, 0.95f, 1f, 1f);
 
-    [Header("Camera")]
-    [Tooltip("Inspector: camera default orthographic size")]
-    [SerializeField, Min(1f)] private float cameraDefaultOrthographicSize = 9f;
-    [Tooltip("Inspector: camera min orthographic size")]
-    [SerializeField, Min(1f)] private float cameraMinOrthographicSize = 5f;
-    [Tooltip("Inspector: camera max orthographic size")]
-    [SerializeField, Min(1f)] private float cameraMaxOrthographicSize = 16f;
-    [Tooltip("Inspector: camera zoom step")]
-    [SerializeField, Min(0.1f)] private float cameraZoomStep = 1.2f;
-    [Tooltip("Inspector: camera zoom smoothing")]
-    [SerializeField, Min(0.1f)] private float cameraZoomSmoothing = 10f;
-    [Tooltip("Inspector: camera follow smoothing")]
-    [SerializeField, Min(0.1f)] private float cameraFollowSmoothing = 6f;
-    [Tooltip("Inspector: camera velocity look ahead")]
-    [SerializeField, Range(0f, 1f)] private float cameraVelocityLookAhead = 0.15f;
-
-    [Header("Audio")]
-    [Tooltip("Inspector: shot base volume")]
-    [SerializeField, Range(0f, 1f)] private float shotBaseVolume = 0.85f;
-    [Tooltip("Inspector: shot pitch random range")]
-    [SerializeField, Range(0f, 0.5f)] private float shotPitchRandomRange = 0.08f;
-    [Tooltip("Inspector: shot volume random range")]
-    [SerializeField, Range(0f, 0.5f)] private float shotVolumeRandomRange = 0.12f;
-    [Tooltip("Inspector: shot audio voices")]
-    [SerializeField, Min(1)] private int shotAudioVoices = 4;
-    [Tooltip("Насколько звук врага становится 3D (0 = 2D, 1 = полностью 3D).")]
-    [SerializeField, Range(0f, 1f)] private float enemyShotSpatialBlend = 0.8f;
-    [Tooltip("Дистанция (в юнитах), где выстрел считается близким.")]
-    [SerializeField, Min(0.1f)] private float enemyShotNearDistance = 2.5f;
-    [Tooltip("Дистанция (в юнитах), где выстрел считается далеким.")]
-    [SerializeField, Min(0.2f)] private float enemyShotFarDistance = 18f;
-    [Tooltip("Множитель громкости для ближних выстрелов врага.")]
-    [SerializeField, Range(0f, 2f)] private float enemyShotNearVolumeMultiplier = 1.05f;
-    [Tooltip("Множитель громкости для дальних выстрелов врага.")]
-    [SerializeField, Range(0f, 1f)] private float enemyShotFarVolumeMultiplier = 0.35f;
-    [Tooltip("Максимальный стерео-пан по оси X для выстрелов врага.")]
-    [SerializeField, Range(0f, 1f)] private float enemyShotPanStrength = 0.75f;
-    [Tooltip("Дистанция по X, на которой панорама достигает максимума.")]
-    [SerializeField, Min(0.1f)] private float enemyShotPanDistance = 12f;
-    [Tooltip("Небольшое повышение тона для ближних выстрелов.")]
-    [SerializeField, Range(-0.5f, 0.5f)] private float enemyShotNearPitchOffset = 0.06f;
-    [Tooltip("Небольшое понижение тона для дальних выстрелов.")]
-    [SerializeField, Range(-0.5f, 0.5f)] private float enemyShotFarPitchOffset = -0.08f;
-
     private sealed class SpawnEventRuntimeState
     {
         public bool oneShotExecuted;
@@ -189,13 +159,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
     private readonly List<ModuleState> modules = new List<ModuleState>();
-    private readonly List<string> combatLog = new List<string>();
     private readonly List<EnemyRow> enemyRows = new List<EnemyRow>();
     private readonly List<PerkChoice> activePerks = new List<PerkChoice>();
     private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
     private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
-    private readonly List<UiButtonView> encounterChoiceButtons = new List<UiButtonView>();
     private readonly List<EncounterSO> activeEncounterChoices = new List<EncounterSO>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
@@ -236,14 +204,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     private RectTransform minimapPanelRect;
 
     private Canvas hudCanvas;
-    private TMP_Text combatLogText;
-    private ScrollRect combatLogScrollRect;
-    private RectTransform combatLogContentRect;
     private TMP_Text gateHintText;
     private TMP_Text statusText;
     private TMP_Text overviewTitleText;
     private TMP_Text enemyHeaderText;
-    private TMP_Text combatLogTitleText;
     private TMP_Text playerStatusTitleText;
     private TMP_Text targetNameText;
     private TMP_Text targetDistanceText;
@@ -290,8 +254,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private TMP_Text capacitorValueText;
     private GameObject perkPanelObject;
     private GameObject gameOverPanelObject;
-    private GameObject encounterChoicePanelObject;
-    private GameObject nonCombatPanelObject;
     private GameObject pauseMenuObject;
     private GameObject startMenuObject;
     private GameObject mainMenuPanelObject;
@@ -324,11 +286,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject confirmationPanelObject;
     private TMP_Text confirmationTitleText;
     private TMP_Text confirmationBodyText;
-    private TMP_Text encounterChoiceTitleText;
-    private TMP_Text encounterChoiceBodyText;
-    private TMP_Text nonCombatTitleText;
-    private TMP_Text nonCombatBodyText;
-    private UiButtonView nonCombatActionButtonView;
     private RectTransform overviewPanelRect;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
@@ -348,7 +305,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool gamePaused;
     private bool encounterCompleted;
     private bool pauseSettingsOpened;
-    private bool combatLogShouldSnapToBottom;
     private EncounterSO activeNonCombatEncounter;
     private float gameTimer;
     private float encounterStartHullPercent = 1f;
@@ -362,10 +318,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool suppressPointerMovementUntilRelease;
     private GameObject runtimeStarLayerPrefab;
     private GameObject runtimeNebulaLayerPrefab;
-    private AudioSource[] shotAudioSources;
-    private int nextShotAudioSourceIndex;
     private int enemySpawnSequence;
-    private float targetCameraOrthographicSize;
     private readonly List<SpawnEventRuntimeState> spawnEventStates = new List<SpawnEventRuntimeState>();
     private readonly Collider2D[] targetSelectionBuffer = new Collider2D[24];
 
@@ -418,6 +371,108 @@ public class SpaceCombatSceneController : MonoBehaviour
         localizationService ??= new SpaceCombatLocalizationService();
         uiFactory ??= new SpaceCombatUiFactory();
         backgroundParallaxService ??= new BackgroundParallaxService();
+    }
+
+    private void EnsureCombatAudioController()
+    {
+        if (combatAudioController == null)
+        {
+            combatAudioController = GetComponent<CombatAudioController>();
+        }
+
+        if (combatAudioController == null)
+        {
+            combatAudioController = FindAnyObjectByType<CombatAudioController>(FindObjectsInactive.Include);
+        }
+
+        if (combatAudioController == null)
+        {
+            combatAudioController = gameObject.AddComponent<CombatAudioController>();
+        }
+
+        if (player != null)
+        {
+            combatAudioController.SetPlayerTransform(player.Transform);
+        }
+    }
+
+    private void EnsureCombatLogPresenter()
+    {
+        if (combatLogPresenter == null)
+        {
+            combatLogPresenter = GetComponent<CombatLogPresenter>();
+        }
+
+        if (combatLogPresenter == null)
+        {
+            combatLogPresenter = FindAnyObjectByType<CombatLogPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (combatLogPresenter == null)
+        {
+            combatLogPresenter = gameObject.AddComponent<CombatLogPresenter>();
+        }
+    }
+
+    private void EnsureCombatCameraController()
+    {
+        if (combatCameraController == null)
+        {
+            combatCameraController = GetComponent<CombatCameraController>();
+        }
+
+        if (combatCameraController == null)
+        {
+            combatCameraController = FindAnyObjectByType<CombatCameraController>(FindObjectsInactive.Include);
+        }
+
+        if (combatCameraController == null)
+        {
+            combatCameraController = gameObject.AddComponent<CombatCameraController>();
+        }
+
+        combatCameraController.Initialize(mainCamera != null ? mainCamera : Camera.main);
+        mainCamera = combatCameraController.CurrentCamera;
+        if (player != null)
+        {
+            combatCameraController.SetTarget(player.Transform);
+        }
+    }
+
+    private void EnsureEncounterChoicePresenter()
+    {
+        if (encounterChoicePresenter == null)
+        {
+            encounterChoicePresenter = GetComponent<EncounterChoicePresenter>();
+        }
+
+        if (encounterChoicePresenter == null)
+        {
+            encounterChoicePresenter = FindAnyObjectByType<EncounterChoicePresenter>(FindObjectsInactive.Include);
+        }
+
+        if (encounterChoicePresenter == null)
+        {
+            encounterChoicePresenter = gameObject.AddComponent<EncounterChoicePresenter>();
+        }
+    }
+
+    private void EnsureNonCombatEncounterPresenter()
+    {
+        if (nonCombatEncounterPresenter == null)
+        {
+            nonCombatEncounterPresenter = GetComponent<NonCombatEncounterPresenter>();
+        }
+
+        if (nonCombatEncounterPresenter == null)
+        {
+            nonCombatEncounterPresenter = FindAnyObjectByType<NonCombatEncounterPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (nonCombatEncounterPresenter == null)
+        {
+            nonCombatEncounterPresenter = gameObject.AddComponent<NonCombatEncounterPresenter>();
+        }
     }
 
     private void EnsureRunManagerReference()
@@ -475,23 +530,19 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsureRunManagerReference();
         EnsureRunMapDirectorReference();
         EnsureRunEventDirectorReference();
+        EnsureCombatAudioController();
+        EnsureCombatLogPresenter();
+        EnsureCombatCameraController();
+        EnsureEncounterChoicePresenter();
+        EnsureNonCombatEncounterPresenter();
         ValidateSerializedReferences();
-        mainCamera = Camera.main;
         useVirtualJoystick = platformService.ShouldUseVirtualJoystick();
-        if (mainCamera == null)
-        {
-            GameObject cameraObject = new GameObject("Main Camera");
-            cameraObject.tag = "MainCamera";
-            mainCamera = cameraObject.AddComponent<Camera>();
-            cameraObject.AddComponent<AudioListener>();
-        }
-
-        ConfigureCamera();
-        EnsureWeaponAudioSources();
         CreateSprites();
         CreateStarterShips();
         BuildWorld();
         SpawnPlayer();
+        EnsureCombatAudioController();
+        EnsureCombatCameraController();
         SelectShip(GetInitialShipIndex());
         BuildHud();
         EnsureEncounterChoiceUi();
@@ -626,89 +677,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         availableShips ??= new List<ShipDataSO>();
         availableShips.RemoveAll(ship => ship == null);
         backgroundLayers ??= new List<BackgroundLayerConfig>();
-        cameraMinOrthographicSize = Mathf.Max(1f, cameraMinOrthographicSize);
-        cameraMaxOrthographicSize = Mathf.Max(cameraMinOrthographicSize, cameraMaxOrthographicSize);
-        cameraDefaultOrthographicSize = Mathf.Clamp(cameraDefaultOrthographicSize, cameraMinOrthographicSize, cameraMaxOrthographicSize);
         if (shieldHitMaterial == null)
         {
             shieldHitMaterial = Resources.Load<Material>("Materials/ShieldHit_SG");
         }
-    }
-
-    private void EnsureWeaponAudioSources()
-    {
-        int voices = Mathf.Max(1, shotAudioVoices);
-        shotAudioSources = new AudioSource[voices];
-        nextShotAudioSourceIndex = 0;
-
-        Transform audioRoot = new GameObject("WeaponAudio").transform;
-        audioRoot.SetParent(transform, false);
-        audioRoot.localPosition = Vector3.zero;
-
-        for (int i = 0; i < voices; i++)
-        {
-            GameObject sourceObject = new GameObject("WeaponShotSource_" + i);
-            sourceObject.transform.SetParent(audioRoot, false);
-            AudioSource source = sourceObject.AddComponent<AudioSource>();
-            source.playOnAwake = false;
-            source.loop = false;
-            source.spatialBlend = 0f;
-            source.volume = 1f;
-            shotAudioSources[i] = source;
-        }
-    }
-
-    private void PlayWeaponShot(WeaponDataSO weaponData, Vector3 shotWorldPosition, CombatFaction sourceFaction)
-    {
-        if (weaponData == null || weaponData.fireSound == null || shotAudioSources == null || shotAudioSources.Length == 0)
-        {
-            return;
-        }
-
-        AudioSource source = shotAudioSources[nextShotAudioSourceIndex];
-        nextShotAudioSourceIndex = (nextShotAudioSourceIndex + 1) % shotAudioSources.Length;
-        if (source == null)
-        {
-            return;
-        }
-
-        float randomPitch = 1f + UnityEngine.Random.Range(-shotPitchRandomRange, shotPitchRandomRange);
-        float randomVolume = 1f + UnityEngine.Random.Range(-shotVolumeRandomRange, shotVolumeRandomRange);
-        float volumeScale = Mathf.Clamp01(shotBaseVolume * randomVolume);
-
-        source.spatialBlend = 0f;
-        source.panStereo = 0f;
-        source.rolloffMode = AudioRolloffMode.Linear;
-        source.minDistance = 1f;
-        source.maxDistance = 500f;
-        source.dopplerLevel = 0f;
-        source.spread = 0f;
-        source.transform.position = shotWorldPosition;
-
-        if (sourceFaction == CombatFaction.Enemy && player != null && player.Transform != null)
-        {
-            Vector3 playerPosition = player.Transform.position;
-            float distance = Vector2.Distance(playerPosition, shotWorldPosition);
-            float nearDistance = Mathf.Max(0.1f, enemyShotNearDistance);
-            float farDistance = Mathf.Max(nearDistance + 0.1f, enemyShotFarDistance);
-            float distanceLerp = Mathf.InverseLerp(nearDistance, farDistance, distance);
-
-            float distanceVolume = Mathf.Lerp(enemyShotNearVolumeMultiplier, enemyShotFarVolumeMultiplier, distanceLerp);
-            volumeScale *= Mathf.Clamp(distanceVolume, 0f, 2f);
-
-            float pitchOffset = Mathf.Lerp(enemyShotNearPitchOffset, enemyShotFarPitchOffset, distanceLerp);
-            randomPitch += pitchOffset;
-
-            float panByX = Mathf.Clamp((shotWorldPosition.x - playerPosition.x) / Mathf.Max(0.1f, enemyShotPanDistance), -1f, 1f);
-            source.panStereo = panByX * Mathf.Clamp01(enemyShotPanStrength);
-            source.spatialBlend = Mathf.Clamp01(enemyShotSpatialBlend);
-            source.minDistance = nearDistance;
-            source.maxDistance = farDistance;
-            source.spread = 25f;
-        }
-
-        source.pitch = Mathf.Clamp(randomPitch, 0.5f, 2f);
-        source.PlayOneShot(weaponData.fireSound, volumeScale);
     }
 
     private void Update()
@@ -937,24 +909,14 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (player != null && player.Transform != null && mainCamera != null)
+        if (combatCameraController != null)
         {
-            Vector3 current = player.Transform.position;
-            Vector3 lookAhead = new Vector3(player.Velocity.x, player.Velocity.y, 0f) * cameraVelocityLookAhead;
-            Vector3 targetPosition = new Vector3(current.x, current.y, -10f) + new Vector3(lookAhead.x, lookAhead.y, 0f);
-            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, targetPosition, cameraFollowSmoothing * Time.deltaTime);
+            combatCameraController.SetTarget(player != null ? player.Transform : null);
+            combatCameraController.LateTick(Time.deltaTime, player != null ? player.Velocity : Vector2.zero);
+            mainCamera = combatCameraController.CurrentCamera;
         }
 
         UpdateMinimapCamera();
-    }
-
-    private void ConfigureCamera()
-    {
-        mainCamera.orthographic = true;
-        targetCameraOrthographicSize = Mathf.Clamp(cameraDefaultOrthographicSize, cameraMinOrthographicSize, cameraMaxOrthographicSize);
-        mainCamera.orthographicSize = targetCameraOrthographicSize;
-        mainCamera.clearFlags = CameraClearFlags.SolidColor;
-        mainCamera.backgroundColor = new Color(0.01f, 0.03f, 0.05f);
     }
 
     private void EnsureMinimap(Transform uiRoot)
@@ -1060,7 +1022,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         if (overviewTitleText != null) overviewTitleText.text = Localize("overview");
         if (enemyHeaderText != null) enemyHeaderText.text = Localize("enemy_header");
-        if (combatLogTitleText != null) combatLogTitleText.text = Localize("combat_log");
+        if (combatLogPresenter != null) combatLogPresenter.SetTitle(Localize("combat_log"));
         if (playerStatusTitleText != null) playerStatusTitleText.text = Localize("ship_status");
         if (gateHintText != null) gateHintText.text = Localize("warp_inactive");
         if (perkTitleText != null) perkTitleText.text = Localize("perk_title");
@@ -1317,6 +1279,15 @@ public class SpaceCombatSceneController : MonoBehaviour
             Transform = playerObject.transform,
             TeamMember = playerTeam
         };
+
+        if (combatAudioController != null)
+        {
+            combatAudioController.SetPlayerTransform(player.Transform);
+        }
+        if (combatCameraController != null)
+        {
+            combatCameraController.SetTarget(player.Transform);
+        }
     }
 
     private void SelectShip(int index)
@@ -1767,7 +1738,10 @@ public class SpaceCombatSceneController : MonoBehaviour
         activePerks.Clear();
         perkPanelObject.SetActive(false);
         ShowGameOverPanel(false);
-        combatLog.Clear();
+        if (combatLogPresenter != null)
+        {
+            combatLogPresenter.Clear();
+        }
         ClearEnemies();
         ClearProjectiles();
         if (gateTransform != null)
@@ -1834,20 +1808,21 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private bool IsEncounterChoicePanelVisible()
     {
-        return encounterChoicePanelObject != null && encounterChoicePanelObject.activeSelf;
+        return encounterChoicePresenter != null && encounterChoicePresenter.IsVisible;
     }
 
     private bool IsNonCombatPanelVisible()
     {
-        return nonCombatPanelObject != null && nonCombatPanelObject.activeSelf;
+        return nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.IsVisible;
     }
 
     private void HandleNonCombatInput()
     {
         Vector2 pointerPosition;
-        if (TryGetPrimaryPointerDown(out pointerPosition) && IsButtonClicked(nonCombatActionButtonView, pointerPosition))
+        if (TryGetPrimaryPointerDown(out pointerPosition) &&
+            nonCombatEncounterPresenter != null &&
+            nonCombatEncounterPresenter.TryActivateAt(pointerPosition))
         {
-            CompleteNonCombatEncounter();
             return;
         }
 
@@ -1868,24 +1843,10 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         activeNonCombatEncounter = encounter;
         EnsureNonCombatUi();
-
-        string encounterName = string.IsNullOrWhiteSpace(encounter.displayName) ? encounter.name : encounter.displayName;
-        if (nonCombatTitleText != null)
+        if (nonCombatEncounterPresenter != null)
         {
-            nonCombatTitleText.text = encounterName + " [" + GetNodeTypeDisplayName(encounter.nodeType) + "]";
+            nonCombatEncounterPresenter.Show(encounter, BuildNonCombatDescription(encounter), CompleteNonCombatEncounter);
         }
-
-        if (nonCombatBodyText != null)
-        {
-            nonCombatBodyText.text = BuildNonCombatDescription(encounter);
-        }
-
-        if (nonCombatActionButtonView != null && nonCombatActionButtonView.Label != null)
-        {
-            nonCombatActionButtonView.Label.text = GetNonCombatActionText(encounter.nodeType);
-        }
-
-        ShowNonCombatPanel(true);
     }
 
     private void ApplyNonCombatPlaceholderEffect(EncounterSO encounter)
@@ -1982,23 +1943,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private static string GetNonCombatActionText(LocationNodeType nodeType)
-    {
-        switch (nodeType)
-        {
-            case LocationNodeType.Repair:
-                return "Ремонт";
-            case LocationNodeType.Rest:
-                return "Отдых";
-            case LocationNodeType.Resource:
-                return "Забрать";
-            case LocationNodeType.Shop:
-            case LocationNodeType.Event:
-            default:
-                return "Продолжить";
-        }
-    }
-
     private static string GetNodeTypeDisplayName(LocationNodeType nodeType)
     {
         switch (nodeType)
@@ -2080,16 +2024,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void HandleEncounterChoiceInput()
     {
         Vector2 pointerPosition;
-        if (TryGetPrimaryPointerDown(out pointerPosition))
+        if (TryGetPrimaryPointerDown(out pointerPosition) &&
+            encounterChoicePresenter != null &&
+            encounterChoicePresenter.TrySelectAt(pointerPosition))
         {
-            for (int i = 0; i < activeEncounterChoices.Count && i < encounterChoiceButtons.Count; i++)
-            {
-                if (IsButtonClicked(encounterChoiceButtons[i], pointerPosition))
-                {
-                    SelectNextEncounter(activeEncounterChoices[i]);
-                    return;
-                }
-            }
+            return;
         }
 
         Keyboard keyboard = Keyboard.current;
@@ -2098,17 +2037,17 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (activeEncounterChoices.Count > 0 && keyboard.digit1Key.wasPressedThisFrame)
+        if (keyboard.digit1Key.wasPressedThisFrame && encounterChoicePresenter != null)
         {
-            SelectNextEncounter(activeEncounterChoices[0]);
+            encounterChoicePresenter.SelectByIndex(0);
         }
-        else if (activeEncounterChoices.Count > 1 && keyboard.digit2Key.wasPressedThisFrame)
+        else if (keyboard.digit2Key.wasPressedThisFrame && encounterChoicePresenter != null)
         {
-            SelectNextEncounter(activeEncounterChoices[1]);
+            encounterChoicePresenter.SelectByIndex(1);
         }
-        else if (activeEncounterChoices.Count > 2 && keyboard.digit3Key.wasPressedThisFrame)
+        else if (keyboard.digit3Key.wasPressedThisFrame && encounterChoicePresenter != null)
         {
-            SelectNextEncounter(activeEncounterChoices[2]);
+            encounterChoicePresenter.SelectByIndex(2);
         }
     }
 
@@ -2151,9 +2090,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         if (!show)
         {
-            if (encounterChoicePanelObject != null)
+            if (encounterChoicePresenter != null)
             {
-                encounterChoicePanelObject.SetActive(false);
+                encounterChoicePresenter.Hide();
             }
             activeEncounterChoices.Clear();
             return;
@@ -2182,43 +2121,17 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (encounterChoiceTitleText != null)
+        if (encounterChoicePresenter != null)
         {
-            encounterChoiceTitleText.text = "Выберите следующую локацию";
+            encounterChoicePresenter.ShowChoices(activeEncounterChoices, SelectNextEncounter);
         }
-        if (encounterChoiceBodyText != null)
-        {
-            encounterChoiceBodyText.text = "Маршрут формируется из пула локаций. Если директор не настроен, используется тестовый список.";
-        }
-
-        for (int i = 0; i < encounterChoiceButtons.Count; i++)
-        {
-            bool isActive = i < activeEncounterChoices.Count;
-            UiButtonView button = encounterChoiceButtons[i];
-            if (button == null || button.Rect == null)
-            {
-                continue;
-            }
-
-            button.Rect.gameObject.SetActive(isActive);
-            if (!isActive || button.Label == null)
-            {
-                continue;
-            }
-
-            EncounterSO encounter = activeEncounterChoices[i];
-            string encounterName = string.IsNullOrWhiteSpace(encounter.displayName) ? encounter.name : encounter.displayName;
-            button.Label.text = (i + 1) + ". " + encounterName + " [" + GetNodeTypeDisplayName(encounter.nodeType) + "]";
-        }
-
-        encounterChoicePanelObject.SetActive(true);
     }
 
     private void ShowNonCombatPanel(bool show)
     {
-        if (nonCombatPanelObject != null)
+        if (!show && nonCombatEncounterPresenter != null)
         {
-            nonCombatPanelObject.SetActive(show);
+            nonCombatEncounterPresenter.Hide();
         }
 
         if (!show)
@@ -3244,23 +3157,20 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        combatLogTitleText = FindText(panel, "Label");
-        combatLogText = FindText(panel, "Viewport/Content/Text");
+        TMP_Text titleText = FindText(panel, "Label");
+        TMP_Text logText = FindText(panel, "Viewport/Content/Text");
         Transform content = panel.Find("Viewport/Content");
-        combatLogContentRect = content != null ? content.GetComponent<RectTransform>() : null;
-        combatLogScrollRect = panel.GetComponent<ScrollRect>();
-        if (combatLogScrollRect == null)
+        RectTransform contentRect = content != null ? content.GetComponent<RectTransform>() : null;
+        ScrollRect scrollRect = panel.GetComponent<ScrollRect>();
+        if (scrollRect == null)
         {
-            combatLogScrollRect = panel.gameObject.AddComponent<ScrollRect>();
+            scrollRect = panel.gameObject.AddComponent<ScrollRect>();
         }
 
         Transform viewport = panel.Find("Viewport");
-        combatLogScrollRect.viewport = viewport != null ? viewport.GetComponent<RectTransform>() : null;
-        combatLogScrollRect.content = combatLogContentRect;
-        combatLogScrollRect.horizontal = false;
-        combatLogScrollRect.vertical = true;
-        combatLogScrollRect.movementType = ScrollRect.MovementType.Clamped;
-        combatLogScrollRect.scrollSensitivity = 24f;
+        scrollRect.viewport = viewport != null ? viewport.GetComponent<RectTransform>() : null;
+        EnsureCombatLogPresenter();
+        combatLogPresenter.Configure(titleText, logText, scrollRect, contentRect);
     }
 
     private void BindGateHint(Transform uiRoot)
@@ -3738,8 +3648,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.anchoredPosition = new Vector2(14f, 14f);
         AddOutline(panel.gameObject, new Color(0.16f, 0.34f, 0.48f, 1f));
 
-        combatLogTitleText = CreateText("Label", panel.transform, "COMBAT LOG", 16, FontStyle.Bold, new Color(0.52f, 0.8f, 1f));
-        SetAnchoredRect(combatLogTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(10f, -8f), new Vector2(-10f, -30f));
+        TMP_Text titleText = CreateText("Label", panel.transform, "COMBAT LOG", 16, FontStyle.Bold, new Color(0.52f, 0.8f, 1f));
+        SetAnchoredRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(10f, -8f), new Vector2(-10f, -30f));
 
         GameObject viewportObject = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
         viewportObject.transform.SetParent(panel.transform, false);
@@ -3751,27 +3661,25 @@ public class SpaceCombatSceneController : MonoBehaviour
         RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
         SetAnchoredRect(viewportRect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(10f, 10f), new Vector2(-10f, -36f));
 
-        combatLogContentRect = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
-        combatLogContentRect.SetParent(viewportRect, false);
-        combatLogContentRect.anchorMin = new Vector2(0f, 1f);
-        combatLogContentRect.anchorMax = new Vector2(1f, 1f);
-        combatLogContentRect.pivot = new Vector2(0f, 1f);
-        combatLogContentRect.anchoredPosition = Vector2.zero;
-        combatLogContentRect.sizeDelta = new Vector2(0f, 160f);
+        RectTransform contentRect = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+        contentRect.SetParent(viewportRect, false);
+        contentRect.anchorMin = new Vector2(0f, 1f);
+        contentRect.anchorMax = new Vector2(1f, 1f);
+        contentRect.pivot = new Vector2(0f, 1f);
+        contentRect.anchoredPosition = Vector2.zero;
+        contentRect.sizeDelta = new Vector2(0f, 160f);
 
-        combatLogText = CreateText("Text", combatLogContentRect, string.Empty, 13, FontStyle.Normal, new Color(0.74f, 0.86f, 1f));
-        combatLogText.alignment = TextAlignmentOptions.TopLeft;
-        combatLogText.textWrappingMode = TextWrappingModes.Normal;
-        combatLogText.overflowMode = TextOverflowModes.Overflow;
-        SetAnchoredRect(combatLogText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, -160f));
+        TMP_Text logText = CreateText("Text", contentRect, string.Empty, 13, FontStyle.Normal, new Color(0.74f, 0.86f, 1f));
+        logText.alignment = TextAlignmentOptions.TopLeft;
+        logText.textWrappingMode = TextWrappingModes.Normal;
+        logText.overflowMode = TextOverflowModes.Overflow;
+        SetAnchoredRect(logText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, -160f));
 
-        combatLogScrollRect = panel.gameObject.AddComponent<ScrollRect>();
-        combatLogScrollRect.viewport = viewportRect;
-        combatLogScrollRect.content = combatLogContentRect;
-        combatLogScrollRect.horizontal = false;
-        combatLogScrollRect.vertical = true;
-        combatLogScrollRect.movementType = ScrollRect.MovementType.Clamped;
-        combatLogScrollRect.scrollSensitivity = 24f;
+        ScrollRect scrollRect = panel.gameObject.AddComponent<ScrollRect>();
+        scrollRect.viewport = viewportRect;
+        scrollRect.content = contentRect;
+        EnsureCombatLogPresenter();
+        combatLogPresenter.Configure(titleText, logText, scrollRect, contentRect);
     }
 
     private void CreateGateHint(Transform parent)
@@ -4134,7 +4042,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void EnsureEncounterChoiceUi()
     {
-        if (encounterChoicePanelObject != null)
+        if (encounterChoicePresenter != null && encounterChoicePresenter.HasPanel)
         {
             return;
         }
@@ -4144,15 +4052,16 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        encounterChoicePanelObject = new GameObject("EncounterChoicePanel", typeof(RectTransform));
-        encounterChoicePanelObject.transform.SetParent(hudCanvas.transform, false);
-        RectTransform rootRect = encounterChoicePanelObject.GetComponent<RectTransform>();
+        EnsureEncounterChoicePresenter();
+        GameObject panelObject = new GameObject("EncounterChoicePanel", typeof(RectTransform));
+        panelObject.transform.SetParent(hudCanvas.transform, false);
+        RectTransform rootRect = panelObject.GetComponent<RectTransform>();
         StretchToParent(rootRect);
 
-        Image dim = CreateImage("Dimmer", encounterChoicePanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        Image dim = CreateImage("Dimmer", panelObject.transform, new Color(0f, 0f, 0f, 0.58f));
         StretchToParent(dim.rectTransform);
 
-        Image panel = CreateImage("Panel", encounterChoicePanelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
+        Image panel = CreateImage("Panel", panelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
         RectTransform panelRect = panel.rectTransform;
         panelRect.anchorMin = new Vector2(0.5f, 0.5f);
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -4160,40 +4069,42 @@ public class SpaceCombatSceneController : MonoBehaviour
         panelRect.sizeDelta = new Vector2(560f, 360f);
         AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
 
-        encounterChoiceTitleText = CreateText("Title", panel.transform, "Выберите следующую локацию", 28, FontStyle.Bold, Color.white);
-        encounterChoiceTitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(encounterChoiceTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
+        TMP_Text titleText = CreateText("Title", panel.transform, "Выберите следующую локацию", 28, FontStyle.Bold, Color.white);
+        titleText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
 
-        encounterChoiceBodyText = CreateText("Body", panel.transform, string.Empty, 16, FontStyle.Normal, new Color(0.74f, 0.86f, 0.96f));
-        encounterChoiceBodyText.alignment = TextAlignmentOptions.Center;
-        encounterChoiceBodyText.textWrappingMode = TextWrappingModes.Normal;
-        SetAnchoredRect(encounterChoiceBodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(34f, -76f), new Vector2(-34f, -124f));
+        TMP_Text bodyText = CreateText("Body", panel.transform, string.Empty, 16, FontStyle.Normal, new Color(0.74f, 0.86f, 0.96f));
+        bodyText.alignment = TextAlignmentOptions.Center;
+        bodyText.textWrappingMode = TextWrappingModes.Normal;
+        SetAnchoredRect(bodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(34f, -76f), new Vector2(-34f, -124f));
 
-        encounterChoiceButtons.Clear();
+        List<Button> buttons = new List<Button>();
+        List<TMP_Text> labels = new List<TMP_Text>();
         for (int i = 0; i < 3; i++)
         {
-            UiButtonView button = CreateMenuButton(
+            UiButtonView buttonView = CreateMenuButton(
                 panel.transform,
                 "encounter_choice_" + (i + 1),
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 48f - i * 72f),
                 new Vector2(450f, 58f));
 
-            if (button.Label != null)
+            if (buttonView.Label != null)
             {
-                button.Label.fontSize = 17f;
-                button.Label.textWrappingMode = TextWrappingModes.Normal;
+                buttonView.Label.fontSize = 17f;
+                buttonView.Label.textWrappingMode = TextWrappingModes.Normal;
             }
 
-            encounterChoiceButtons.Add(button);
+            buttons.Add(buttonView.Rect.GetComponent<Button>());
+            labels.Add(buttonView.Label);
         }
 
-        encounterChoicePanelObject.SetActive(false);
+        encounterChoicePresenter.Configure(panelObject, titleText, bodyText, buttons, labels);
     }
 
     private void EnsureNonCombatUi()
     {
-        if (nonCombatPanelObject != null)
+        if (nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.HasPanel)
         {
             return;
         }
@@ -4203,15 +4114,16 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        nonCombatPanelObject = new GameObject("NonCombatEncounterPanel", typeof(RectTransform));
-        nonCombatPanelObject.transform.SetParent(hudCanvas.transform, false);
-        RectTransform rootRect = nonCombatPanelObject.GetComponent<RectTransform>();
+        EnsureNonCombatEncounterPresenter();
+        GameObject panelObject = new GameObject("NonCombatEncounterPanel", typeof(RectTransform));
+        panelObject.transform.SetParent(hudCanvas.transform, false);
+        RectTransform rootRect = panelObject.GetComponent<RectTransform>();
         StretchToParent(rootRect);
 
-        Image dim = CreateImage("Dimmer", nonCombatPanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        Image dim = CreateImage("Dimmer", panelObject.transform, new Color(0f, 0f, 0f, 0.58f));
         StretchToParent(dim.rectTransform);
 
-        Image panel = CreateImage("Panel", nonCombatPanelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
+        Image panel = CreateImage("Panel", panelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
         RectTransform panelRect = panel.rectTransform;
         panelRect.anchorMin = new Vector2(0.5f, 0.5f);
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -4219,24 +4131,29 @@ public class SpaceCombatSceneController : MonoBehaviour
         panelRect.sizeDelta = new Vector2(560f, 320f);
         AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
 
-        nonCombatTitleText = CreateText("Title", panel.transform, "Локация", 28, FontStyle.Bold, Color.white);
-        nonCombatTitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(nonCombatTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
+        TMP_Text titleText = CreateText("Title", panel.transform, "Локация", 28, FontStyle.Bold, Color.white);
+        titleText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
 
-        nonCombatBodyText = CreateText("Body", panel.transform, string.Empty, 17, FontStyle.Normal, new Color(0.82f, 0.92f, 1f));
-        nonCombatBodyText.alignment = TextAlignmentOptions.Center;
-        nonCombatBodyText.textWrappingMode = TextWrappingModes.Normal;
-        SetAnchoredRect(nonCombatBodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(38f, -84f), new Vector2(-38f, -214f));
+        TMP_Text bodyText = CreateText("Body", panel.transform, string.Empty, 17, FontStyle.Normal, new Color(0.82f, 0.92f, 1f));
+        bodyText.alignment = TextAlignmentOptions.Center;
+        bodyText.textWrappingMode = TextWrappingModes.Normal;
+        SetAnchoredRect(bodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(38f, -84f), new Vector2(-38f, -214f));
 
-        nonCombatActionButtonView = CreateMenuButton(
+        UiButtonView actionButtonView = CreateMenuButton(
             panel.transform,
             "non_combat_action",
             new Vector2(0.5f, 0.5f),
             new Vector2(0f, -112f),
             new Vector2(250f, 56f));
-        nonCombatActionButtonView.Label.text = "Продолжить";
+        actionButtonView.Label.text = "Продолжить";
 
-        nonCombatPanelObject.SetActive(false);
+        nonCombatEncounterPresenter.Configure(
+            panelObject,
+            titleText,
+            bodyText,
+            actionButtonView.Rect.GetComponent<Button>(),
+            actionButtonView.Label);
     }
 
     private void CreateStartMenu(Transform parent)
@@ -4867,7 +4784,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Keyboard keyboard = Keyboard.current;
         UpdateVirtualJoystick();
-        HandleCameraZoom(deltaTime);
+        if (combatCameraController != null)
+        {
+            combatCameraController.Tick(deltaTime);
+            mainCamera = combatCameraController.CurrentCamera;
+        }
 
         Vector2 moveInput = GetMovementVector(keyboard);
         if (moveInput.sqrMagnitude > 0.01f)
@@ -4927,26 +4848,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             pointerState,
             pointerWorldPosition);
         movementService.UpdateMovement(player, movementContext, deltaTime);
-    }
-
-    private void HandleCameraZoom(float deltaTime)
-    {
-        if (mainCamera == null)
-        {
-            return;
-        }
-
-        float scrollY = Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
-        if (Mathf.Abs(scrollY) > 0.01f)
-        {
-            targetCameraOrthographicSize -= Mathf.Sign(scrollY) * cameraZoomStep;
-            targetCameraOrthographicSize = Mathf.Clamp(targetCameraOrthographicSize, cameraMinOrthographicSize, cameraMaxOrthographicSize);
-        }
-
-        mainCamera.orthographicSize = Mathf.Lerp(
-            mainCamera.orthographicSize,
-            targetCameraOrthographicSize,
-            cameraZoomSmoothing * deltaTime);
     }
 
     private void ToggleModule(int index)
@@ -5465,6 +5366,13 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Vector3 targetPoint = Vector3.zero;
         bool hasPlayerTarget = TryGetPlayerTargetPosition(out targetPoint);
+        if (combatAudioController != null)
+        {
+            combatAudioController.SetPlayerTransform(player != null ? player.Transform : null);
+        }
+        Action<WeaponDataSO, Vector3, CombatFaction> playWeaponShot = combatAudioController != null
+            ? combatAudioController.PlayWeaponShot
+            : null;
 
         CombatUpdateContext context = new CombatUpdateContext
         {
@@ -5481,7 +5389,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             Localize = Localize,
             LogMessage = LogMessage,
             UpdateModuleVisual = UpdateModuleVisual,
-            PlayWeaponShot = PlayWeaponShot
+            PlayWeaponShot = playWeaponShot
         };
 
         CombatUpdateResult result = combatService.UpdateFrame(context, deltaTime);
@@ -6228,8 +6136,10 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateHud()
     {
-        combatLogText.text = string.Join("\n", combatLog);
-        UpdateCombatLogScroll();
+        if (combatLogPresenter != null)
+        {
+            combatLogPresenter.Refresh();
+        }
         if (pauseHudButtonView != null)
         {
             pauseHudButtonView.Rect.gameObject.SetActive(gameStarted && !gameOver && !gamePaused && !levelUpPending);
@@ -6321,25 +6231,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         UpdateUI();
-    }
-
-    private void UpdateCombatLogScroll()
-    {
-        if (combatLogText == null || combatLogContentRect == null)
-        {
-            return;
-        }
-
-        float preferredHeight = Mathf.Max(160f, combatLogText.preferredHeight + 8f);
-        combatLogContentRect.sizeDelta = new Vector2(combatLogContentRect.sizeDelta.x, preferredHeight);
-        SetAnchoredRect(combatLogText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, -preferredHeight));
-
-        if (combatLogShouldSnapToBottom && combatLogScrollRect != null)
-        {
-            Canvas.ForceUpdateCanvases();
-            combatLogScrollRect.verticalNormalizedPosition = 0f;
-            combatLogShouldSnapToBottom = false;
-        }
     }
 
     private void UpdateUI()
@@ -6465,32 +6356,10 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void LogMessage(string message, string kind = "info")
     {
-        string prefix;
-        switch (kind)
+        if (combatLogPresenter != null)
         {
-            case "hit":
-                prefix = "[HIT] ";
-                break;
-            case "miss":
-                prefix = "[MISS] ";
-                break;
-            case "critical":
-                prefix = "[ALERT] ";
-                break;
-            case "warning":
-                prefix = "[WARN] ";
-                break;
-            default:
-                prefix = "[INFO] ";
-                break;
+            combatLogPresenter.LogMessage(message, kind);
         }
-
-        combatLog.Add(prefix + message);
-        while (combatLog.Count > 80)
-        {
-            combatLog.RemoveAt(0);
-        }
-        combatLogShouldSnapToBottom = true;
     }
 
     private Sprite CreateFilledSprite(int width, int height, Func<int, int, int, Color> generator)
