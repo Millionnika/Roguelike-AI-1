@@ -39,6 +39,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private EnemySpawner enemySpawner;
     [Tooltip("Компонент, отвечающий за выбор текущей цели, рамку/линию цели и активацию TargetRing на выбранном враге.")]
     [SerializeField] private TargetingController targetingController;
+    [Tooltip("Компонент визуализации команды движения: линия к точке и маркер цели. Не влияет на игровую механику движения.")]
+    [SerializeField] private MoveCommandVisualController moveCommandVisualController;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
@@ -60,26 +62,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Header("Background Layers")]
     [Tooltip("Inspector: background layers")]
     [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
-
-    [Header("Move Command Visuals")]
-    [Tooltip("Inspector: move command line color")]
-    [SerializeField] private Color moveCommandLineColor = new Color(0.55f, 0.9f, 1f, 0.45f);
-    [Tooltip("Inspector: move command line width")]
-    [SerializeField, Min(0.01f)] private float moveCommandLineWidth = 0.03f;
-    [Tooltip("Inspector: move command line sorting order")]
-    [SerializeField] private int moveCommandLineSortingOrder = 0;
-    [Tooltip("Inspector: use dashed move command line")]
-    [SerializeField] private bool moveCommandLineDashed = true;
-    [Tooltip("Inspector: move command line dash size")]
-    [SerializeField, Min(0.02f)] private float moveCommandLineDashSize = 0.26f;
-    [Tooltip("Inspector: move command line gap size")]
-    [SerializeField, Min(0.01f)] private float moveCommandLineGapSize = 0.17f;
-    [Tooltip("Inspector: move command marker sprite (optional)")]
-    [SerializeField] private Sprite moveCommandMarkerSprite;
-    [Tooltip("Inspector: move command marker color")]
-    [SerializeField] private Color moveCommandMarkerColor = new Color(0.78f, 0.95f, 1f, 0.95f);
-    [Tooltip("Inspector: move command marker world size")]
-    [SerializeField, Min(0.05f)] private float moveCommandMarkerSize = 0.28f;
 
     [Header("Minimap")]
     [Tooltip("Inspector: enable minimap runtime UI")]
@@ -145,11 +127,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Transform gateTransform;
     private Transform weaponSlotsRoot;
     private GameObject playerVisualInstance;
-    private LineRenderer moveCommandLineRenderer;
-    private Material targetingMaterial;
-    private Texture2D dashedLineTexture;
-    private GameObject moveCommandMarkerObject;
-    private SpriteRenderer moveCommandMarkerRenderer;
     private Camera minimapCamera;
     private RenderTexture minimapRenderTexture;
     private RawImage minimapRawImage;
@@ -502,6 +479,26 @@ public class SpaceCombatSceneController : MonoBehaviour
         targetingController.Initialize(player, enemies, worldRoot, mainCamera != null ? mainCamera : Camera.main, LogMessage, Localize);
     }
 
+    private void EnsureMoveCommandVisualController()
+    {
+        if (moveCommandVisualController == null)
+        {
+            moveCommandVisualController = GetComponent<MoveCommandVisualController>();
+        }
+
+        if (moveCommandVisualController == null)
+        {
+            moveCommandVisualController = FindAnyObjectByType<MoveCommandVisualController>(FindObjectsInactive.Include);
+        }
+
+        if (moveCommandVisualController == null)
+        {
+            moveCommandVisualController = gameObject.AddComponent<MoveCommandVisualController>();
+        }
+
+        moveCommandVisualController.Initialize(player, worldRoot, circleSprite);
+    }
+
     private float GetPlayerHullPercent()
     {
         return player != null ? player.HullPercent : 0f;
@@ -531,11 +528,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         BuildWorld();
         EnsureEnemySpawner();
         EnsureTargetingController();
+        EnsureMoveCommandVisualController();
         SpawnPlayer();
         EnsureCombatAudioController();
         EnsureCombatCameraController();
         EnsureTimelineSpawnController();
         EnsureTargetingController();
+        EnsureMoveCommandVisualController();
         SelectShip(GetInitialShipIndex());
         BuildHud();
         EnsureEncounterChoiceUi();
@@ -573,14 +572,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (runtimeNebulaLayerPrefab != null)
         {
             Destroy(runtimeNebulaLayerPrefab);
-        }
-        if (targetingMaterial != null)
-        {
-            Destroy(targetingMaterial);
-        }
-        if (dashedLineTexture != null)
-        {
-            Destroy(dashedLineTexture);
         }
         if (minimapRenderTexture != null)
         {
@@ -4909,7 +4900,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         targetingController?.TickVisuals();
-        UpdateMoveCommandVisuals();
+        moveCommandVisualController?.Tick();
     }
 
     private void ApplyShieldVisual(SpriteRenderer renderer, Color baseColor, float shieldPercent, float hitFlash, float pulseOffset)
@@ -4928,172 +4919,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         shieldColor.a = Mathf.Clamp01(alpha);
         renderer.color = shieldColor;
         renderer.enabled = shieldColor.a > 0.001f;
-    }
-
-    private void EnsureMoveCommandVisuals()
-    {
-        Transform parent = worldRoot != null ? worldRoot : transform;
-        if (moveCommandLineRenderer == null)
-        {
-            GameObject lineObject = new GameObject("MoveCommandLine");
-            lineObject.transform.SetParent(parent, false);
-            moveCommandLineRenderer = lineObject.AddComponent<LineRenderer>();
-            moveCommandLineRenderer.positionCount = 2;
-            moveCommandLineRenderer.useWorldSpace = true;
-            moveCommandLineRenderer.alignment = LineAlignment.View;
-            moveCommandLineRenderer.textureMode = LineTextureMode.Stretch;
-            moveCommandLineRenderer.numCapVertices = 4;
-            moveCommandLineRenderer.sortingOrder = moveCommandLineSortingOrder;
-            moveCommandLineRenderer.material = GetTargetingMaterial();
-            moveCommandLineRenderer.gameObject.SetActive(false);
-        }
-
-        if (moveCommandMarkerObject == null)
-        {
-            moveCommandMarkerObject = new GameObject("MoveCommandMarker");
-            moveCommandMarkerObject.transform.SetParent(parent, false);
-            moveCommandMarkerRenderer = moveCommandMarkerObject.AddComponent<SpriteRenderer>();
-            moveCommandMarkerRenderer.sortingOrder = moveCommandLineSortingOrder + 1;
-            moveCommandMarkerObject.SetActive(false);
-        }
-    }
-
-    private void UpdateMoveCommandVisuals()
-    {
-        if (player == null || player.Transform == null)
-        {
-            return;
-        }
-
-        EnsureMoveCommandVisuals();
-
-        bool show = player.MoveCommandActive;
-        if (!show)
-        {
-            if (moveCommandLineRenderer != null) moveCommandLineRenderer.gameObject.SetActive(false);
-            if (moveCommandMarkerObject != null) moveCommandMarkerObject.SetActive(false);
-            return;
-        }
-
-        Vector3 start = player.Transform.position;
-        Vector3 end = player.MoveCommandTarget;
-        start.z = 0f;
-        end.z = 0f;
-
-        if (moveCommandLineRenderer != null)
-        {
-            ConfigureLineRenderer(
-                moveCommandLineRenderer,
-                moveCommandLineColor,
-                moveCommandLineWidth,
-                moveCommandLineSortingOrder,
-                moveCommandLineDashed,
-                moveCommandLineDashSize,
-                moveCommandLineGapSize,
-                start,
-                end);
-        }
-
-        if (moveCommandMarkerObject != null && moveCommandMarkerRenderer != null)
-        {
-            moveCommandMarkerObject.SetActive(true);
-            moveCommandMarkerObject.transform.position = end;
-            moveCommandMarkerObject.transform.rotation = Quaternion.identity;
-
-            Sprite markerSprite = moveCommandMarkerSprite != null ? moveCommandMarkerSprite : circleSprite;
-            moveCommandMarkerRenderer.sprite = markerSprite;
-            moveCommandMarkerRenderer.color = moveCommandMarkerColor;
-            moveCommandMarkerRenderer.sortingOrder = moveCommandLineSortingOrder + 1;
-
-            float scale = moveCommandMarkerSize;
-            if (markerSprite != null)
-            {
-                Vector3 spriteSize = markerSprite.bounds.size;
-                float baseSize = Mathf.Max(spriteSize.x, spriteSize.y, 0.001f);
-                scale = moveCommandMarkerSize / baseSize;
-            }
-
-            moveCommandMarkerObject.transform.localScale = Vector3.one * Mathf.Max(0.01f, scale);
-        }
-    }
-
-    private void ConfigureLineRenderer(
-        LineRenderer renderer,
-        Color color,
-        float width,
-        int sortingOrder,
-        bool dashed,
-        float dashSize,
-        float gapSize,
-        Vector3 start,
-        Vector3 end)
-    {
-        if (renderer == null)
-        {
-            return;
-        }
-
-        renderer.gameObject.SetActive(true);
-        renderer.startColor = color;
-        renderer.endColor = color;
-        renderer.startWidth = width;
-        renderer.endWidth = width;
-        renderer.sortingOrder = sortingOrder;
-        renderer.SetPosition(0, start);
-        renderer.SetPosition(1, end);
-
-        if (renderer.material == null)
-        {
-            renderer.material = GetTargetingMaterial();
-        }
-
-        if (renderer.material == null)
-        {
-            return;
-        }
-
-        if (dashed)
-        {
-            renderer.textureMode = LineTextureMode.Tile;
-            renderer.material.mainTexture = GetDashedLineTexture();
-            float segment = Mathf.Max(0.01f, dashSize + gapSize);
-            float lineLength = Vector3.Distance(start, end);
-            renderer.material.mainTextureScale = new Vector2(Mathf.Max(1f, lineLength / segment), 1f);
-        }
-        else
-        {
-            renderer.textureMode = LineTextureMode.Stretch;
-            renderer.material.mainTexture = null;
-            renderer.material.mainTextureScale = Vector2.one;
-        }
-    }
-
-    private Material GetTargetingMaterial()
-    {
-        if (targetingMaterial != null)
-        {
-            return targetingMaterial;
-        }
-
-        Shader shader = Shader.Find("Sprites/Default");
-        targetingMaterial = shader != null ? new Material(shader) : null;
-        return targetingMaterial;
-    }
-
-    private Texture2D GetDashedLineTexture()
-    {
-        if (dashedLineTexture != null)
-        {
-            return dashedLineTexture;
-        }
-
-        dashedLineTexture = new Texture2D(2, 1, TextureFormat.RGBA32, false);
-        dashedLineTexture.filterMode = FilterMode.Point;
-        dashedLineTexture.wrapMode = TextureWrapMode.Repeat;
-        dashedLineTexture.SetPixel(0, 0, Color.white);
-        dashedLineTexture.SetPixel(1, 0, new Color(1f, 1f, 1f, 0f));
-        dashedLineTexture.Apply();
-        return dashedLineTexture;
     }
 
     private void UpdateHud()
