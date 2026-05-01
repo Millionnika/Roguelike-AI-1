@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Encounter 3
   m_EditorClassIdentifier: Assembly-CSharp::EncounterSO
   displayName: "\u041D\u043E\u0432\u0430\u044F \u043B\u043E\u043A\u0430\u0446\u0438\u044F"
-  nodeType: 0
+  nodeType: 3
   icon: {fileID: 0}
-  waveTimeline: {fileID: 11400000, guid: e841595622dd52e43863fe3d1957201d, type: 2}
+  waveTimeline: {fileID: 0}
   dangerLevel: 1
   shortDescription: 

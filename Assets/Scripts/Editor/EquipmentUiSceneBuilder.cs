@@ -186,9 +186,15 @@ public static class EquipmentUiSceneBuilder
     internal static void BuildShipFromFactory(string sourceName, Sprite shipSprite)
     {
         string safeName = SanitizeName(sourceName);
-        if (string.IsNullOrWhiteSpace(safeName) || shipSprite == null)
+        if (string.IsNullOrWhiteSpace(safeName))
         {
-            EditorUtility.DisplayDialog("Ship Factory", "Enter valid ship name and sprite.", "OK");
+            EditorUtility.DisplayDialog("Ship Factory", "Укажите имя корабля.", "OK");
+            return;
+        }
+
+        if (shipSprite == null)
+        {
+            EditorUtility.DisplayDialog("Ship Factory", "Назначьте Ship Sprite. Без спрайта корабль не будет создан.", "OK");
             return;
         }
 
@@ -200,14 +206,30 @@ public static class EquipmentUiSceneBuilder
         string prefabPath = shipDir + "/" + safeName + "_Prefab.prefab";
         string shipDataPath = shipDir + "/" + safeName + "_ShipData.asset";
 
-        GameObject prefab = CreateFactoryShipPrefab(prefabPath, safeName, shipSprite);
+        bool prefabExists = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null;
+        bool shipDataExists = AssetDatabase.LoadAssetAtPath<ShipDataSO>(shipDataPath) != null;
+        if ((prefabExists || shipDataExists) &&
+            !EditorUtility.DisplayDialog(
+                "Ship Factory",
+                "Корабль с таким именем уже существует. Обновить существующий prefab/ShipDataSO выбранным спрайтом?",
+                "Обновить",
+                "Отмена"))
+        {
+            Debug.LogWarning("Ship Factory: создание корабля отменено, потому что ассеты уже существуют: " + shipDir);
+            return;
+        }
+
+        ShipDataSO existingShipData = AssetDatabase.LoadAssetAtPath<ShipDataSO>(shipDataPath);
+        int weaponSlotCount = existingShipData != null ? Mathf.Max(0, existingShipData.weaponSlotCount) : 2;
+        GameObject prefab = CreateFactoryShipPrefab(prefabPath, safeName, shipSprite, weaponSlotCount);
         ShipDataSO shipData = CreateFactoryShipData(shipDataPath, safeName, shipSprite, prefab);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorUtility.FocusProjectWindow();
         Selection.activeObject = shipData;
-        Debug.Log("Ship Factory: created ship at " + shipDir);
+        EditorGUIUtility.PingObject(shipData);
+        Debug.Log("Корабль " + safeName + " создан. Body и Aura используют выбранный спрайт.");
     }
 
     public static void CreateExampleShipWithWeapon()
@@ -480,11 +502,11 @@ public static class EquipmentUiSceneBuilder
         return AssetDatabase.LoadAssetAtPath<SlotUI>(PrefabPath);
     }
 
-    private static GameObject CreateFactoryShipPrefab(string prefabPath, string safeName, Sprite shipSprite)
+    private static GameObject CreateFactoryShipPrefab(string prefabPath, string safeName, Sprite shipSprite, int weaponSlotCount)
     {
         Sprite railgunVisualSprite = AssetDatabase.LoadAssetAtPath<Sprite>(RailgunVisualSpritePath);
-        GameObject root = new GameObject(safeName + "_ShipRoot");
-        BuildCompleteShipHierarchy(root.transform, shipSprite, 2, railgunVisualSprite);
+        GameObject root = new GameObject(safeName + "_Prefab");
+        BuildCompleteShipHierarchy(root.transform, shipSprite, Mathf.Max(0, weaponSlotCount), railgunVisualSprite);
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
@@ -514,7 +536,9 @@ public static class EquipmentUiSceneBuilder
     {
         GameObject body = new GameObject("Body");
         body.transform.SetParent(root, false);
-        body.transform.localScale = new Vector3(0.42f, 0.55f, 1f);
+        body.transform.localPosition = Vector3.zero;
+        body.transform.localRotation = Quaternion.identity;
+        body.transform.localScale = Vector3.one;
         SpriteRenderer bodyRenderer = body.AddComponent<SpriteRenderer>();
         bodyRenderer.sprite = shipSprite;
         bodyRenderer.color = Color.white;
@@ -523,7 +547,9 @@ public static class EquipmentUiSceneBuilder
 
         GameObject aura = new GameObject("Aura");
         aura.transform.SetParent(root, false);
-        aura.transform.localScale = new Vector3(0.66f, 0.8f, 1f);
+        aura.transform.localPosition = Vector3.zero;
+        aura.transform.localRotation = Quaternion.identity;
+        aura.transform.localScale = new Vector3(1.2f, 1.2f, 1f);
         SpriteRenderer auraRenderer = aura.AddComponent<SpriteRenderer>();
         auraRenderer.sprite = shipSprite;
         auraRenderer.color = new Color(0.42f, 0.9f, 1f, 0.28f);
@@ -532,14 +558,11 @@ public static class EquipmentUiSceneBuilder
         GameObject thruster = new GameObject("Thruster");
         thruster.transform.SetParent(root, false);
         thruster.transform.localPosition = new Vector3(0f, -0.52f, 0f);
-        thruster.transform.localScale = new Vector3(0.22f, 0.28f, 1f);
-        SpriteRenderer thrusterRenderer = thruster.AddComponent<SpriteRenderer>();
-        thrusterRenderer.sprite = shipSprite;
-        thrusterRenderer.color = new Color(1f, 0.72f, 0.24f, 0.65f);
-        thrusterRenderer.sortingOrder = 3;
+        thruster.transform.localRotation = Quaternion.identity;
+        thruster.transform.localScale = Vector3.one;
 
-        CreateEngineFire(thruster.transform, "Engine_Fire_L", new Vector3(-0.22f, -0.58f, 0f));
-        CreateEngineFire(thruster.transform, "Engine_Fire_R", new Vector3(0.22f, -0.58f, 0f));
+        CreateEngineFireAnchor(thruster.transform, "Engine_Fire_L", new Vector3(-0.22f, -0.58f, 0f));
+        CreateEngineFireAnchor(thruster.transform, "Engine_Fire_R", new Vector3(0.22f, -0.58f, 0f));
         CreateWeaponSlots(root, weaponSlotCount, weaponVisualSprite);
     }
 
@@ -550,12 +573,17 @@ public static class EquipmentUiSceneBuilder
         {
             Sprite shipSprite = ResolveShipSpriteForPrefab(root.transform, shipData);
             EnsureSpriteRenderer(root.transform.Find("Aura"), shipSprite, new Color(0.42f, 0.9f, 1f, 0.28f), 4);
-            EnsureSpriteRenderer(root.transform.Find("Thruster"), shipSprite, new Color(1f, 0.72f, 0.24f, 0.65f), 3);
             Transform thruster = root.transform.Find("Thruster");
             if (thruster != null)
             {
-                EnsureEngineFireVisual(thruster, "Engine_Fire_L", new Vector3(-0.76f, 0f, 0f), shipSprite);
-                EnsureEngineFireVisual(thruster, "Engine_Fire_R", new Vector3(0.76f, 0f, 0f), shipSprite);
+                SpriteRenderer thrusterRenderer = thruster.GetComponent<SpriteRenderer>();
+                if (thrusterRenderer != null)
+                {
+                    Object.DestroyImmediate(thrusterRenderer, true);
+                }
+
+                EnsureEngineFireAnchor(thruster, "Engine_Fire_L", new Vector3(-0.22f, -0.58f, 0f));
+                EnsureEngineFireAnchor(thruster, "Engine_Fire_R", new Vector3(0.22f, -0.58f, 0f));
             }
 
             Transform[] children = root.GetComponentsInChildren<Transform>(true);
@@ -614,20 +642,16 @@ public static class EquipmentUiSceneBuilder
         renderer.sortingOrder = sortingOrder;
     }
 
-    private static void CreateEngineFire(Transform parent, string name, Vector3 localPosition)
+    private static void CreateEngineFireAnchor(Transform parent, string name, Vector3 localPosition)
     {
         GameObject fire = new GameObject(name);
         fire.transform.SetParent(parent, false);
         fire.transform.localPosition = localPosition;
-        fire.transform.localScale = new Vector3(0.22f, 0.42f, 1f);
-        SpriteRenderer renderer = fire.AddComponent<SpriteRenderer>();
-        SpriteRenderer parentRenderer = parent.GetComponent<SpriteRenderer>();
-        renderer.sprite = parentRenderer != null ? parentRenderer.sprite : null;
-        renderer.color = new Color(1f, 0.48f, 0.08f, 0.72f);
-        renderer.sortingOrder = 2;
+        fire.transform.localRotation = Quaternion.identity;
+        fire.transform.localScale = Vector3.one;
     }
 
-    private static void EnsureEngineFireVisual(Transform parent, string name, Vector3 localPosition, Sprite sprite)
+    private static void EnsureEngineFireAnchor(Transform parent, string name, Vector3 localPosition)
     {
         Transform fire = parent.Find(name);
         if (fire == null)
@@ -638,16 +662,12 @@ public static class EquipmentUiSceneBuilder
 
         fire.localPosition = localPosition;
         fire.localRotation = Quaternion.identity;
-        fire.localScale = new Vector3(0.22f, 0.42f, 1f);
+        fire.localScale = Vector3.one;
         SpriteRenderer renderer = fire.GetComponent<SpriteRenderer>();
-        if (renderer == null)
+        if (renderer != null)
         {
-            renderer = fire.gameObject.AddComponent<SpriteRenderer>();
+            Object.DestroyImmediate(renderer, true);
         }
-
-        renderer.sprite = sprite;
-        renderer.color = new Color(1f, 0.48f, 0.08f, 0.72f);
-        renderer.sortingOrder = 2;
     }
 
     private static void CreateWeaponSlots(Transform root, int weaponSlotCount, Sprite weaponVisualSprite)
@@ -810,6 +830,27 @@ public sealed class ShipFactoryWizard : ScriptableWizard
 {
     public string shipName = "NewShip";
     public Sprite shipSprite;
+
+    private void OnWizardUpdate()
+    {
+        if (string.IsNullOrWhiteSpace(shipName))
+        {
+            errorString = "Укажите Ship Name.";
+            isValid = false;
+            return;
+        }
+
+        if (shipSprite == null)
+        {
+            errorString = "Назначьте Ship Sprite.";
+            isValid = false;
+            return;
+        }
+
+        errorString = string.Empty;
+        helpString = "Build Ship создаст prefab и ShipDataSO в Assets/Content/Ships/<ShipName>.";
+        isValid = true;
+    }
 
     private void OnWizardCreate()
     {

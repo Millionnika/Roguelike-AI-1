@@ -14,12 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WaveTimelineSO
   events:
   - startTime: 3
-    duration: 0
+    duration: 1
     pattern: 0
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
     count: 2
   - startTime: 5
-    duration: 0
+    duration: 1
     pattern: 0
     shipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
     count: 2

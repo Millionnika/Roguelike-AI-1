@@ -19,10 +19,8 @@ MonoBehaviour:
     weight: 1
   - nodeType: 1
     weight: 0.2
-  - nodeType: 1
-    weight: 0.2
   - nodeType: 3
-    weight: 0.15
+    weight: 0.2
   forceBossAtEnd: 1
   bossNodeIndex: 3
   minDangerLevel: 0
