@@ -24,20 +24,20 @@ MonoBehaviour:
   acceleration: 11
   rotationSpeed: 8.5
   drag: 1.6
-  enemyBehaviorPreset: 0
+  enemyBehaviorPreset: 1
   enemyPreferredDistance: 0
-  enemyPreferredDistanceFromRange: 0.78
-  enemyPreferredDistanceVariance: 0.45
-  enemyDistanceTolerance: 0.35
-  enemyOutOfRangeApproachFactor: 0.95
-  enemyLowDurabilityRetreatThreshold: 0.35
-  enemyLowDurabilityRetreatDistanceBonus: 1.2
-  enemyLowDurabilityRetreatSpeedMultiplier: 1.35
-  enemyStrafeJitterAmplitude: 0.22
-  enemyStrafeJitterFrequency: 1.35
-  maxShield: 430
-  maxArmor: 320
-  maxHull: 220
+  enemyPreferredDistanceFromRange: 0.68
+  enemyPreferredDistanceVariance: 0.35
+  enemyDistanceTolerance: 0.28
+  enemyOutOfRangeApproachFactor: 0.98
+  enemyLowDurabilityRetreatThreshold: 0.18
+  enemyLowDurabilityRetreatDistanceBonus: 0.65
+  enemyLowDurabilityRetreatSpeedMultiplier: 1.15
+  enemyStrafeJitterAmplitude: 0.26
+  enemyStrafeJitterFrequency: 1.7
+  maxShield: 11111
+  maxArmor: 11111
+  maxHull: 11111
   capacitor: 1200
   capacitorRechargeTime: 92
   capacitorRechargeRate: 1.2
@@ -48,8 +48,8 @@ MonoBehaviour:
   repairMultiplier: 1
   shipPrefab: {fileID: 211344207131180428, guid: 707683e44e5d84a4ba144d35fb7b6253, type: 3}
   startingWeapons:
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: 1975a3d482d3aff48af50378a74e1d57, type: 2}
+  - {fileID: 11400000, guid: 1975a3d482d3aff48af50378a74e1d57, type: 2}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}

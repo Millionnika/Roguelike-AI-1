@@ -356,20 +356,46 @@ public static class EquipmentUiSceneBuilder
     internal static void BuildWeaponFromFactory(
         string sourceName,
         ShipClass requiredClass,
-        GameObject projectilePrefab,
-        Sprite icon,
+        FireMode fireMode,
+        Sprite weaponSprite,
+        Sprite projectileSprite,
         AudioClip fireSound,
         float damage,
-        float fireRate,
+        float cooldown,
+        float maxRange,
+        float firingAngle,
         float projectileSpeed,
+        float projectileLifetime,
+        float projectileMaxDistance,
         float capacitorPerShot)
     {
         string safeName = SanitizeName(sourceName);
         if (string.IsNullOrWhiteSpace(safeName))
         {
-            EditorUtility.DisplayDialog("Weapon Factory", "Enter valid weapon name.", "OK");
+            EditorUtility.DisplayDialog("Weapon Factory", "Укажите имя оружия.", "OK");
             return;
         }
+
+        bool usesProjectile = fireMode == FireMode.Projectile || fireMode == FireMode.Missile;
+        if (usesProjectile && projectileSprite == null)
+        {
+            EditorUtility.DisplayDialog("Weapon Factory", "Для режима Projectile или Missile назначьте Projectile Sprite.", "OK");
+            return;
+        }
+
+        if (weaponSprite == null)
+        {
+            Debug.LogWarning("Weapon Factory: Weapon Sprite не назначен. Оружие будет создано без иконки и без спрайта визуального префаба.");
+        }
+
+        damage = Mathf.Max(1f, damage);
+        cooldown = Mathf.Max(0.01f, cooldown);
+        maxRange = Mathf.Max(0.1f, maxRange);
+        firingAngle = Mathf.Clamp(firingAngle, 0f, 360f);
+        projectileSpeed = Mathf.Max(0.01f, projectileSpeed);
+        projectileLifetime = Mathf.Max(0.01f, projectileLifetime);
+        projectileMaxDistance = Mathf.Max(0.1f, projectileMaxDistance);
+        capacitorPerShot = Mathf.Max(0f, capacitorPerShot);
 
         EnsureFolder("Assets/Content");
         EnsureFolder(WeaponFactoryRootDir);
@@ -377,23 +403,57 @@ public static class EquipmentUiSceneBuilder
         EnsureFolder(weaponDir);
 
         string weaponDataPath = weaponDir + "/" + safeName + "_WeaponData.asset";
+        string projectilePrefabPath = weaponDir + "/" + safeName + "_Projectile.prefab";
+        string visualPrefabPath = weaponDir + "/" + safeName + "_WeaponVisual.prefab";
+
+        bool dataExists = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(weaponDataPath) != null;
+        bool projectileExists = AssetDatabase.LoadAssetAtPath<GameObject>(projectilePrefabPath) != null;
+        bool visualExists = AssetDatabase.LoadAssetAtPath<GameObject>(visualPrefabPath) != null;
+        if ((dataExists || projectileExists || visualExists) &&
+            !EditorUtility.DisplayDialog(
+                "Weapon Factory",
+                "Оружие с таким именем уже существует. Обновить существующие ассеты?",
+                "Обновить",
+                "Отмена"))
+        {
+            Debug.LogWarning("Weapon Factory: создание оружия отменено, потому что ассеты уже существуют: " + weaponDir);
+            return;
+        }
+
+        GameObject projectilePrefab = usesProjectile
+            ? CreateOrUpdateProjectilePrefab(projectilePrefabPath, safeName, projectileSprite)
+            : null;
+        GameObject visualPrefab = CreateOrUpdateWeaponVisualPrefab(visualPrefabPath, safeName, weaponSprite);
+
+        if (!usesProjectile)
+        {
+            Debug.Log("Оружие работает в режиме Hitscan/Beam: летящий projectile prefab в бою создаваться не будет.");
+        }
+
         WeaponDataSO weaponData = CreateFactoryWeaponData(
             weaponDataPath,
             safeName,
             requiredClass,
+            fireMode,
             projectilePrefab,
-            icon,
+            weaponSprite,
+            visualPrefab,
             fireSound,
             damage,
-            fireRate,
+            cooldown,
+            maxRange,
+            firingAngle,
             projectileSpeed,
+            projectileLifetime,
+            projectileMaxDistance,
             capacitorPerShot);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         EditorUtility.FocusProjectWindow();
         Selection.activeObject = weaponData;
-        Debug.Log("Weapon Factory: created weapon at " + weaponDir);
+        EditorGUIUtility.PingObject(weaponData);
+        Debug.Log("Оружие " + safeName + " создано. WeaponDataSO, projectile prefab и visual prefab настроены.");
     }
 
     private static void ConfigureRow(RectTransform row)
@@ -729,16 +789,124 @@ public static class EquipmentUiSceneBuilder
         return shipData;
     }
 
+    private static GameObject CreateOrUpdateProjectilePrefab(string prefabPath, string safeName, Sprite projectileSprite)
+    {
+        bool loadedExistingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null;
+        GameObject root = loadedExistingPrefab
+            ? PrefabUtility.LoadPrefabContents(prefabPath)
+            : new GameObject(safeName + "_Projectile");
+
+        try
+        {
+            root.name = safeName + "_Projectile";
+
+            SpriteRenderer renderer = root.GetComponent<SpriteRenderer>();
+            if (renderer == null)
+            {
+                renderer = root.AddComponent<SpriteRenderer>();
+            }
+
+            renderer.sprite = projectileSprite;
+            renderer.sortingOrder = 8;
+
+            Rigidbody2D body = root.GetComponent<Rigidbody2D>();
+            if (body == null)
+            {
+                body = root.AddComponent<Rigidbody2D>();
+            }
+
+            body.bodyType = RigidbodyType2D.Kinematic;
+            body.gravityScale = 0f;
+            body.linearDamping = 0f;
+            body.angularDamping = 0f;
+
+            Collider2D collider = root.GetComponent<Collider2D>();
+            if (collider == null)
+            {
+                CircleCollider2D circle = root.AddComponent<CircleCollider2D>();
+                circle.radius = 0.08f;
+                collider = circle;
+            }
+
+            collider.isTrigger = true;
+
+            if (root.GetComponent<ProjectileBehaviour>() == null)
+            {
+                root.AddComponent<ProjectileBehaviour>();
+            }
+
+            return PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        }
+        finally
+        {
+            if (loadedExistingPrefab)
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+            else
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+    }
+
+    private static GameObject CreateOrUpdateWeaponVisualPrefab(string prefabPath, string safeName, Sprite weaponSprite)
+    {
+        bool loadedExistingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null;
+        GameObject root = loadedExistingPrefab
+            ? PrefabUtility.LoadPrefabContents(prefabPath)
+            : new GameObject(safeName + "_WeaponVisual");
+
+        try
+        {
+            root.name = safeName + "_WeaponVisual";
+
+            SpriteRenderer renderer = root.GetComponent<SpriteRenderer>();
+            if (renderer == null)
+            {
+                renderer = root.AddComponent<SpriteRenderer>();
+            }
+
+            renderer.sprite = weaponSprite;
+            renderer.sortingOrder = 9;
+
+            Collider2D[] colliders = root.GetComponents<Collider2D>();
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                Object.DestroyImmediate(colliders[i], true);
+            }
+
+            return PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        }
+        finally
+        {
+            if (loadedExistingPrefab)
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+            else
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+    }
+
     private static WeaponDataSO CreateFactoryWeaponData(
         string weaponDataPath,
         string safeName,
         ShipClass requiredClass,
+        FireMode fireMode,
         GameObject projectilePrefab,
         Sprite icon,
+        GameObject visualPrefab,
         AudioClip fireSound,
         float damage,
-        float fireRate,
+        float cooldown,
+        float maxRange,
+        float firingAngle,
         float projectileSpeed,
+        float projectileLifetime,
+        float projectileMaxDistance,
         float capacitorPerShot)
     {
         WeaponDataSO weaponData = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(weaponDataPath);
@@ -750,18 +918,19 @@ public static class EquipmentUiSceneBuilder
 
         weaponData.name = safeName + "_WeaponData";
         weaponData.requiredClass = requiredClass;
+        weaponData.fireMode = fireMode;
         weaponData.projectilePrefab = projectilePrefab;
         weaponData.icon = icon;
+        weaponData.visualPrefab = visualPrefab;
         weaponData.fireSound = fireSound;
-        weaponData.fireMode = FireMode.Projectile;
-        weaponData.damage = Mathf.Max(0f, damage);
-        weaponData.cooldown = Mathf.Max(0.01f, fireRate);
-        weaponData.fireRate = Mathf.Max(0.01f, fireRate);
-        weaponData.maxRange = Mathf.Max(0.5f, weaponData.maxRange > 0f ? weaponData.maxRange : 8f);
-        weaponData.firingAngle = Mathf.Clamp(weaponData.firingAngle <= 0f ? 360f : weaponData.firingAngle, 0f, 360f);
+        weaponData.damage = Mathf.Max(1f, damage);
+        weaponData.cooldown = Mathf.Max(0.01f, cooldown);
+        weaponData.fireRate = Mathf.Max(0.01f, cooldown);
+        weaponData.maxRange = Mathf.Max(0.1f, maxRange);
+        weaponData.firingAngle = Mathf.Clamp(firingAngle, 0f, 360f);
         weaponData.projectileSpeed = Mathf.Max(0.01f, projectileSpeed);
-        weaponData.projectileMaxDistance = Mathf.Max(0.1f, weaponData.projectileMaxDistance > 0f ? weaponData.projectileMaxDistance : weaponData.maxRange);
-        weaponData.projectileLifetime = Mathf.Max(0.1f, weaponData.projectileLifetime > 0f ? weaponData.projectileLifetime : weaponData.projectileMaxDistance / weaponData.projectileSpeed);
+        weaponData.projectileLifetime = Mathf.Max(0.01f, projectileLifetime);
+        weaponData.projectileMaxDistance = Mathf.Max(0.1f, projectileMaxDistance);
         weaponData.capacitorPerShot = Mathf.Max(0f, capacitorPerShot);
         EditorUtility.SetDirty(weaponData);
         return weaponData;
@@ -862,25 +1031,80 @@ public sealed class WeaponFactoryWizard : ScriptableWizard
 {
     public string weaponName = "NewWeapon";
     public ShipClass requiredClass = ShipClass.Light;
-    public GameObject projectilePrefab;
-    public Sprite icon;
+    public FireMode fireMode = FireMode.Projectile;
+    public Sprite weaponSprite;
+    public Sprite projectileSprite;
     public AudioClip fireSound;
     public float damage = 28f;
-    public float fireRate = 0.45f;
+    public float cooldown = 0.45f;
+    public float maxRange = 8f;
+    public float firingAngle = 30f;
     public float projectileSpeed = 18f;
+    public float projectileLifetime = 1.5f;
+    public float projectileMaxDistance = 8f;
     public float capacitorPerShot = 9f;
+
+    private void OnWizardUpdate()
+    {
+        bool usesProjectile = fireMode == FireMode.Projectile || fireMode == FireMode.Missile;
+        if (string.IsNullOrWhiteSpace(weaponName))
+        {
+            errorString = "Укажите Weapon Name.";
+            isValid = false;
+            return;
+        }
+
+        if (usesProjectile && projectileSprite == null)
+        {
+            errorString = "Для Projectile/Missile назначьте Projectile Sprite.";
+            isValid = false;
+            return;
+        }
+
+        if (damage <= 0f)
+        {
+            errorString = "Damage должен быть больше 0. При создании значение будет исправлено.";
+        }
+        else if (cooldown <= 0f)
+        {
+            errorString = "Cooldown должен быть больше 0. При создании значение будет исправлено.";
+        }
+        else if (usesProjectile && projectileSpeed <= 0f)
+        {
+            errorString = "Projectile Speed должен быть больше 0. При создании значение будет исправлено.";
+        }
+        else if (weaponSprite == null)
+        {
+            errorString = string.Empty;
+            helpString = "Weapon Sprite не назначен: weapon visual prefab и icon будут без спрайта.";
+        }
+        else
+        {
+            errorString = string.Empty;
+            helpString = usesProjectile
+                ? "Build Weapon создаст WeaponDataSO, projectile prefab и visual prefab."
+                : "Build Weapon создаст WeaponDataSO и visual prefab. Projectile prefab для Hitscan/Beam не нужен.";
+        }
+
+        isValid = true;
+    }
 
     private void OnWizardCreate()
     {
         EquipmentUiSceneBuilder.BuildWeaponFromFactory(
             weaponName,
             requiredClass,
-            projectilePrefab,
-            icon,
+            fireMode,
+            weaponSprite,
+            projectileSprite,
             fireSound,
             damage,
-            fireRate,
+            cooldown,
+            maxRange,
+            firingAngle,
             projectileSpeed,
+            projectileLifetime,
+            projectileMaxDistance,
             capacitorPerShot);
     }
 }

@@ -28724,7 +28724,7 @@ MonoBehaviour:
   mainMenuSceneName: MainMenuScene
   availableShips:
   - {fileID: 11400000, guid: 0ee6c6b9a0b1c644d8595ee8f3c68c16, type: 2}
-  - {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
+  - {fileID: 11400000, guid: 52dd8629756d26e4f9781f98ff26100d, type: 2}
   currentTimeline: {fileID: 11400000, guid: f377acad0504b83458ca04b67eed1de1, type: 2}
   testNextEncounters:
   - {fileID: 11400000, guid: 6653bd4c3e84d254c9ce40c0246bc4bb, type: 2}
