@@ -41,6 +41,16 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private TargetingController targetingController;
     [Tooltip("Компонент визуализации команды движения: линия к точке и маркер цели. Не влияет на игровую механику движения.")]
     [SerializeField] private MoveCommandVisualController moveCommandVisualController;
+    [Tooltip("Компонент системы миникарты: камера, RenderTexture, привязка к панели и обновление позиции.")]
+    [SerializeField] private MinimapController minimapController;
+    [Header("Фон и параллакс")]
+    [Tooltip("Компонент фона и параллакса. Отвечает за слои звезд/туманности, runtime-fallback и обновление фона по позиции игрока.")]
+    [SerializeField] private BackgroundController backgroundController;
+    [Tooltip("Компонент, создающий корабль игрока, применяющий ShipDataSO, экипировку, слои и прием урона.")]
+    [SerializeField] private PlayerShipController playerShipController;
+    [Header("Боевой HUD")]
+    [Tooltip("Компонент отображения боевого HUD: статус игрока, цель, обзор врагов и панель экипировки.")]
+    [SerializeField] private CombatHudPresenter combatHudPresenter;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
@@ -59,19 +69,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] public WaveTimelineSO currentTimeline;
     [SerializeField, HideInInspector] private List<EncounterSO> testNextEncounters = new List<EncounterSO>();
 
-    [Header("Background Layers")]
-    [Tooltip("Inspector: background layers")]
+    [Header("Фон")]
+    [Tooltip("Legacy-настройки слоев фона. Используются только как резерв для BackgroundController, чтобы не потерять старые настройки сцены при переносе.")]
     [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
-
-    [Header("Minimap")]
-    [Tooltip("Inspector: enable minimap runtime UI")]
-    [SerializeField] private bool minimapEnabled = true;
-    [Tooltip("Inspector: minimap camera orthographic size")]
-    [SerializeField, Min(2f)] private float minimapOrthoSize = 20f;
-    [Tooltip("Inspector: minimap panel size in pixels")]
-    [SerializeField, Min(96f)] private float minimapPanelSize = 200f;
-    [Tooltip("Inspector: minimap background tint")]
-    [SerializeField] private Color minimapBackgroundColor = new Color(0.03f, 0.08f, 0.14f, 0.82f);
 
     [Header("Shield Visuals")]
     [Tooltip("РђРјРїР»РёС‚СѓРґР° РїСѓР»СЊСЃР°С†РёРё РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚Рё С‰РёС‚Р° (fallback, РµСЃР»Рё ShipShieldVisual РЅРµ РЅР°Р·РЅР°С‡РµРЅ).")]
@@ -121,17 +121,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Camera mainCamera;
     private PlayerShip player;
     private Transform worldRoot;
-    private Transform starRoot;
     private Transform enemyRoot;
     private Transform projectileRoot;
     private Transform gateTransform;
-    private Transform weaponSlotsRoot;
-    private GameObject playerVisualInstance;
-    private Camera minimapCamera;
-    private RenderTexture minimapRenderTexture;
-    private RawImage minimapRawImage;
-    private RectTransform minimapPanelRect;
-
     private Canvas hudCanvas;
     private TMP_Text gateHintText;
     private TMP_Text statusText;
@@ -242,8 +234,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool joystickDragging;
     private Vector2 joystickVector;
     private bool suppressPointerMovementUntilRelease;
-    private GameObject runtimeStarLayerPrefab;
-    private GameObject runtimeNebulaLayerPrefab;
     private int enemySpawnSequence;
 
     private enum ConfirmAction
@@ -256,7 +246,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private ConfirmAction pendingConfirmAction = ConfirmAction.None;
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
-    public ShipEquipmentState CurrentEquipmentState => equipmentState;
+    public ShipEquipmentState CurrentEquipmentState => playerShipController != null ? playerShipController.EquipmentState : equipmentState;
 
     private void OnValidate()
     {
@@ -499,9 +489,102 @@ public class SpaceCombatSceneController : MonoBehaviour
         moveCommandVisualController.Initialize(player, worldRoot, circleSprite);
     }
 
+    private void EnsureMinimapController()
+    {
+        if (minimapController == null)
+        {
+            minimapController = GetComponent<MinimapController>();
+        }
+
+        if (minimapController == null)
+        {
+            minimapController = FindAnyObjectByType<MinimapController>(FindObjectsInactive.Include);
+        }
+
+        if (minimapController == null)
+        {
+            minimapController = gameObject.AddComponent<MinimapController>();
+        }
+
+        minimapController.SetPlayer(player);
+    }
+
+    private void EnsureBackgroundController()
+    {
+        if (backgroundController == null)
+        {
+            backgroundController = GetComponent<BackgroundController>();
+        }
+
+        if (backgroundController == null)
+        {
+            backgroundController = FindAnyObjectByType<BackgroundController>(FindObjectsInactive.Include);
+        }
+
+        if (backgroundController == null)
+        {
+            backgroundController = gameObject.AddComponent<BackgroundController>();
+        }
+
+        backgroundController.Initialize(worldRoot, player, poolService, backgroundParallaxService, circleSprite, backgroundLayers);
+    }
+
+    private void EnsurePlayerShipController()
+    {
+        if (playerShipController == null)
+        {
+            playerShipController = GetComponent<PlayerShipController>();
+        }
+
+        if (playerShipController == null)
+        {
+            playerShipController = FindAnyObjectByType<PlayerShipController>(FindObjectsInactive.Include);
+        }
+
+        if (playerShipController == null)
+        {
+            playerShipController = gameObject.AddComponent<PlayerShipController>();
+        }
+
+        playerShipController.Initialize(equipmentState, shieldHitMaterial, ringSprite, _ => NotifyEquipmentStateChanged());
+        player = playerShipController.Player;
+    }
+
+    private void EnsureCombatHudPresenter()
+    {
+        if (combatHudPresenter == null)
+        {
+            combatHudPresenter = GetComponent<CombatHudPresenter>();
+        }
+
+        if (combatHudPresenter == null)
+        {
+            combatHudPresenter = FindAnyObjectByType<CombatHudPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (combatHudPresenter == null)
+        {
+            combatHudPresenter = gameObject.AddComponent<CombatHudPresenter>();
+        }
+
+        combatHudPresenter.Initialize(
+            this,
+            uiFactory,
+            uiFont,
+            squareSprite,
+            slotUiPrefab,
+            healthBar,
+            scoreText,
+            waveText,
+            equipmentUiController,
+            Localize);
+        equipmentUiController = combatHudPresenter.EquipmentUiController;
+        statusText = combatHudPresenter.StatusText;
+    }
+
     private float GetPlayerHullPercent()
     {
-        return player != null ? player.HullPercent : 0f;
+        return playerShipController != null ? playerShipController.GetHullPercent() : player != null ? player.HullPercent : 0f;
     }
 
     private WaveTimelineSO GetActiveTimeline()
@@ -526,15 +609,19 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreateSprites();
         CreateStarterShips();
         BuildWorld();
+        EnsurePlayerShipController();
         EnsureEnemySpawner();
         EnsureTargetingController();
         EnsureMoveCommandVisualController();
+        EnsureMinimapController();
         SpawnPlayer();
+        EnsureBackgroundController();
         EnsureCombatAudioController();
         EnsureCombatCameraController();
         EnsureTimelineSpawnController();
         EnsureTargetingController();
         EnsureMoveCommandVisualController();
+        EnsureMinimapController();
         SelectShip(GetInitialShipIndex());
         BuildHud();
         EnsureEncounterChoiceUi();
@@ -563,29 +650,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             equipmentUiController.Bind(null);
         }
 
-        backgroundParallaxService?.Dispose();
-
-        if (runtimeStarLayerPrefab != null)
-        {
-            Destroy(runtimeStarLayerPrefab);
-        }
-        if (runtimeNebulaLayerPrefab != null)
-        {
-            Destroy(runtimeNebulaLayerPrefab);
-        }
-        if (minimapRenderTexture != null)
-        {
-            if (minimapRawImage != null && minimapRawImage.texture == minimapRenderTexture)
-            {
-                minimapRawImage.texture = null;
-            }
-            minimapRenderTexture.Release();
-            Destroy(minimapRenderTexture);
-        }
-        if (minimapCamera != null)
-        {
-            Destroy(minimapCamera.gameObject);
-        }
+        backgroundController?.Cleanup();
+        minimapController?.Cleanup();
     }
 
     private void ValidateSerializedReferences()
@@ -722,7 +788,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         UpdateCombat(deltaTime);
         UpdateTimelineSpawner(deltaTime);
         TryCompleteEncounter();
-        UpdateBackgroundParallax();
+        backgroundController?.Tick();
         UpdateEffects(deltaTime);
         UpdateVisuals();
         UpdateHud();
@@ -896,82 +962,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             mainCamera = combatCameraController.CurrentCamera;
         }
 
-        UpdateMinimapCamera();
-    }
-
-    private void EnsureMinimap(Transform uiRoot)
-    {
-        if (!minimapEnabled || uiRoot == null)
-        {
-            if (minimapPanelRect != null)
-            {
-                minimapPanelRect.gameObject.SetActive(false);
-            }
-            return;
-        }
-
-        Transform minimapPanel = uiRoot.Find("MinimapPanel");
-        if (minimapPanel == null)
-        {
-            minimapPanelRect = null;
-            minimapRawImage = null;
-            return;
-        }
-
-        minimapPanelRect = minimapPanel.GetComponent<RectTransform>();
-        if (minimapPanelRect != null)
-        {
-            minimapPanelRect.gameObject.SetActive(true);
-        }
-        minimapRawImage = minimapPanel.GetComponentInChildren<RawImage>(true);
-
-        if (minimapCamera == null)
-        {
-            GameObject minimapCameraObject = new GameObject("MinimapCamera");
-            minimapCameraObject.transform.SetParent(transform, false);
-            minimapCamera = minimapCameraObject.AddComponent<Camera>();
-            minimapCamera.orthographic = true;
-            minimapCamera.orthographicSize = minimapOrthoSize;
-            minimapCamera.clearFlags = CameraClearFlags.SolidColor;
-            minimapCamera.backgroundColor = new Color(0.01f, 0.04f, 0.08f, 1f);
-            minimapCamera.cullingMask = ~0;
-            minimapCamera.nearClipPlane = 0.1f;
-            minimapCamera.farClipPlane = 200f;
-            minimapCamera.depth = -50f;
-        }
-
-        int rtSize = Mathf.RoundToInt(Mathf.Clamp(minimapPanelSize * 1.2f, 128f, 1024f));
-        if (minimapRenderTexture == null || minimapRenderTexture.width != rtSize || minimapRenderTexture.height != rtSize)
-        {
-            if (minimapRenderTexture != null)
-            {
-                minimapRenderTexture.Release();
-                Destroy(minimapRenderTexture);
-            }
-
-            minimapRenderTexture = new RenderTexture(rtSize, rtSize, 16, RenderTextureFormat.ARGB32);
-            minimapRenderTexture.name = "Minimap_RT";
-            minimapRenderTexture.Create();
-        }
-
-        minimapCamera.targetTexture = minimapRenderTexture;
-        if (minimapRawImage != null)
-        {
-            minimapRawImage.texture = minimapRenderTexture;
-        }
-    }
-
-    private void UpdateMinimapCamera()
-    {
-        if (!minimapEnabled || minimapCamera == null || player == null || player.Transform == null)
-        {
-            return;
-        }
-
-        minimapCamera.orthographicSize = minimapOrthoSize;
-        Vector3 playerPosition = player.Transform.position;
-        minimapCamera.transform.position = new Vector3(playerPosition.x, playerPosition.y, -40f);
-        minimapCamera.transform.rotation = Quaternion.identity;
+        minimapController?.Tick();
     }
 
     private string Localize(string key)
@@ -1208,18 +1199,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         enemyRoot.SetParent(worldRoot, false);
         projectileRoot = new GameObject("Projectiles").transform;
         projectileRoot.SetParent(worldRoot, false);
-        starRoot = new GameObject("Stars").transform;
-        starRoot.SetParent(worldRoot, false);
 
-        BuildStarfield();
         BuildGate();
-    }
-
-    private void BuildStarfield()
-    {
-        EnsureBackgroundLayers();
-        backgroundParallaxService.Dispose();
-        backgroundParallaxService.Initialize(starRoot, backgroundLayers, poolService);
     }
 
     private void BuildGate()
@@ -1245,26 +1226,14 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void SpawnPlayer()
     {
-        GameObject playerObject = new GameObject("PlayerShip");
-        playerObject.transform.SetParent(worldRoot, false);
-        TeamMember playerTeam = playerObject.GetComponent<TeamMember>();
-        if (playerTeam == null)
-        {
-            playerTeam = playerObject.AddComponent<TeamMember>();
-        }
-        playerTeam.SetFaction(CombatFaction.Player);
-
-        player = new PlayerShip
-        {
-            Transform = playerObject.transform,
-            TeamMember = playerTeam
-        };
+        EnsurePlayerShipController();
+        player = playerShipController.SpawnPlayer(worldRoot);
 
         if (combatAudioController != null)
         {
-            combatAudioController.SetPlayerTransform(player.Transform);
+            combatAudioController.SetPlayerTransform(player != null ? player.Transform : null);
         }
-        if (combatCameraController != null)
+        if (combatCameraController != null && player != null)
         {
             combatCameraController.SetTarget(player.Transform);
         }
@@ -1302,161 +1271,20 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ApplyShipDefinition(ShipDataSO ship, bool resetProgress)
     {
-        if (player == null || ship == null)
+        if (ship == null)
         {
             return;
         }
 
-        player.Speed = Mathf.Max(0.1f, ship.maxSpeed);
-        player.Acceleration = Mathf.Max(0.1f, ship.acceleration);
-        player.Drag = Mathf.Max(0f, ship.drag);
-        player.RotationResponsiveness = Mathf.Max(0.1f, ship.rotationSpeed);
-        player.SpeedMultiplier = 1f;
-        player.DamageMultiplier = Mathf.Max(0.1f, ship.damageMultiplier);
-        player.RepairMultiplier = Mathf.Max(0.1f, ship.repairMultiplier);
-        player.MaxShield = Mathf.Max(1f, ship.maxShield);
-        player.Shield = player.MaxShield;
-        player.MaxArmor = Mathf.Max(1f, ship.maxArmor);
-        player.Armor = player.MaxArmor;
-        player.MaxHull = Mathf.Max(1f, ship.maxHull);
-        player.Hull = player.MaxHull;
-        player.MaxCapacitor = Mathf.Max(1f, ship.capacitor);
-        player.Capacitor = player.MaxCapacitor;
-        player.CapacitorRechargeTime = Mathf.Max(1f, ship.capacitorRechargeTime);
-        player.CapacitorRechargeRate = Mathf.Max(0.1f, ship.capacitorRechargeRate);
-        player.Transform.position = Vector3.zero;
-        player.Transform.rotation = Quaternion.identity;
-        player.Velocity = Vector2.zero;
-        player.MoveCommandActive = false;
+        EnsurePlayerShipController();
+        if (playerShipController.Player == null)
+        {
+            playerShipController.SpawnPlayer(worldRoot);
+        }
 
-        ApplyShipVisualFromPrefab(ship);
-
-        ConfigureEquipment(ship);
+        playerShipController.ApplyShipDefinition(ship, resetProgress);
+        player = playerShipController.Player;
         CreateModules(ship.moduleSlotCount, ship);
-        ConfigurePlayerDamageReceiver();
-
-        if (resetProgress)
-        {
-            player.Level = 1;
-            player.Experience = 0;
-            player.ExperienceToNext = 100;
-        }
-    }
-
-    private void ConfigureEquipment(ShipDataSO ship)
-    {
-        if (player == null || player.Transform == null || ship == null)
-        {
-            return;
-        }
-
-        equipmentState.ShipData = ship;
-        equipmentState.ConfigureSlots(Mathf.Max(0, ship.weaponSlotCount), Mathf.Max(0, ship.moduleSlotCount));
-        RebuildWeaponSlots(ship.weaponSlotCount);
-
-        for (int i = 0; i < equipmentState.InstalledWeapons.Count; i++)
-        {
-            WeaponDataSO configuredWeapon = ship.startingWeapons != null && i < ship.startingWeapons.Count
-                ? ship.startingWeapons[i]
-                : null;
-            if (configuredWeapon != null && !CanShipUseWeapon(ship.shipClass, configuredWeapon))
-            {
-                Debug.LogWarning(
-                    "SpaceCombatSceneController: weapon '" + configuredWeapon.name + "' in ship '" + ship.displayName +
-                    "' slot " + (i + 1) + " is not compatible with class " + ship.shipClass + ".");
-                configuredWeapon = null;
-            }
-
-            equipmentState.InstalledWeapons[i] = configuredWeapon;
-            equipmentState.WeaponTimers[i] = 0f;
-            equipmentState.RuntimeWeapons[i] = configuredWeapon != null
-                ? new WeaponInstance(
-                    configuredWeapon,
-                    player.Transform,
-                    i < equipmentState.WeaponMuzzles.Count ? equipmentState.WeaponMuzzles[i] : player.Transform,
-                    CombatFaction.Player,
-                    player.Transform.gameObject)
-                : null;
-        }
-
-        RefreshWeaponVisuals(equipmentState.InstalledWeapons, equipmentState.WeaponMuzzles);
-
-        for (int i = 0; i < equipmentState.InstalledModules.Count; i++)
-        {
-            ModuleDataSO moduleData = ship.startingModules != null && i < ship.startingModules.Count
-                ? ship.startingModules[i]
-                : null;
-            equipmentState.InstalledModules[i] = moduleData;
-        }
-
-        NotifyEquipmentStateChanged();
-    }
-
-    private void ConfigurePlayerDamageReceiver()
-    {
-        if (player == null || player.Transform == null)
-        {
-            return;
-        }
-
-        ShipDamageReceiver receiver = player.Transform.GetComponent<ShipDamageReceiver>();
-        if (receiver == null)
-        {
-            receiver = player.Transform.gameObject.AddComponent<ShipDamageReceiver>();
-        }
-
-        receiver.Initialize(
-            CombatFaction.Player,
-            ReadPlayerDurability,
-            WritePlayerDurability);
-        receiver.DamageApplied += OnPlayerDamageApplied;
-
-        TeamMember teamMember = player.Transform.GetComponent<TeamMember>();
-        if (teamMember == null)
-        {
-            teamMember = player.Transform.gameObject.AddComponent<TeamMember>();
-        }
-        teamMember.SetFaction(CombatFaction.Player);
-        CombatLayerUtility.ApplyShipLayer(player.Transform.gameObject, CombatFaction.Player);
-
-        player.DamageReceiver = receiver;
-        player.TeamMember = teamMember;
-    }
-
-    private ShipDurabilityState ReadPlayerDurability()
-    {
-        return new ShipDurabilityState
-        {
-            MaxShield = player.MaxShield,
-            Shield = player.Shield,
-            MaxArmor = player.MaxArmor,
-            Armor = player.Armor,
-            MaxHull = player.MaxHull,
-            Hull = player.Hull
-        };
-    }
-
-    private void WritePlayerDurability(ShipDurabilityState state)
-    {
-        player.MaxShield = state.MaxShield;
-        player.Shield = state.Shield;
-        player.MaxArmor = state.MaxArmor;
-        player.Armor = state.Armor;
-        player.MaxHull = state.MaxHull;
-        player.Hull = state.Hull;
-    }
-
-    private void OnPlayerDamageApplied(DamageInfo info, DamageResolutionResult result)
-    {
-        if (result.AppliedShieldDamage <= 0f)
-        {
-            return;
-        }
-
-        if (player != null && player.ShieldVisual != null)
-        {
-            player.ShieldVisual.PlayImpact(info.HitPoint, result.AppliedShieldDamage);
-        }
     }
 
     private void OnEnemyDamageApplied(EnemyShip enemy, DamageInfo info, DamageResolutionResult result)
@@ -1472,213 +1300,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void ApplyShipVisualFromPrefab(ShipDataSO ship)
-    {
-        if (player == null || player.Transform == null)
-        {
-            return;
-        }
-
-        if (playerVisualInstance != null)
-        {
-            Destroy(playerVisualInstance);
-            playerVisualInstance = null;
-        }
-
-        player.BodyRenderer = null;
-        player.AuraRenderer = null;
-        player.ThrusterRenderer = null;
-        player.ShieldVisual = null;
-        player.ThrusterEffect = null;
-
-        if (ship == null || ship.shipPrefab == null)
-        {
-            Debug.LogError("SpaceCombatSceneController: Ship prefab is missing for ship '" + (ship != null ? ship.displayName : "null") + "'.");
-            return;
-        }
-
-        playerVisualInstance = Instantiate(ship.shipPrefab, player.Transform);
-        playerVisualInstance.name = "PlayerVisual";
-        playerVisualInstance.transform.localPosition = Vector3.zero;
-        playerVisualInstance.transform.localRotation = Quaternion.identity;
-        playerVisualInstance.transform.localScale = Vector3.one;
-
-        ResolvePlayerVisualRenderers(playerVisualInstance.transform, out SpriteRenderer body, out SpriteRenderer aura, out SpriteRenderer thruster);
-        player.BodyRenderer = body;
-        player.AuraRenderer = aura;
-        player.ThrusterRenderer = thruster;
-        player.ThrusterEffect = EnsureThrusterEffect(playerVisualInstance);
-
-        player.BaseBodyColor = body != null ? body.color : ship.accentColor;
-        player.BaseAuraColor = aura != null && aura.color.a > 0.001f ? aura.color : ship.auraColor;
-        player.ShieldVisual = EnsureShieldVisual(playerVisualInstance, player.AuraRenderer, player.BaseAuraColor, 0f);
-    }
-
-    private static ShipThrusterEffect EnsureThrusterEffect(GameObject shipObject)
-    {
-        if (shipObject == null)
-        {
-            return null;
-        }
-
-        ShipThrusterEffect effect = shipObject.GetComponent<ShipThrusterEffect>();
-        if (effect == null)
-        {
-            effect = shipObject.AddComponent<ShipThrusterEffect>();
-        }
-
-        return effect;
-    }
-
-    private static void ResolvePlayerVisualRenderers(Transform visualRoot, out SpriteRenderer body, out SpriteRenderer aura, out SpriteRenderer thruster)
-    {
-        body = null;
-        aura = null;
-        thruster = null;
-        SpriteRenderer shieldCandidate = null;
-        SpriteRenderer auraCandidate = null;
-
-        if (visualRoot == null)
-        {
-            return;
-        }
-
-        SpriteRenderer[] renderers = visualRoot.GetComponentsInChildren<SpriteRenderer>(true);
-        for (int i = 0; i < renderers.Length; i++)
-        {
-            string lowerName = renderers[i].name.ToLowerInvariant();
-            if (body == null && (lowerName.Contains("body") || lowerName.Contains("hull")))
-            {
-                body = renderers[i];
-            }
-            else if (shieldCandidate == null && lowerName.Contains("shield"))
-            {
-                shieldCandidate = renderers[i];
-            }
-            else if (auraCandidate == null && lowerName.Contains("aura"))
-            {
-                auraCandidate = renderers[i];
-            }
-            else if (thruster == null && (lowerName.Contains("thruster") || lowerName.Contains("engine")))
-            {
-                thruster = renderers[i];
-            }
-        }
-
-        aura = shieldCandidate != null ? shieldCandidate : auraCandidate;
-
-        if (body == null && renderers.Length > 0)
-        {
-            body = renderers[0];
-        }
-    }
-
-    private void RebuildWeaponSlots(int weaponSlotCount)
-    {
-        int slotCount = Mathf.Max(0, weaponSlotCount);
-        Transform prefabSlotsRoot = playerVisualInstance != null ? FindDirectChild(playerVisualInstance.transform, "WeaponSlots") : null;
-
-        if (prefabSlotsRoot != null)
-        {
-            weaponSlotsRoot = prefabSlotsRoot;
-            for (int i = 0; i < slotCount; i++)
-            {
-                Transform prefabSlot = FindWeaponMuzzle(prefabSlotsRoot, i);
-                if (i < equipmentState.WeaponMuzzles.Count)
-                {
-                    equipmentState.WeaponMuzzles[i] = prefabSlot != null ? prefabSlot : player.Transform;
-                }
-            }
-
-            return;
-        }
-
-        if (weaponSlotsRoot == null || weaponSlotsRoot == prefabSlotsRoot)
-        {
-            weaponSlotsRoot = new GameObject("WeaponSlots").transform;
-            weaponSlotsRoot.SetParent(player.Transform, false);
-        }
-
-        for (int i = 0; i < slotCount; i++)
-        {
-            Transform slotTransform = FindDirectChild(weaponSlotsRoot, "WeaponSlot_" + (i + 1));
-            if (slotTransform == null)
-            {
-                GameObject slotObject = new GameObject("WeaponSlot_" + (i + 1));
-                slotObject.transform.SetParent(weaponSlotsRoot, false);
-                slotTransform = slotObject.transform;
-            }
-
-            float lerp = slotCount <= 1 ? 0.5f : i / (float)(slotCount - 1);
-            float x = Mathf.Lerp(-0.38f, 0.38f, lerp);
-            float y = Mathf.Lerp(0.58f, 0.66f, 1f - Mathf.Abs(lerp - 0.5f) * 2f);
-            slotTransform.localPosition = new Vector3(x, y, 0f);
-            slotTransform.localRotation = Quaternion.identity;
-            Transform muzzleTransform = EnsureWeaponMount(slotTransform, i);
-
-            if (i < equipmentState.WeaponMuzzles.Count)
-            {
-                equipmentState.WeaponMuzzles[i] = muzzleTransform != null ? muzzleTransform : slotTransform;
-            }
-        }
-    }
-
-    private static Transform EnsureWeaponMount(Transform slotTransform, int index)
-    {
-        if (slotTransform == null)
-        {
-            return null;
-        }
-
-        string mountName = "WeaponMount_" + (index + 1);
-        Transform mountTransform = FindDirectChild(slotTransform, mountName);
-        if (mountTransform == null)
-        {
-            GameObject mountObject = new GameObject(mountName);
-            mountObject.transform.SetParent(slotTransform, false);
-            mountTransform = mountObject.transform;
-        }
-
-        Transform muzzleTransform = FindDirectChild(mountTransform, "Muzzle");
-        if (muzzleTransform == null)
-        {
-            GameObject muzzleObject = new GameObject("Muzzle");
-            muzzleObject.transform.SetParent(mountTransform, false);
-            muzzleTransform = muzzleObject.transform;
-        }
-
-        muzzleTransform.localPosition = Vector3.zero;
-        muzzleTransform.localRotation = Quaternion.identity;
-        return muzzleTransform;
-    }
-
-    private static bool CanShipUseWeapon(ShipClass shipClass, WeaponDataSO weaponData)
-    {
-        if (weaponData == null)
-        {
-            return false;
-        }
-
-        return GetShipClassRank(shipClass) >= GetShipClassRank(weaponData.requiredClass);
-    }
-
-    private static int GetShipClassRank(ShipClass shipClass)
-    {
-        switch (shipClass)
-        {
-            case ShipClass.Light: return 0;
-            case ShipClass.Medium: return 1;
-            case ShipClass.Heavy: return 2;
-            default: return 0;
-        }
-    }
-
     private void NotifyEquipmentStateChanged()
     {
-        EquipmentStateChanged?.Invoke(equipmentState);
+        ShipEquipmentState state = CurrentEquipmentState;
+        EquipmentStateChanged?.Invoke(state);
         if (equipmentUiController != null)
         {
-            equipmentUiController.Refresh(equipmentState);
+            equipmentUiController.Refresh(state);
         }
     }
 
@@ -1752,15 +1380,8 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void PreparePlayerForNextEncounter()
     {
-        if (player == null || player.Transform == null)
-        {
-            return;
-        }
-
-        player.Transform.position = Vector3.zero;
-        player.Transform.rotation = Quaternion.identity;
-        player.Velocity = Vector2.zero;
-        player.MoveCommandActive = false;
+        playerShipController?.PrepareForNextEncounter();
+        player = playerShipController != null ? playerShipController.Player : player;
     }
 
     private void ResumeRun()
@@ -1819,13 +1440,8 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void RestorePlayerHull(float percent)
     {
-        if (player == null)
-        {
-            return;
-        }
-
-        float amount = Mathf.Max(0f, percent) * player.MaxHull * Mathf.Max(0.1f, player.RepairMultiplier);
-        player.Hull = Mathf.Min(player.MaxHull, player.Hull + amount);
+        playerShipController?.RestoreHull(percent);
+        player = playerShipController != null ? playerShipController.Player : player;
     }
 
     private void TryCompleteEncounter()
@@ -1903,7 +1519,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (equipmentUiController != null)
         {
-            equipmentUiController.Refresh(equipmentState);
+            equipmentUiController.Refresh(CurrentEquipmentState);
         }
     }
 
@@ -2445,8 +2061,21 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (HasAuthoredInspectorHud(uiRoot))
         {
-            BindAuthoredInspectorHud(uiRoot);
-            EnsureMinimap(uiRoot);
+            EnsureCombatHudPresenter();
+            combatHudPresenter.BindOrBuild(uiRoot);
+            equipmentUiController = combatHudPresenter.EquipmentUiController;
+            statusText = combatHudPresenter.StatusText;
+            BindCombatLogPanel(uiRoot);
+            BindGateHint(uiRoot);
+            BindModulePanel(uiRoot);
+            pauseHudButtonView = BindMenuButton(uiRoot.Find("PauseButton"), "PauseButton");
+            BindPerkPanel(uiRoot);
+            BindGameOverPanel(uiRoot);
+            BindPauseMenu(uiRoot);
+            BindStartMenu(uiRoot);
+            BindVirtualJoystick(uiRoot);
+            EnsureMinimapController();
+            minimapController?.Initialize(player, uiRoot);
             return;
         }
 
@@ -2457,14 +2086,12 @@ public class SpaceCombatSceneController : MonoBehaviour
         rootRect.offsetMin = Vector2.zero;
         rootRect.offsetMax = Vector2.zero;
 
-        CreateRightOverviewPanel(uiRoot);
+        EnsureCombatHudPresenter();
+        combatHudPresenter.BindOrBuild(uiRoot);
+        equipmentUiController = combatHudPresenter.EquipmentUiController;
+        statusText = combatHudPresenter.StatusText;
         CreateCombatLogPanel(uiRoot);
         CreateGateHint(uiRoot);
-        CreatePlayerStatusHud(uiRoot);
-        if (uiRoot.Find("EquipmentPanel") == null)
-        {
-            CreateEquipmentHud(uiRoot);
-        }
         CreateModuleHud(uiRoot);
         CreatePauseHudButton(uiRoot);
         CreateStatusLabel(uiRoot);
@@ -2478,7 +2105,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             CreateVirtualJoystick(uiRoot);
         }
 
-        EnsureMinimap(uiRoot);
+        EnsureMinimapController();
+        minimapController?.Initialize(player, uiRoot);
     }
 
     private Transform ResolveInspectorUiRoot()
@@ -4352,25 +3980,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private bool TrySelectEnemyFromOverview(Vector2 screenPosition)
     {
-        for (int i = 0; i < enemyRows.Count; i++)
-        {
-            EnemyRow row = enemyRows[i];
-            if (!row.RootTransform.gameObject.activeSelf || row.RootText == null)
-            {
-                continue;
-            }
-
-            if (RectTransformUtility.RectangleContainsScreenPoint(row.RootTransform, screenPosition, null))
-            {
-                EnemyShip enemy = row.Enemy;
-                if (enemy != null && enemy.IsAlive() && targetingController != null && targetingController.TrySelectFromOverview(enemy))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return combatHudPresenter != null && combatHudPresenter.TrySelectEnemyFromOverview(screenPosition, targetingController);
     }
 
     private bool TrySelectEnemyFromWorld(Vector2 screenPosition)
@@ -4381,7 +3991,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private bool IsGameplayHudBlocked(Vector2 screenPosition)
     {
-        if (overviewPanelRect != null && RectTransformUtility.RectangleContainsScreenPoint(overviewPanelRect, screenPosition, null))
+        if (combatHudPresenter != null && combatHudPresenter.IsOverviewBlocked(screenPosition))
         {
             return true;
         }
@@ -4475,78 +4085,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         Vector3 world = camera.ScreenToWorldPoint(screenPosition);
         world.z = 0f;
         return world;
-    }
-
-    private void UpdateBackgroundParallax()
-    {
-        if (player != null && player.Transform != null && backgroundParallaxService != null)
-        {
-            backgroundParallaxService.Update(player.Transform.position);
-        }
-    }
-
-    private void EnsureBackgroundLayers()
-    {
-        if (backgroundLayers == null)
-        {
-            backgroundLayers = new List<BackgroundLayerConfig>();
-        }
-
-        if (backgroundLayers.Count > 0)
-        {
-            return;
-        }
-
-        backgroundLayers.Add(new BackgroundLayerConfig
-        {
-            prefab = GetRuntimeNebulaLayerPrefab(),
-            parallaxFactor = 0.08f,
-            tileSize = 48f,
-            gridRadius = 2
-        });
-        backgroundLayers.Add(new BackgroundLayerConfig
-        {
-            prefab = GetRuntimeStarLayerPrefab(),
-            parallaxFactor = 0.18f,
-            tileSize = 36f,
-            gridRadius = 2
-        });
-    }
-
-    private GameObject GetRuntimeStarLayerPrefab()
-    {
-        if (runtimeStarLayerPrefab != null)
-        {
-            return runtimeStarLayerPrefab;
-        }
-
-        runtimeStarLayerPrefab = new GameObject("RuntimeStarLayerPrefab");
-        runtimeStarLayerPrefab.SetActive(false);
-        runtimeStarLayerPrefab.hideFlags = HideFlags.DontSave;
-        SpriteRenderer renderer = runtimeStarLayerPrefab.AddComponent<SpriteRenderer>();
-        renderer.sprite = circleSprite;
-        renderer.color = new Color(0.7f, 0.85f, 1f, 0.85f);
-        renderer.sortingOrder = -20;
-        runtimeStarLayerPrefab.transform.localScale = new Vector3(0.08f, 0.08f, 1f);
-        return runtimeStarLayerPrefab;
-    }
-
-    private GameObject GetRuntimeNebulaLayerPrefab()
-    {
-        if (runtimeNebulaLayerPrefab != null)
-        {
-            return runtimeNebulaLayerPrefab;
-        }
-
-        runtimeNebulaLayerPrefab = new GameObject("RuntimeNebulaLayerPrefab");
-        runtimeNebulaLayerPrefab.SetActive(false);
-        runtimeNebulaLayerPrefab.hideFlags = HideFlags.DontSave;
-        SpriteRenderer renderer = runtimeNebulaLayerPrefab.AddComponent<SpriteRenderer>();
-        renderer.sprite = circleSprite;
-        renderer.color = new Color(0.1f, 0.24f, 0.35f, 0.16f);
-        renderer.sortingOrder = -30;
-        runtimeNebulaLayerPrefab.transform.localScale = new Vector3(5.5f, 3.8f, 1f);
-        return runtimeNebulaLayerPrefab;
     }
 
     private static SpriteRenderer FindChildSpriteRenderer(Transform root, string childName)
@@ -4645,7 +4183,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             Player = player,
             Enemies = enemies,
             Modules = modules,
-            EquipmentState = equipmentState,
+            EquipmentState = CurrentEquipmentState,
             TargetEnemy = targetingController != null ? targetingController.TargetEnemy : null,
             HasPlayerTarget = hasPlayerTarget,
             PlayerTargetPosition = targetPoint,
@@ -4932,94 +4470,39 @@ public class SpaceCombatSceneController : MonoBehaviour
             pauseHudButtonView.Rect.gameObject.SetActive(gameStarted && !gameOver && !gamePaused && !levelUpPending);
         }
 
-        capacitorText.text = Localize("capacitor") + Mathf.RoundToInt(player.CapacitorPercent * 100f) + "%";
-        if (capacitorValueText != null)
-        {
-            capacitorValueText.text = FormatBarValue(player.Capacitor, player.MaxCapacitor);
-        }
-        string targetDisplayName = Localize("target_none_name");
-        EnemyShip hudTargetEnemy = targetingController != null ? targetingController.TargetEnemy : null;
-        EnemyBaseLair hudTargetBase = targetingController != null ? targetingController.TargetBase : null;
-        if (hudTargetEnemy != null && hudTargetEnemy.IsAlive())
-        {
-            targetDisplayName = hudTargetEnemy.Id + " (" + hudTargetEnemy.Type + ")";
-        }
-        else if (hudTargetBase != null && hudTargetBase.IsAlive)
-        {
-            targetDisplayName = hudTargetBase.name;
-        }
-        targetDisplayText.text = Localize("target_label") + targetDisplayName;
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
             ? availableShips[selectedShipIndex].displayName
             : "-";
-        shipText.text = Localize("ship_label") + shipName;
-        levelText.text = Localize("level_label") + player.Level;
-        experienceText.text = Localize("xp_label") + player.Experience + " / " + player.ExperienceToNext;
-
-        bool hasEnemyTarget = hudTargetEnemy != null && hudTargetEnemy.IsAlive();
-        bool hasBaseTarget = hudTargetBase != null && hudTargetBase.IsAlive;
-        targetPanel.gameObject.SetActive(hasEnemyTarget || hasBaseTarget);
-        if (hasEnemyTarget)
+        combatHudPresenter?.Tick(new CombatHudContext
         {
-            targetNameText.text = hudTargetEnemy.Id + "  " + hudTargetEnemy.Type;
-            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, hudTargetEnemy.Transform.position).ToString("0.0") + " km";
-            SetFillWidth(targetShieldFill.rectTransform, hudTargetEnemy.ShieldPercent, 252f);
-            SetFillWidth(targetArmorFill.rectTransform, hudTargetEnemy.ArmorPercent, 252f);
-            SetFillWidth(targetHullFill.rectTransform, hudTargetEnemy.HullPercent, 252f);
-            if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(hudTargetEnemy.Shield, hudTargetEnemy.MaxShield);
-            if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(hudTargetEnemy.Armor, hudTargetEnemy.MaxArmor);
-            if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(hudTargetEnemy.Hull, hudTargetEnemy.MaxHull);
-        }
-        else if (hasBaseTarget)
+            Player = player,
+            Enemies = enemies,
+            Modules = modules,
+            EquipmentState = CurrentEquipmentState,
+            TargetingController = targetingController,
+            CurrentWave = wave,
+            GameStarted = gameStarted,
+            GameOver = gameOver,
+            LevelUpPending = levelUpPending,
+            UseVirtualJoystick = useVirtualJoystick,
+            ShipName = shipName
+        });
+
+        if (statusText != null && (combatHudPresenter == null || combatHudPresenter.StatusText == null))
         {
-            ShipDurabilityState state = hudTargetBase.CurrentDurability;
-            targetNameText.text = hudTargetBase.name + "  BASE";
-            targetDistanceText.text = Localize("distance") + Vector3.Distance(player.Transform.position, hudTargetBase.transform.position).ToString("0.0") + " km";
-
-            float shieldPercent = state.MaxShield <= 0f ? 0f : state.Shield / Mathf.Max(0.01f, state.MaxShield);
-            float armorPercent = state.MaxArmor <= 0f ? 0f : state.Armor / Mathf.Max(0.01f, state.MaxArmor);
-            float hullPercent = state.MaxHull <= 0f ? 0f : state.Hull / Mathf.Max(0.01f, state.MaxHull);
-
-            SetFillWidth(targetShieldFill.rectTransform, shieldPercent, 252f);
-            SetFillWidth(targetArmorFill.rectTransform, armorPercent, 252f);
-            SetFillWidth(targetHullFill.rectTransform, hullPercent, 252f);
-            if (targetShieldValueText != null) targetShieldValueText.text = FormatBarValue(state.Shield, state.MaxShield);
-            if (targetArmorValueText != null) targetArmorValueText.text = FormatBarValue(state.Armor, state.MaxArmor);
-            if (targetHullValueText != null) targetHullValueText.text = FormatBarValue(state.Hull, state.MaxHull);
+            statusText.text = !gameStarted
+                ? Localize("status_menu")
+                : gameOver
+                    ? Localize("status_gameover")
+                    : levelUpPending
+                        ? Localize("status_levelup")
+                        : useVirtualJoystick ? Localize("status_play_mobile") : Localize("status_play_desktop");
         }
 
-        SetFillWidth(playerShieldFill.rectTransform, player.ShieldPercent, 180f);
-        SetFillWidth(playerArmorFill.rectTransform, player.ArmorPercent, 180f);
-        SetFillWidth(playerHullFill.rectTransform, player.HullPercent, 180f);
-        float experiencePercent = player.ExperienceToNext <= 0 ? 0f : player.Experience / (float)player.ExperienceToNext;
-        SetFillWidth(playerExperienceFill.rectTransform, experiencePercent, 180f);
-        if (playerShieldValueText != null) playerShieldValueText.text = FormatBarValue(player.Shield, player.MaxShield);
-        if (playerArmorValueText != null) playerArmorValueText.text = FormatBarValue(player.Armor, player.MaxArmor);
-        if (playerHullValueText != null) playerHullValueText.text = FormatBarValue(player.Hull, player.MaxHull);
-        if (playerExperienceValueText != null) playerExperienceValueText.text = player.Experience + " / " + player.ExperienceToNext;
-        if (playerLevelBadgeText != null) playerLevelBadgeText.text = "LVL " + player.Level;
-        SetFillHeight(capacitorFill.rectTransform, player.CapacitorPercent, 60f);
-
-        UpdateEnemyRows();
-        statusText.text = !gameStarted
-            ? Localize("status_menu")
-            : gameOver
-                ? Localize("status_gameover")
-                : levelUpPending
-                    ? Localize("status_levelup")
-                    : useVirtualJoystick ? Localize("status_play_mobile") : Localize("status_play_desktop");
-
-        if (!gameStarted)
+        if (!gameStarted && gateHintText != null && gateHintText.transform.parent != null)
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
         }
-
-        if (equipmentUiController != null)
-        {
-            equipmentUiController.RefreshCooldowns(equipmentState);
-        }
-
-        UpdateUI();
     }
 
     private void UpdateUI()
@@ -5083,14 +4566,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateModuleVisual(ModuleState module)
     {
-        if (module.SlotImage == null)
-        {
-            return;
-        }
-
-        module.SlotImage.color = module.Active
-            ? new Color(0.12f, 0.31f, 0.42f, 0.98f)
-            : new Color(0.05f, 0.1f, 0.14f, 0.92f);
+        combatHudPresenter?.UpdateModuleVisual(module);
     }
 
     private void LogMessage(string message, string kind = "info")
