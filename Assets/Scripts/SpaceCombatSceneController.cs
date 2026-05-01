@@ -51,6 +51,12 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Header("Боевой HUD")]
     [Tooltip("Компонент отображения боевого HUD: статус игрока, цель, обзор врагов и панель экипировки.")]
     [SerializeField] private CombatHudPresenter combatHudPresenter;
+    [Tooltip("Presenter меню паузы: HUD-кнопка, панель паузы и обработка UI-нажатий.")]
+    [SerializeField] private PauseMenuPresenter pauseMenuPresenter;
+    [Tooltip("Presenter диалога подтверждения: показ вопроса и обработка кнопок Да/Нет.")]
+    [SerializeField] private ConfirmationDialogPresenter confirmationDialogPresenter;
+    [Tooltip("Presenter экрана поражения: показ панели Game Over и обработка кнопок повтора, меню и выхода.")]
+    [SerializeField] private GameOverPresenter gameOverPresenter;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
@@ -145,8 +151,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private TMP_Text settingsFpsLabelText;
     private TMP_Text joystickHintText;
     private GameObject perkPanelObject;
-    private GameObject gameOverPanelObject;
-    private GameObject pauseMenuObject;
     private GameObject startMenuObject;
     private GameObject mainMenuPanelObject;
     private GameObject hangarPanelObject;
@@ -165,19 +169,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private UiButtonView languageRuButtonView;
     private UiButtonView languageEngButtonView;
     private UiButtonView[] fpsButtonViews = new UiButtonView[4];
-    private UiButtonView retryButtonView;
-    private UiButtonView gameOverMenuButtonView;
-    private UiButtonView gameOverExitButtonView;
-    private UiButtonView pauseHudButtonView;
-    private UiButtonView pauseResumeButtonView;
-    private UiButtonView pauseSettingsButtonView;
-    private UiButtonView pauseMenuButtonView;
-    private UiButtonView pauseExitButtonView;
-    private UiButtonView confirmYesButtonView;
-    private UiButtonView confirmNoButtonView;
-    private GameObject confirmationPanelObject;
-    private TMP_Text confirmationTitleText;
-    private TMP_Text confirmationBodyText;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
     private Image joystickBaseImage;
@@ -552,6 +543,73 @@ public class SpaceCombatSceneController : MonoBehaviour
         statusText = combatHudPresenter.StatusText;
     }
 
+    private void EnsurePauseMenuPresenter()
+    {
+        if (pauseMenuPresenter == null)
+        {
+            pauseMenuPresenter = GetComponent<PauseMenuPresenter>();
+        }
+
+        if (pauseMenuPresenter == null)
+        {
+            pauseMenuPresenter = FindAnyObjectByType<PauseMenuPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (pauseMenuPresenter == null)
+        {
+            pauseMenuPresenter = gameObject.AddComponent<PauseMenuPresenter>();
+        }
+
+        pauseMenuPresenter.Initialize(Localize);
+        pauseMenuPresenter.OnResume = ResumeRun;
+        pauseMenuPresenter.OnOpenSettings = OpenPauseSettings;
+        pauseMenuPresenter.OnReturnToMenuRequested = () => RequestConfirmation(ConfirmAction.ReturnToMainMenu, Localize("confirm_to_menu"));
+        pauseMenuPresenter.OnExitRequested = () => RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
+    }
+
+    private void EnsureConfirmationDialogPresenter()
+    {
+        if (confirmationDialogPresenter == null)
+        {
+            confirmationDialogPresenter = GetComponent<ConfirmationDialogPresenter>();
+        }
+
+        if (confirmationDialogPresenter == null)
+        {
+            confirmationDialogPresenter = FindAnyObjectByType<ConfirmationDialogPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (confirmationDialogPresenter == null)
+        {
+            confirmationDialogPresenter = gameObject.AddComponent<ConfirmationDialogPresenter>();
+        }
+
+        confirmationDialogPresenter.Initialize(Localize);
+    }
+
+    private void EnsureGameOverPresenter()
+    {
+        if (gameOverPresenter == null)
+        {
+            gameOverPresenter = GetComponent<GameOverPresenter>();
+        }
+
+        if (gameOverPresenter == null)
+        {
+            gameOverPresenter = FindAnyObjectByType<GameOverPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (gameOverPresenter == null)
+        {
+            gameOverPresenter = gameObject.AddComponent<GameOverPresenter>();
+        }
+
+        gameOverPresenter.Initialize(Localize);
+        gameOverPresenter.OnRetry = () => StartRun();
+        gameOverPresenter.OnReturnToMenuRequested = () => RequestConfirmation(ConfirmAction.ReturnToMainMenu, Localize("confirm_to_menu"));
+        gameOverPresenter.OnExitRequested = () => RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
+    }
+
     private float GetPlayerHullPercent()
     {
         return playerShipController != null ? playerShipController.GetHullPercent() : player != null ? player.HullPercent : 0f;
@@ -572,6 +630,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsureCombatCameraController();
         EnsureEncounterChoicePresenter();
         EnsureNonCombatEncounterPresenter();
+        EnsurePauseMenuPresenter();
+        EnsureConfirmationDialogPresenter();
+        EnsureGameOverPresenter();
         EnsureEncounterFlowController();
         EnsureTimelineSpawnController();
         ValidateSerializedReferences();
@@ -1302,10 +1363,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         gamePaused = false;
         pauseSettingsOpened = false;
         pendingConfirmAction = ConfirmAction.None;
-        if (confirmationPanelObject != null)
-        {
-            confirmationPanelObject.SetActive(false);
-        }
+        confirmationDialogPresenter?.Hide();
         levelUpPending = false;
         wave = 1;
         enemySpawnSequence = 0;
@@ -2036,10 +2094,13 @@ public class SpaceCombatSceneController : MonoBehaviour
             BindCombatLogPanel(uiRoot);
             BindGateHint(uiRoot);
             BindModulePanel(uiRoot);
-            pauseHudButtonView = BindMenuButton(uiRoot.Find("PauseButton"), "PauseButton");
+            EnsurePauseMenuPresenter();
+            pauseMenuPresenter.Bind(uiRoot);
             BindPerkPanel(uiRoot);
-            BindGameOverPanel(uiRoot);
-            BindPauseMenu(uiRoot);
+            EnsureGameOverPresenter();
+            gameOverPresenter.Bind(uiRoot);
+            EnsureConfirmationDialogPresenter();
+            confirmationDialogPresenter.Bind(uiRoot);
             BindStartMenu(uiRoot);
             BindVirtualJoystick(uiRoot);
             EnsureMinimapController();
@@ -2061,12 +2122,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreateCombatLogPanel(uiRoot);
         CreateGateHint(uiRoot);
         CreateModuleHud(uiRoot);
-        CreatePauseHudButton(uiRoot);
+        EnsurePauseMenuPresenter();
+        pauseMenuPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
         CreateStatusLabel(uiRoot);
         CreatePerkPanel(uiRoot);
-        CreateGameOverPanel(uiRoot);
-        CreatePauseMenu(uiRoot);
-        CreateConfirmationPanel(uiRoot);
+        EnsureGameOverPresenter();
+        gameOverPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
+        EnsureConfirmationDialogPresenter();
+        confirmationDialogPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
         CreateStartMenu(uiRoot);
         if (useVirtualJoystick)
         {
@@ -2175,35 +2238,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (perkPanelObject != null)
         {
             perkPanelObject.SetActive(false);
-        }
-    }
-
-    private void BindGameOverPanel(Transform uiRoot)
-    {
-        Transform root = uiRoot.Find("GameOverPanel");
-        gameOverPanelObject = root != null ? root.gameObject : null;
-        Transform content = root != null ? root.Find("Content") : null;
-        retryButtonView = BindMenuButton(content != null ? content.Find("gameover_retry") : null, "gameover_retry");
-        gameOverMenuButtonView = BindMenuButton(content != null ? content.Find("gameover_menu") : null, "gameover_menu");
-        gameOverExitButtonView = BindMenuButton(content != null ? content.Find("gameover_exit") : null, "gameover_exit");
-        if (gameOverPanelObject != null)
-        {
-            gameOverPanelObject.SetActive(false);
-        }
-    }
-
-    private void BindPauseMenu(Transform uiRoot)
-    {
-        Transform root = uiRoot.Find("PauseMenu");
-        pauseMenuObject = root != null ? root.gameObject : null;
-        Transform panel = root != null ? root.Find("Panel") : null;
-        pauseResumeButtonView = BindMenuButton(panel != null ? panel.Find("pause_resume") : null, "pause_resume");
-        pauseSettingsButtonView = BindMenuButton(panel != null ? panel.Find("pause_settings") : null, "pause_settings");
-        pauseMenuButtonView = BindMenuButton(panel != null ? panel.Find("pause_menu") : null, "pause_menu");
-        pauseExitButtonView = BindMenuButton(panel != null ? panel.Find("pause_exit") : null, "pause_exit");
-        if (pauseMenuObject != null)
-        {
-            pauseMenuObject.SetActive(false);
         }
     }
 
@@ -2471,13 +2505,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         BindModuleSlots();
     }
 
-    private void CreatePauseHudButton(Transform parent)
-    {
-        pauseHudButtonView = CreateMenuButton(parent, "PauseButton", new Vector2(0f, 1f), new Vector2(46f, -34f), new Vector2(76f, 38f));
-        pauseHudButtonView.Label.text = "MENU";
-        pauseHudButtonView.Label.fontSize = 14f;
-    }
-
     private void CreateVirtualJoystick(Transform parent)
     {
         joystickRootObject = new GameObject("VirtualJoystick", typeof(RectTransform));
@@ -2576,104 +2603,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         perkPanelObject.SetActive(false);
-    }
-
-    private void CreateGameOverPanel(Transform parent)
-    {
-        gameOverPanelObject = new GameObject("GameOverPanel", typeof(RectTransform));
-        gameOverPanelObject.transform.SetParent(parent, false);
-        RectTransform rootRect = gameOverPanelObject.GetComponent<RectTransform>();
-        rootRect.anchorMin = Vector2.zero;
-        rootRect.anchorMax = Vector2.one;
-        rootRect.offsetMin = Vector2.zero;
-        rootRect.offsetMax = Vector2.zero;
-
-        Image dim = CreateImage("Dimmer", gameOverPanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
-        RectTransform dimRect = dim.rectTransform;
-        dimRect.anchorMin = Vector2.zero;
-        dimRect.anchorMax = Vector2.one;
-        dimRect.offsetMin = Vector2.zero;
-        dimRect.offsetMax = Vector2.zero;
-
-        Image panel = CreateImage("Content", gameOverPanelObject.transform, new Color(0.06f, 0.1f, 0.14f, 0.98f));
-        RectTransform panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(420f, 300f);
-        AddOutline(panel.gameObject, new Color(0.55f, 0.18f, 0.18f, 1f));
-
-        TMP_Text title = CreateText("Title", panel.transform, Localize("status_gameover"), 28, FontStyle.Bold, new Color(1f, 0.42f, 0.36f));
-        title.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -24f), new Vector2(-20f, -64f));
-
-        retryButtonView = CreateMenuButton(panel.transform, "gameover_retry", new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(260f, 52f));
-        gameOverMenuButtonView = CreateMenuButton(panel.transform, "gameover_menu", new Vector2(0.5f, 0.5f), new Vector2(0f, -24f), new Vector2(260f, 52f));
-        gameOverExitButtonView = CreateMenuButton(panel.transform, "gameover_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -88f), new Vector2(260f, 52f));
-
-        gameOverPanelObject.SetActive(false);
-    }
-
-    private void CreatePauseMenu(Transform parent)
-    {
-        pauseMenuObject = new GameObject("PauseMenu", typeof(RectTransform));
-        pauseMenuObject.transform.SetParent(parent, false);
-        RectTransform rootRect = pauseMenuObject.GetComponent<RectTransform>();
-        StretchToParent(rootRect);
-
-        Image dim = CreateImage("Dimmer", pauseMenuObject.transform, new Color(0f, 0f, 0f, 0.42f));
-        RectTransform dimRect = dim.rectTransform;
-        StretchToParent(dimRect);
-
-        Image panel = CreateImage("Panel", pauseMenuObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.97f));
-        RectTransform panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(360f, 340f);
-        AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
-
-        TMP_Text title = CreateText("Title", panel.transform, "PAUSE", 28, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        title.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(18f, -22f), new Vector2(-18f, -62f));
-
-        pauseResumeButtonView = CreateMenuButton(panel.transform, "pause_resume", new Vector2(0.5f, 0.5f), new Vector2(0f, 38f), new Vector2(260f, 52f));
-        pauseSettingsButtonView = CreateMenuButton(panel.transform, "pause_settings", new Vector2(0.5f, 0.5f), new Vector2(0f, -24f), new Vector2(260f, 52f));
-        pauseMenuButtonView = CreateMenuButton(panel.transform, "pause_menu", new Vector2(0.5f, 0.5f), new Vector2(0f, -86f), new Vector2(260f, 52f));
-        pauseExitButtonView = CreateMenuButton(panel.transform, "pause_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -148f), new Vector2(260f, 52f));
-
-        pauseMenuObject.SetActive(false);
-    }
-
-    private void CreateConfirmationPanel(Transform parent)
-    {
-        confirmationPanelObject = new GameObject("ConfirmationPanel", typeof(RectTransform));
-        confirmationPanelObject.transform.SetParent(parent, false);
-        RectTransform rootRect = confirmationPanelObject.GetComponent<RectTransform>();
-        StretchToParent(rootRect);
-
-        Image dim = CreateImage("Dimmer", confirmationPanelObject.transform, new Color(0f, 0f, 0f, 0.58f));
-        StretchToParent(dim.rectTransform);
-
-        Image panel = CreateImage("Panel", confirmationPanelObject.transform, new Color(0.05f, 0.1f, 0.14f, 0.98f));
-        RectTransform panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(460f, 230f);
-        AddOutline(panel.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
-
-        confirmationTitleText = CreateText("Title", panel.transform, Localize("confirm_title"), 28, FontStyle.Bold, Color.white);
-        confirmationTitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(confirmationTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -24f), new Vector2(-20f, -66f));
-
-        confirmationBodyText = CreateText("Body", panel.transform, string.Empty, 18, FontStyle.Normal, new Color(0.88f, 0.94f, 1f));
-        confirmationBodyText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(confirmationBodyText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -72f), new Vector2(-26f, -132f));
-
-        confirmYesButtonView = CreateMenuButton(panel.transform, "confirm_yes", new Vector2(0.5f, 0.5f), new Vector2(-90f, -72f), new Vector2(150f, 48f));
-        confirmNoButtonView = CreateMenuButton(panel.transform, "confirm_no", new Vector2(0.5f, 0.5f), new Vector2(90f, -72f), new Vector2(150f, 48f));
-        confirmationPanelObject.SetActive(false);
     }
 
     private void EnsureEncounterChoiceUi()
@@ -3037,17 +2966,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (settingsBackButtonView != null) settingsBackButtonView.Label.text = Localize("back");
         if (languageRuButtonView != null) languageRuButtonView.Label.text = Localize("lang_ru");
         if (languageEngButtonView != null) languageEngButtonView.Label.text = Localize("lang_eng");
-        if (retryButtonView != null) retryButtonView.Label.text = Localize("retry");
-        if (gameOverMenuButtonView != null) gameOverMenuButtonView.Label.text = Localize("pause_to_menu");
-        if (gameOverExitButtonView != null) gameOverExitButtonView.Label.text = Localize("menu_exit");
-        if (pauseResumeButtonView != null) pauseResumeButtonView.Label.text = Localize("menu_continue");
-        if (pauseSettingsButtonView != null) pauseSettingsButtonView.Label.text = Localize("menu_settings");
-        if (pauseMenuButtonView != null) pauseMenuButtonView.Label.text = Localize("pause_to_menu");
-        if (pauseExitButtonView != null) pauseExitButtonView.Label.text = Localize("menu_exit");
-        if (pauseHudButtonView != null) pauseHudButtonView.Label.text = Localize("menu_short");
-        if (confirmYesButtonView != null) confirmYesButtonView.Label.text = Localize("confirm_yes");
-        if (confirmNoButtonView != null) confirmNoButtonView.Label.text = Localize("confirm_no");
-        if (confirmationTitleText != null) confirmationTitleText.text = Localize("confirm_title");
+        gameOverPresenter?.RefreshLocalizedTexts();
+        pauseMenuPresenter?.RefreshLocalizedTexts();
+        confirmationDialogPresenter?.RefreshLocalizedTexts();
         for (int i = 0; i < fpsButtonViews.Length; i++)
         {
             if (fpsButtonViews[i] != null)
@@ -3109,31 +3030,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (IsButtonClicked(pauseResumeButtonView, pointerPosition))
-        {
-            ResumeRun();
-            return;
-        }
-
-        if (IsButtonClicked(pauseSettingsButtonView, pointerPosition))
-        {
-            pauseSettingsOpened = true;
-            ShowPauseMenu(false);
-            ShowStartMenu(true);
-            SetStartMenuPage(StartMenuPage.Settings);
-            return;
-        }
-
-        if (IsButtonClicked(pauseMenuButtonView, pointerPosition))
-        {
-            RequestConfirmation(ConfirmAction.ReturnToMainMenu, Localize("confirm_to_menu"));
-            return;
-        }
-
-        if (IsButtonClicked(pauseExitButtonView, pointerPosition))
-        {
-            RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
-        }
+        pauseMenuPresenter?.HandlePointerDown(pointerPosition);
     }
 
     private void HandleGameOverInput()
@@ -3149,22 +3046,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (IsButtonClicked(retryButtonView, pointerPosition))
-        {
-            StartRun();
-            return;
-        }
-
-        if (IsButtonClicked(gameOverMenuButtonView, pointerPosition))
-        {
-            RequestConfirmation(ConfirmAction.ReturnToMainMenu, Localize("confirm_to_menu"));
-            return;
-        }
-
-        if (IsButtonClicked(gameOverExitButtonView, pointerPosition))
-        {
-            RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
-        }
+        gameOverPresenter?.TickInput(pointerPosition);
     }
 
     private void ReturnToMainMenu()
@@ -3191,23 +3073,39 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ShowGameOverPanel(bool show)
     {
-        if (gameOverPanelObject != null)
+        if (show)
         {
-            gameOverPanelObject.SetActive(show);
+            gameOverPresenter?.Show();
+        }
+        else
+        {
+            gameOverPresenter?.Hide();
         }
     }
 
     private void ShowPauseMenu(bool show)
     {
-        if (pauseMenuObject != null)
+        if (show)
         {
-            pauseMenuObject.SetActive(show);
+            pauseMenuPresenter?.Show();
+        }
+        else
+        {
+            pauseMenuPresenter?.Hide();
         }
 
         if (!show)
         {
             pauseSettingsOpened = false;
         }
+    }
+
+    private void OpenPauseSettings()
+    {
+        ShowPauseMenu(false);
+        pauseSettingsOpened = true;
+        ShowStartMenu(true);
+        SetStartMenuPage(StartMenuPage.Settings);
     }
 
     private void ExitGame()
@@ -3221,26 +3119,19 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void RequestConfirmation(ConfirmAction action, string bodyText)
     {
-        if (confirmationPanelObject == null && hudCanvas != null)
+        EnsureConfirmationDialogPresenter();
+        if (hudCanvas != null)
         {
-            CreateConfirmationPanel(hudCanvas.transform);
-            RefreshStartMenuTexts();
+            confirmationDialogPresenter.Build(hudCanvas.transform, uiFactory, uiFont, squareSprite);
         }
 
         pendingConfirmAction = action;
-        if (confirmationBodyText != null)
-        {
-            confirmationBodyText.text = bodyText;
-        }
-        if (confirmationPanelObject != null)
-        {
-            confirmationPanelObject.SetActive(true);
-        }
+        confirmationDialogPresenter?.Show(Localize("confirm_title"), bodyText, ExecutePendingConfirmation, CancelPendingConfirmation);
     }
 
     private bool HandleConfirmationInput()
     {
-        if (pendingConfirmAction == ConfirmAction.None || confirmationPanelObject == null || !confirmationPanelObject.activeSelf)
+        if (pendingConfirmAction == ConfirmAction.None || confirmationDialogPresenter == null || !confirmationDialogPresenter.IsVisible)
         {
             return false;
         }
@@ -3251,21 +3142,18 @@ public class SpaceCombatSceneController : MonoBehaviour
             return true;
         }
 
-        if (IsButtonClicked(confirmNoButtonView, pointerPosition))
-        {
-            pendingConfirmAction = ConfirmAction.None;
-            confirmationPanelObject.SetActive(false);
-            return true;
-        }
+        return confirmationDialogPresenter.HandlePointerDown(pointerPosition);
+    }
 
-        if (!IsButtonClicked(confirmYesButtonView, pointerPosition))
-        {
-            return true;
-        }
+    private void CancelPendingConfirmation()
+    {
+        pendingConfirmAction = ConfirmAction.None;
+    }
 
+    private void ExecutePendingConfirmation()
+    {
         ConfirmAction action = pendingConfirmAction;
         pendingConfirmAction = ConfirmAction.None;
-        confirmationPanelObject.SetActive(false);
 
         if (action == ConfirmAction.ReturnToMainMenu)
         {
@@ -3275,8 +3163,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             ExitGame();
         }
-
-        return true;
     }
 
     private static void EnsureButtonScaleAnimator(GameObject buttonObject)
@@ -3387,7 +3273,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         Vector2 pointerPosition;
         if (TryGetPrimaryPointerDown(out pointerPosition))
         {
-            if (IsButtonClicked(pauseHudButtonView, pointerPosition))
+            if (pauseMenuPresenter != null && pauseMenuPresenter.IsHudButtonClicked(pointerPosition))
             {
                 SetPaused(true);
                 return;
@@ -3979,10 +3865,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             combatLogPresenter.Refresh();
         }
-        if (pauseHudButtonView != null)
-        {
-            pauseHudButtonView.Rect.gameObject.SetActive(gameStarted && !gameOver && !gamePaused && !levelUpPending);
-        }
+        pauseMenuPresenter?.SetHudButtonVisible(gameStarted && !gameOver && !gamePaused && !levelUpPending);
 
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
             ? availableShips[selectedShipIndex].displayName
