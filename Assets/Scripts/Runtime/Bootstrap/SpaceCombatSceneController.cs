@@ -668,6 +668,40 @@ public class SpaceCombatSceneController : MonoBehaviour
             : currentTimeline;
     }
 
+    [ContextMenu("Автонастроить ссылки сцены")]
+    private void AutoWireSceneReferences()
+    {
+        combatCameraController = GetOrAddSceneComponent<CombatCameraController>();
+        encounterFlowController = GetOrAddSceneComponent<EncounterFlowController>();
+        timelineSpawnController = GetOrAddSceneComponent<TimelineSpawnController>();
+        enemySpawner = GetOrAddSceneComponent<EnemySpawner>();
+        targetingController = GetOrAddSceneComponent<TargetingController>();
+        moveCommandVisualController = GetOrAddSceneComponent<MoveCommandVisualController>();
+        minimapController = GetOrAddSceneComponent<MinimapController>();
+        backgroundController = GetOrAddSceneComponent<BackgroundController>();
+        playerShipController = GetOrAddSceneComponent<PlayerShipController>();
+        playerModuleController = GetOrAddSceneComponent<PlayerModuleController>();
+        combatHudPresenter = GetOrAddSceneComponent<CombatHudPresenter>();
+        pauseMenuPresenter = GetOrAddSceneComponent<PauseMenuPresenter>();
+        confirmationDialogPresenter = GetOrAddSceneComponent<ConfirmationDialogPresenter>();
+        gameOverPresenter = GetOrAddSceneComponent<GameOverPresenter>();
+        perkSelectionPresenter = GetOrAddSceneComponent<PerkSelectionPresenter>();
+        playerProgressionController = GetOrAddSceneComponent<PlayerProgressionController>();
+        startMenuPresenter = GetOrAddSceneComponent<StartMenuPresenter>();
+        encounterChoicePresenter = GetOrAddSceneComponent<EncounterChoicePresenter>();
+        nonCombatEncounterPresenter = GetOrAddSceneComponent<NonCombatEncounterPresenter>();
+        combatAudioController = GetOrAddSceneComponent<CombatAudioController>();
+        combatLogPresenter = GetOrAddSceneComponent<CombatLogPresenter>();
+
+        Debug.Log("SpaceCombatSceneController: ссылки сцены автонастроены. Проверьте Inspector и сохраните сцену.", this);
+    }
+
+    private T GetOrAddSceneComponent<T>() where T : Component
+    {
+        T component = GetComponent<T>();
+        return component != null ? component : gameObject.AddComponent<T>();
+    }
+
     private void Awake()
     {
         EnsureServices();

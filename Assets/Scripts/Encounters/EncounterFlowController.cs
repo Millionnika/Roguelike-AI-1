@@ -34,6 +34,10 @@ public readonly struct EncounterCompletionContext
 [DisallowMultipleComponent]
 public sealed class EncounterFlowController : MonoBehaviour
 {
+    [Header("Пресет забега")]
+    [Tooltip("Единый пресет забега. Используется для стартовой локации и как понятная точка входа настройки. Если поле пустое, работают старые прямые ссылки.")]
+    [SerializeField] private RunPresetSO runPreset;
+
     [Header("Связи забега")]
     [Tooltip("Runtime-менеджер забега. Хранит текущую выбранную локацию и счетчик завершенных локаций.")]
     [SerializeField] private RunManager runManager;
@@ -69,6 +73,21 @@ public sealed class EncounterFlowController : MonoBehaviour
     public bool IsEncounterChoiceVisible => encounterChoicePresenter != null && encounterChoicePresenter.IsVisible;
     public bool IsNonCombatVisible => nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.IsVisible;
     public RunManager RunManager => runManager;
+    public RunPresetSO RunPreset => ActiveRunPreset;
+
+    private RunPresetSO ActiveRunPreset
+    {
+        get
+        {
+            if (runPreset != null)
+            {
+                return runPreset;
+            }
+
+            EnsureRunMapDirectorReference();
+            return runMapDirector != null ? runMapDirector.RunPreset : null;
+        }
+    }
 
     private void Awake()
     {
@@ -122,6 +141,11 @@ public sealed class EncounterFlowController : MonoBehaviour
         if (runManager != null)
         {
             runManager.StartRun();
+            RunPresetSO activePreset = ActiveRunPreset;
+            if (runManager.CurrentEncounter == null && activePreset != null && activePreset.startingEncounter != null)
+            {
+                runManager.SelectEncounter(activePreset.startingEncounter);
+            }
         }
     }
 
@@ -141,6 +165,14 @@ public sealed class EncounterFlowController : MonoBehaviour
             runManager.CurrentEncounter.waveTimeline != null)
         {
             return runManager.CurrentEncounter.waveTimeline;
+        }
+
+        RunPresetSO activePreset = ActiveRunPreset;
+        if (activePreset != null &&
+            activePreset.startingEncounter != null &&
+            activePreset.startingEncounter.waveTimeline != null)
+        {
+            return activePreset.startingEncounter.waveTimeline;
         }
 
         return fallbackTimeline;

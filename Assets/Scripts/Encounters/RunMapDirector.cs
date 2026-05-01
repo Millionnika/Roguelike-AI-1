@@ -4,6 +4,10 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class RunMapDirector : MonoBehaviour
 {
+    [Header("Пресет забега")]
+    [Tooltip("Единый пресет забега. Если назначен, EncounterPoolSO и RunMapConfigSO берутся из него. Прямые ссылки ниже остаются fallback для старых сцен.")]
+    [SerializeField] private RunPresetSO runPreset;
+
     [Header("Настройки генерации")]
     [Tooltip("Базовая конфигурация карты забега: длина, количество вариантов, веса типов узлов, настройки босса и диапазон опасности.")]
     [SerializeField] private RunMapConfigSO config;
@@ -16,10 +20,14 @@ public sealed class RunMapDirector : MonoBehaviour
     private readonly List<NodeTypeWeight> modifiedWeightBuffer = new List<NodeTypeWeight>();
     private readonly List<EncounterSO> testChoiceBuffer = new List<EncounterSO>();
 
-    public RunMapConfigSO Config => config;
-    public EncounterPoolSO EncounterPool => encounterPool;
+    public RunPresetSO RunPreset => runPreset;
+    public RunMapConfigSO Config => ActiveConfig;
+    public EncounterPoolSO EncounterPool => ActiveEncounterPool;
     public RunEventDirector EventDirector => eventDirector;
-    public bool IsConfigured => config != null && encounterPool != null;
+    public bool IsConfigured => ActiveConfig != null && ActiveEncounterPool != null;
+
+    private RunMapConfigSO ActiveConfig => runPreset != null && runPreset.runMapConfig != null ? runPreset.runMapConfig : config;
+    private EncounterPoolSO ActiveEncounterPool => runPreset != null && runPreset.encounterPool != null ? runPreset.encounterPool : encounterPool;
 
     private void Awake()
     {
@@ -40,19 +48,22 @@ public sealed class RunMapDirector : MonoBehaviour
             return false;
         }
 
-        if (encounterPool.encounters == null || encounterPool.encounters.Count == 0)
+        RunMapConfigSO activeConfig = ActiveConfig;
+        EncounterPoolSO activePool = ActiveEncounterPool;
+
+        if (activePool.encounters == null || activePool.encounters.Count == 0)
         {
             Debug.LogWarning("RunMapDirector: пул локаций пуст. Добавьте EncounterSO в пул или используйте резервный список Test Next Encounters.", this);
             return false;
         }
 
-        if (!config.HasUsableWeights())
+        if (!activeConfig.HasUsableWeights())
         {
             Debug.LogWarning("RunMapDirector: в RunMapConfigSO нет рабочих весов. Все веса равны нулю или список пуст.", this);
             return false;
         }
 
-        int choiceCount = Mathf.Clamp(config.choicesPerStep, 1, 3);
+        int choiceCount = Mathf.Clamp(activeConfig.choicesPerStep, 1, 3);
         if (ShouldForceBoss(completedEncounterCount))
         {
             FillChoicesOfType(LocationNodeType.Boss, choiceCount, results);
@@ -113,15 +124,16 @@ public sealed class RunMapDirector : MonoBehaviour
     private void BuildModifiedWeights()
     {
         modifiedWeightBuffer.Clear();
-        if (config.baseNodeWeights == null)
+        RunMapConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null || activeConfig.baseNodeWeights == null)
         {
             return;
         }
 
         EnsureEventDirectorReference();
-        for (int i = 0; i < config.baseNodeWeights.Count; i++)
+        for (int i = 0; i < activeConfig.baseNodeWeights.Count; i++)
         {
-            NodeTypeWeight source = config.baseNodeWeights[i];
+            NodeTypeWeight source = activeConfig.baseNodeWeights[i];
             if (source == null)
             {
                 continue;
@@ -142,13 +154,21 @@ public sealed class RunMapDirector : MonoBehaviour
 
     private bool ShouldForceBoss(int completedEncounterCount)
     {
-        return config.forceBossAtEnd && completedEncounterCount >= config.bossNodeIndex;
+        RunMapConfigSO activeConfig = ActiveConfig;
+        return activeConfig != null && activeConfig.forceBossAtEnd && completedEncounterCount >= activeConfig.bossNodeIndex;
     }
 
     private void FillChoicesOfType(LocationNodeType nodeType, int choiceCount, List<EncounterSO> results)
     {
         candidateBuffer.Clear();
-        List<EncounterSO> candidates = encounterPool.GetValidEncounters(nodeType, config.minDangerLevel, config.maxDangerLevel);
+        RunMapConfigSO activeConfig = ActiveConfig;
+        EncounterPoolSO activePool = ActiveEncounterPool;
+        if (activeConfig == null || activePool == null)
+        {
+            return;
+        }
+
+        List<EncounterSO> candidates = activePool.GetValidEncounters(nodeType, activeConfig.minDangerLevel, activeConfig.maxDangerLevel);
         AddCandidates(candidates);
         AddRandomUniqueChoices(choiceCount, results);
     }
@@ -156,7 +176,14 @@ public sealed class RunMapDirector : MonoBehaviour
     private EncounterSO PickEncounterOfType(LocationNodeType nodeType, List<EncounterSO> existingChoices)
     {
         candidateBuffer.Clear();
-        List<EncounterSO> candidates = encounterPool.GetValidEncounters(nodeType, config.minDangerLevel, config.maxDangerLevel);
+        RunMapConfigSO activeConfig = ActiveConfig;
+        EncounterPoolSO activePool = ActiveEncounterPool;
+        if (activeConfig == null || activePool == null)
+        {
+            return null;
+        }
+
+        List<EncounterSO> candidates = activePool.GetValidEncounters(nodeType, activeConfig.minDangerLevel, activeConfig.maxDangerLevel);
         for (int i = 0; i < candidates.Count; i++)
         {
             EncounterSO candidate = candidates[i];
@@ -172,7 +199,14 @@ public sealed class RunMapDirector : MonoBehaviour
     private void FillAnyValidChoices(int choiceCount, List<EncounterSO> results)
     {
         candidateBuffer.Clear();
-        List<EncounterSO> candidates = encounterPool.GetValidEncounters(config.minDangerLevel, config.maxDangerLevel);
+        RunMapConfigSO activeConfig = ActiveConfig;
+        EncounterPoolSO activePool = ActiveEncounterPool;
+        if (activeConfig == null || activePool == null)
+        {
+            return;
+        }
+
+        List<EncounterSO> candidates = activePool.GetValidEncounters(activeConfig.minDangerLevel, activeConfig.maxDangerLevel);
         for (int i = 0; i < candidates.Count; i++)
         {
             EncounterSO candidate = candidates[i];

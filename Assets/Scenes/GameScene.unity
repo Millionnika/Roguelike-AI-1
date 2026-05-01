@@ -27523,6 +27523,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3691091adad17c84c9dff65c362f54f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunEventDirector
+  runPreset: {fileID: 0}
   config: {fileID: 11400000, guid: 339d20614a9658343a506b8240181fb6, type: 2}
   currentTension: 1
   combatStreak: 0
@@ -27542,6 +27543,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a5ff4d6eaebc0a14d91afd6625af236f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunMapDirector
+  runPreset: {fileID: 11400000, guid: 38bebd538e0308443ab1921d1c25d736, type: 2}
   config: {fileID: 11400000, guid: 13451997ac2c3e54bb4c1bed0689adc0, type: 2}
   encounterPool: {fileID: 11400000, guid: 39bc13502805afc4280d59f883e4d2fc, type: 2}
   eventDirector: {fileID: 1649103438}
@@ -28707,7 +28709,14 @@ MonoBehaviour:
   minimapController: {fileID: 0}
   backgroundController: {fileID: 0}
   playerShipController: {fileID: 0}
+  playerModuleController: {fileID: 0}
   combatHudPresenter: {fileID: 0}
+  pauseMenuPresenter: {fileID: 0}
+  confirmationDialogPresenter: {fileID: 0}
+  gameOverPresenter: {fileID: 0}
+  perkSelectionPresenter: {fileID: 0}
+  playerProgressionController: {fileID: 0}
+  startMenuPresenter: {fileID: 0}
   encounterChoicePresenter: {fileID: 0}
   nonCombatEncounterPresenter: {fileID: 0}
   shieldHitMaterial: {fileID: 0}

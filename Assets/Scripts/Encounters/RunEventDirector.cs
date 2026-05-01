@@ -4,6 +4,10 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class RunEventDirector : MonoBehaviour
 {
+    [Header("Пресет забега")]
+    [Tooltip("Единый пресет забега. Если назначен и содержит EventDirectorConfigSO, директор темпа берет настройки из него. Прямая ссылка ниже остается fallback для старых сцен.")]
+    [SerializeField] private RunPresetSO runPreset;
+
     [Header("Настройки")]
     [Tooltip("Конфиг темпа забега. Хранит все пороги и множители весов, которые влияют на будущие варианты локаций.")]
     [SerializeField] private EventDirectorConfigSO config;
@@ -24,17 +28,44 @@ public sealed class RunEventDirector : MonoBehaviour
 
     private readonly HashSet<LocationNodeType> loggedWeightNodesThisFrame = new HashSet<LocationNodeType>();
     private int loggedWeightFrame = -1;
+    private RunMapDirector cachedRunMapDirector;
 
-    public bool IsConfigured => config != null;
+    public bool IsConfigured => ActiveConfig != null;
+    public RunPresetSO RunPreset => ActiveRunPreset;
+    public EventDirectorConfigSO Config => ActiveConfig;
     public int CombatStreak => combatStreak;
     public int CompletedNodeCount => completedNodeCount;
     public float LastPlayerHullPercent => lastPlayerHullPercent;
     public float LastDamageTaken => lastDamageTaken;
     public LocationNodeType LastCompletedNodeType => lastCompletedNodeType;
 
+    private RunPresetSO ActiveRunPreset => runPreset != null ? runPreset : ResolveRunPresetFromMapDirector();
+    private EventDirectorConfigSO ActiveConfig => ActiveRunPreset != null && ActiveRunPreset.eventDirectorConfig != null ? ActiveRunPreset.eventDirectorConfig : config;
+
+    private void Awake()
+    {
+        ResolveRunPresetFromMapDirector();
+    }
+
+    private RunPresetSO ResolveRunPresetFromMapDirector()
+    {
+        if (cachedRunMapDirector == null)
+        {
+            cachedRunMapDirector = GetComponent<RunMapDirector>();
+        }
+
+        if (cachedRunMapDirector == null)
+        {
+            cachedRunMapDirector = FindAnyObjectByType<RunMapDirector>(FindObjectsInactive.Include);
+        }
+
+        return cachedRunMapDirector != null ? cachedRunMapDirector.RunPreset : null;
+    }
+
     public void OnEncounterCompleted(EncounterResult result)
     {
-        if (config == null)
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null)
         {
             return;
         }
@@ -78,7 +109,8 @@ public sealed class RunEventDirector : MonoBehaviour
 
     public float ModifyNodeWeight(LocationNodeType nodeType, float baseWeight)
     {
-        if (config == null || baseWeight <= 0f)
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null || baseWeight <= 0f)
         {
             return Mathf.Max(0f, baseWeight);
         }
@@ -93,7 +125,7 @@ public sealed class RunEventDirector : MonoBehaviour
             modifiedWeight *= GetLowTensionMultiplier(nodeType);
         }
 
-        if (combatStreak >= config.combatStreakLimit)
+        if (combatStreak >= activeConfig.combatStreakLimit)
         {
             modifiedWeight *= GetCombatStreakMultiplier(nodeType);
         }
@@ -105,23 +137,30 @@ public sealed class RunEventDirector : MonoBehaviour
 
     public float GetDangerLevelModifier()
     {
-        if (config == null)
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null)
         {
             return 0f;
         }
 
-        return completedNodeCount * config.difficultyGrowthPerCompletedNode;
+        return completedNodeCount * activeConfig.difficultyGrowthPerCompletedNode;
     }
 
     private Tension CalculateTension(float hullPercent, float damageTaken)
     {
-        if (hullPercent <= config.lowHullThreshold || damageTaken >= config.heavyDamageThreshold)
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null)
+        {
+            return Tension.Normal;
+        }
+
+        if (hullPercent <= activeConfig.lowHullThreshold || damageTaken >= activeConfig.heavyDamageThreshold)
         {
             return Tension.High;
         }
 
-        float strongHullThreshold = Mathf.Clamp01(1f - config.lowHullThreshold);
-        float lowDamageThreshold = config.heavyDamageThreshold * 0.5f;
+        float strongHullThreshold = Mathf.Clamp01(1f - activeConfig.lowHullThreshold);
+        float lowDamageThreshold = activeConfig.heavyDamageThreshold * 0.5f;
         if (hullPercent >= strongHullThreshold && damageTaken <= lowDamageThreshold)
         {
             return Tension.Low;
@@ -132,18 +171,24 @@ public sealed class RunEventDirector : MonoBehaviour
 
     private float GetHighTensionMultiplier(LocationNodeType nodeType)
     {
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null)
+        {
+            return 1f;
+        }
+
         switch (nodeType)
         {
             case LocationNodeType.Repair:
-                return config.repairWeightBoostWhenLowHull;
+                return activeConfig.repairWeightBoostWhenLowHull;
             case LocationNodeType.Shop:
-                return config.shopWeightBoostWhenLowHull;
+                return activeConfig.shopWeightBoostWhenLowHull;
             case LocationNodeType.Resource:
-                return config.resourceWeightBoostWhenLowHull;
+                return activeConfig.resourceWeightBoostWhenLowHull;
             case LocationNodeType.Rest:
-                return config.restWeightBoostWhenHighTension;
+                return activeConfig.restWeightBoostWhenHighTension;
             case LocationNodeType.Elite:
-                return config.eliteWeightPenaltyWhenLowHull;
+                return activeConfig.eliteWeightPenaltyWhenLowHull;
             default:
                 return 1f;
         }
@@ -151,12 +196,18 @@ public sealed class RunEventDirector : MonoBehaviour
 
     private float GetLowTensionMultiplier(LocationNodeType nodeType)
     {
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null)
+        {
+            return 1f;
+        }
+
         switch (nodeType)
         {
             case LocationNodeType.Combat:
-                return config.combatWeightBoostWhenPlayerStrong;
+                return activeConfig.combatWeightBoostWhenPlayerStrong;
             case LocationNodeType.Elite:
-                return config.eliteWeightBoostWhenPlayerStrong;
+                return activeConfig.eliteWeightBoostWhenPlayerStrong;
             default:
                 return 1f;
         }
@@ -164,17 +215,23 @@ public sealed class RunEventDirector : MonoBehaviour
 
     private float GetCombatStreakMultiplier(LocationNodeType nodeType)
     {
+        EventDirectorConfigSO activeConfig = ActiveConfig;
+        if (activeConfig == null)
+        {
+            return 1f;
+        }
+
         switch (nodeType)
         {
             case LocationNodeType.Combat:
             case LocationNodeType.Elite:
-                return config.combatWeightPenaltyAfterCombatStreak;
+                return activeConfig.combatWeightPenaltyAfterCombatStreak;
             case LocationNodeType.Repair:
-                return Mathf.Max(1f, config.repairWeightBoostWhenLowHull);
+                return Mathf.Max(1f, activeConfig.repairWeightBoostWhenLowHull);
             case LocationNodeType.Shop:
-                return Mathf.Max(1f, config.shopWeightBoostWhenLowHull);
+                return Mathf.Max(1f, activeConfig.shopWeightBoostWhenLowHull);
             case LocationNodeType.Rest:
-                return Mathf.Max(1f, config.restWeightBoostWhenHighTension);
+                return Mathf.Max(1f, activeConfig.restWeightBoostWhenHighTension);
             case LocationNodeType.Event:
                 return 1.25f;
             default:

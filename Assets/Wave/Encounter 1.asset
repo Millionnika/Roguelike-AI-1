@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6ed2aed6b2e9f1c458c280f826545445, type: 3}
   m_Name: Encounter 1
   m_EditorClassIdentifier: Assembly-CSharp::EncounterSO
-  displayName: New Encounter
+  displayName: "\u041D\u043E\u0432\u0430\u044F \u043B\u043E\u043A\u0430\u0446\u0438\u044F"
   nodeType: 1
-  icon: {fileID: -2121471355247410076, guid: 4d8bf4247624e9f47b0baee3920bf946, type: 3}
-  waveTimeline: {fileID: 11400000, guid: d8c4e80cea8c5254b96211a1dd793cf7, type: 2}
+  icon: {fileID: 0}
+  waveTimeline: {fileID: 11400000, guid: e841595622dd52e43863fe3d1957201d, type: 2}
   dangerLevel: 1
   shortDescription: 

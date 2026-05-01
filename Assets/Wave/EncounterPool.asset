@@ -13,4 +13,6 @@ MonoBehaviour:
   m_Name: EncounterPool
   m_EditorClassIdentifier: Assembly-CSharp::EncounterPoolSO
   encounters:
-  - {fileID: 0}
+  - {fileID: 11400000, guid: 6653bd4c3e84d254c9ce40c0246bc4bb, type: 2}
+  - {fileID: 11400000, guid: 93a5e55d94289fa42bd1e1f654735831, type: 2}
+  - {fileID: 11400000, guid: f16f3f70a9f1e244c81b3bac48555ade, type: 2}
