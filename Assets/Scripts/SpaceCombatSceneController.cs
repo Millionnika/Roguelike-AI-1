@@ -100,7 +100,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
     private readonly List<ModuleState> modules = new List<ModuleState>();
-    private readonly List<EnemyRow> enemyRows = new List<EnemyRow>();
     private readonly List<PerkChoice> activePerks = new List<PerkChoice>();
     private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
     private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
@@ -127,16 +126,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Canvas hudCanvas;
     private TMP_Text gateHintText;
     private TMP_Text statusText;
-    private TMP_Text overviewTitleText;
-    private TMP_Text enemyHeaderText;
-    private TMP_Text playerStatusTitleText;
-    private TMP_Text targetNameText;
-    private TMP_Text targetDistanceText;
-    private TMP_Text targetDisplayText;
-    private TMP_Text capacitorText;
-    private TMP_Text levelText;
-    private TMP_Text experienceText;
-    private TMP_Text shipText;
     private TMP_Text perkTitleText;
     private TMP_Text perkHintText;
     private readonly TMP_Text[] perkOptionTexts = new TMP_Text[3];
@@ -155,24 +144,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private TMP_Text settingsLanguageLabelText;
     private TMP_Text settingsFpsLabelText;
     private TMP_Text joystickHintText;
-    private Image targetPanel;
-    private Image targetShieldFill;
-    private Image targetArmorFill;
-    private Image targetHullFill;
-    private Image playerShieldFill;
-    private Image playerArmorFill;
-    private Image playerHullFill;
-    private Image playerExperienceFill;
-    private Image capacitorFill;
-    private TMP_Text targetShieldValueText;
-    private TMP_Text targetArmorValueText;
-    private TMP_Text targetHullValueText;
-    private TMP_Text playerShieldValueText;
-    private TMP_Text playerArmorValueText;
-    private TMP_Text playerHullValueText;
-    private TMP_Text playerExperienceValueText;
-    private TMP_Text playerLevelBadgeText;
-    private TMP_Text capacitorValueText;
     private GameObject perkPanelObject;
     private GameObject gameOverPanelObject;
     private GameObject pauseMenuObject;
@@ -207,7 +178,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject confirmationPanelObject;
     private TMP_Text confirmationTitleText;
     private TMP_Text confirmationBodyText;
-    private RectTransform overviewPanelRect;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
     private Image joystickBaseImage;
@@ -991,10 +961,8 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void RefreshLocalizedTexts()
     {
-        if (overviewTitleText != null) overviewTitleText.text = Localize("overview");
-        if (enemyHeaderText != null) enemyHeaderText.text = Localize("enemy_header");
+        combatHudPresenter?.RefreshLocalizedTexts();
         if (combatLogPresenter != null) combatLogPresenter.SetTitle(Localize("combat_log"));
-        if (playerStatusTitleText != null) playerStatusTitleText.text = Localize("ship_status");
         if (gateHintText != null) gateHintText.text = Localize("warp_inactive");
         if (perkTitleText != null) perkTitleText.text = Localize("perk_title");
         if (joystickHintText != null) joystickHintText.text = Localize("joystick_hint");
@@ -2153,76 +2121,6 @@ public class SpaceCombatSceneController : MonoBehaviour
                 uiRoot.Find("PlayerStatus") != null);
     }
 
-    private void BindAuthoredInspectorHud(Transform uiRoot)
-    {
-        BindOverviewPanel(uiRoot);
-        BindCombatLogPanel(uiRoot);
-        BindGateHint(uiRoot);
-        BindPlayerStatusPanel(uiRoot);
-        BindEquipmentPanel(uiRoot);
-        BindModulePanel(uiRoot);
-        pauseHudButtonView = BindMenuButton(uiRoot.Find("PauseButton"), "PauseButton");
-        statusText = FindText(uiRoot, "StatusLabel");
-        BindPerkPanel(uiRoot);
-        BindGameOverPanel(uiRoot);
-        BindPauseMenu(uiRoot);
-        BindStartMenu(uiRoot);
-        BindVirtualJoystick(uiRoot);
-    }
-
-    private void BindOverviewPanel(Transform uiRoot)
-    {
-        Transform panel = uiRoot.Find("OverviewPanel");
-        if (panel == null)
-        {
-            return;
-        }
-
-        overviewPanelRect = panel.GetComponent<RectTransform>();
-        overviewTitleText = FindText(panel, "Title");
-        targetPanel = FindImage(panel, "TargetPanel");
-        Transform target = panel.Find("TargetPanel");
-        targetNameText = FindText(target, "TargetName");
-        targetDistanceText = FindText(target, "TargetDistance");
-        targetShieldFill = FindIndexedFill(target, "BarBackground", 0);
-        targetArmorFill = FindIndexedFill(target, "BarBackground", 1);
-        targetHullFill = FindIndexedFill(target, "BarBackground", 2);
-        targetShieldValueText = FindIndexedText(target, "Value", 0);
-        targetArmorValueText = FindIndexedText(target, "Value", 1);
-        targetHullValueText = FindIndexedText(target, "Value", 2);
-        enemyHeaderText = FindText(panel, "EnemyHeader");
-        capacitorText = FindText(panel, "CapText");
-        targetDisplayText = FindText(panel, "TargetDisplay");
-        shipText = FindText(panel, "ShipText");
-        levelText = FindText(panel, "LevelText");
-        experienceText = FindText(panel, "ExperienceText");
-
-        enemyRows.Clear();
-        Transform rowsRoot = panel.Find("EnemyRows");
-        if (rowsRoot == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < 9; i++)
-        {
-            Transform rowTransform = rowsRoot.Find("EnemyRow_" + i);
-            if (rowTransform == null)
-            {
-                continue;
-            }
-
-            enemyRows.Add(new EnemyRow
-            {
-                RootTransform = rowTransform.GetComponent<RectTransform>(),
-                RootText = FindText(rowTransform, "RowText"),
-                ShieldFill = FindIndexedFill(rowTransform, "BarBg", 0),
-                ArmorFill = FindIndexedFill(rowTransform, "BarBg", 1),
-                HullFill = FindIndexedFill(rowTransform, "BarBg", 2)
-            });
-        }
-    }
-
     private void BindCombatLogPanel(Transform uiRoot)
     {
         Transform panel = uiRoot.Find("CombatLog");
@@ -2251,90 +2149,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Transform panel = uiRoot.Find("GateHint");
         gateHintText = FindText(panel, "Text");
-    }
-
-    private void BindPlayerStatusPanel(Transform uiRoot)
-    {
-        Transform panel = uiRoot.Find("PlayerStatus");
-        if (panel == null)
-        {
-            return;
-        }
-
-        playerStatusTitleText = FindText(panel, "Label");
-        playerLevelBadgeText = FindText(panel, "LevelBadge");
-        playerShieldFill = FindImage(panel, "ShieldBg/ShieldFill");
-        playerArmorFill = FindImage(panel, "ArmorBg/ArmorFill");
-        playerHullFill = FindImage(panel, "HullBg/HullFill");
-        playerExperienceFill = FindImage(panel, "XPBg/XPFill");
-        playerShieldValueText = FindText(panel, "ShieldBg/Value");
-        playerArmorValueText = FindText(panel, "ArmorBg/Value");
-        playerHullValueText = FindText(panel, "HullBg/Value");
-        playerExperienceValueText = FindText(panel, "XPBg/Value");
-        capacitorFill = FindImage(panel, "CapacitorFill");
-        capacitorValueText = FindText(panel, "CapValue");
-    }
-
-    private void BindEquipmentPanel(Transform uiRoot)
-    {
-        Transform authoredPanel = uiRoot.Find("EquipmentPanel");
-        Transform runtimePanel = uiRoot.Find("EquipmentPanelRuntime");
-        Transform panel = authoredPanel;
-        if (panel == null)
-        {
-            if (runtimePanel != null)
-            {
-                runtimePanel.gameObject.SetActive(false);
-            }
-            return;
-        }
-
-        panel.gameObject.SetActive(true);
-        if (runtimePanel != null)
-        {
-            runtimePanel.gameObject.SetActive(false);
-        }
-
-        RectTransform panelRect = panel.GetComponent<RectTransform>();
-        bool panelHadInvertedAnchors = NormalizeAuthoredRect(panelRect);
-        AlignEquipmentPanelToModulePanelIfNeeded(uiRoot, panelRect, panelHadInvertedAnchors);
-
-        DisableDuplicateEquipmentPanels(uiRoot, panel);
-
-        EquipmentUIController runtimeController = panel.GetComponent<EquipmentUIController>();
-        if (runtimeController == null)
-        {
-            runtimeController = panel.gameObject.AddComponent<EquipmentUIController>();
-        }
-        else
-        {
-            runtimeController.enabled = true;
-        }
-
-        Transform weaponsRow = panel.Find("WeaponsRow");
-        Transform modulesRow = panel.Find("ModulesRow");
-        runtimeController.Configure(
-            this,
-            slotUiPrefab,
-            weaponsRow != null ? weaponsRow.GetComponent<RectTransform>() : null,
-            modulesRow != null ? modulesRow.GetComponent<RectTransform>() : null);
-        equipmentUiController = runtimeController;
-    }
-
-    private static void DisableDuplicateEquipmentPanels(Transform uiRoot, Transform activePanel)
-    {
-        EquipmentUIController[] controllers = uiRoot.GetComponentsInChildren<EquipmentUIController>(true);
-        for (int i = 0; i < controllers.Length; i++)
-        {
-            EquipmentUIController controller = controllers[i];
-            if (controller == null || controller.transform == activePanel)
-            {
-                continue;
-            }
-
-            controller.enabled = false;
-            controller.gameObject.SetActive(false);
-        }
     }
 
     private void BindModulePanel(Transform uiRoot)
@@ -2543,43 +2357,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         return changed;
     }
 
-    private static void AlignEquipmentPanelToModulePanelIfNeeded(Transform uiRoot, RectTransform equipmentPanelRect, bool forceAlign)
-    {
-        if (uiRoot == null || equipmentPanelRect == null)
-        {
-            return;
-        }
-
-        Transform modulePanelTransform = uiRoot.Find("ModulePanel");
-        RectTransform modulePanelRect = modulePanelTransform != null ? modulePanelTransform.GetComponent<RectTransform>() : null;
-        if (modulePanelRect == null)
-        {
-            return;
-        }
-
-        bool hasInvalidAnchors =
-            equipmentPanelRect.anchorMin.x > equipmentPanelRect.anchorMax.x ||
-            equipmentPanelRect.anchorMin.y > equipmentPanelRect.anchorMax.y;
-
-        bool hasInvalidSize = equipmentPanelRect.sizeDelta.x <= 0f || equipmentPanelRect.sizeDelta.y <= 0f;
-        bool shouldAutoAlign = forceAlign || hasInvalidAnchors || hasInvalidSize;
-        if (!shouldAutoAlign)
-        {
-            return;
-        }
-
-        equipmentPanelRect.anchorMin = modulePanelRect.anchorMin;
-        equipmentPanelRect.anchorMax = modulePanelRect.anchorMax;
-        equipmentPanelRect.pivot = modulePanelRect.pivot;
-
-        float moduleWidth = Mathf.Max(200f, modulePanelRect.sizeDelta.x);
-        float moduleHeight = Mathf.Max(48f, modulePanelRect.sizeDelta.y);
-        equipmentPanelRect.sizeDelta = new Vector2(moduleWidth * 1.95f, moduleHeight * 1.9f);
-        equipmentPanelRect.anchoredPosition = new Vector2(
-            modulePanelRect.anchoredPosition.x + moduleWidth + 26f,
-            modulePanelRect.anchoredPosition.y);
-    }
-
     private static Image FindImage(Transform root, string path)
     {
         Transform child = root != null ? root.Find(path) : null;
@@ -2590,125 +2367,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Transform child = root != null ? root.Find(path) : null;
         return child != null ? child.GetComponent<TMP_Text>() : null;
-    }
-
-    private static Image FindIndexedFill(Transform root, string backgroundName, int index)
-    {
-        Transform background = FindIndexedChild(root, backgroundName, index);
-        Transform fill = background != null ? background.Find("Fill") : null;
-        return fill != null ? fill.GetComponent<Image>() : null;
-    }
-
-    private static TMP_Text FindIndexedText(Transform root, string childName, int index)
-    {
-        Transform child = FindIndexedChild(root, childName, index);
-        return child != null ? child.GetComponent<TMP_Text>() : null;
-    }
-
-    private static Transform FindIndexedChild(Transform root, string childName, int index)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        int matchIndex = 0;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            Transform child = root.GetChild(i);
-            if (child.name != childName)
-            {
-                continue;
-            }
-
-            if (matchIndex == index)
-            {
-                return child;
-            }
-            matchIndex++;
-        }
-
-        return null;
-    }
-
-    private void CreateRightOverviewPanel(Transform parent)
-    {
-        Image panel = CreateImage("OverviewPanel", parent, new Color(0.04f, 0.08f, 0.11f, 0.94f));
-        RectTransform rect = panel.rectTransform;
-        overviewPanelRect = rect;
-        rect.anchorMin = new Vector2(1f, 0f);
-        rect.anchorMax = new Vector2(1f, 1f);
-        rect.pivot = new Vector2(1f, 0.5f);
-        rect.sizeDelta = new Vector2(290f, -40f);
-        rect.anchoredPosition = new Vector2(-10f, 0f);
-        AddOutline(panel.gameObject, new Color(0.12f, 0.28f, 0.4f, 1f));
-
-        overviewTitleText = CreateText("Title", panel.transform, "OVERVIEW", 20, FontStyle.Bold, new Color(0.52f, 0.8f, 1f));
-        RectTransform titleRect = overviewTitleText.rectTransform;
-        titleRect.anchorMin = new Vector2(0f, 1f);
-        titleRect.anchorMax = new Vector2(1f, 1f);
-        titleRect.pivot = new Vector2(0.5f, 1f);
-        titleRect.sizeDelta = new Vector2(-20f, 38f);
-        titleRect.anchoredPosition = new Vector2(0f, -12f);
-
-        targetPanel = CreateImage("TargetPanel", panel.transform, new Color(0.06f, 0.13f, 0.18f, 0.95f));
-        RectTransform targetRect = targetPanel.rectTransform;
-        targetRect.anchorMin = new Vector2(0f, 1f);
-        targetRect.anchorMax = new Vector2(1f, 1f);
-        targetRect.pivot = new Vector2(0.5f, 1f);
-        targetRect.sizeDelta = new Vector2(-18f, 114f);
-        targetRect.anchoredPosition = new Vector2(0f, -54f);
-        AddOutline(targetPanel.gameObject, new Color(0.25f, 0.55f, 0.7f, 1f));
-
-        targetNameText = CreateText("TargetName", targetPanel.transform, "-", 18, FontStyle.Bold, new Color(1f, 0.88f, 0.45f));
-        SetAnchoredRect(targetNameText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -8f), new Vector2(-8f, -30f));
-
-        targetDistanceText = CreateText("TargetDistance", targetPanel.transform, "-", 13, FontStyle.Normal, new Color(0.6f, 0.82f, 1f));
-        SetAnchoredRect(targetDistanceText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -34f), new Vector2(-8f, -52f));
-
-        targetShieldFill = CreateBar(targetPanel.transform, new Vector2(8f, -62f), new Color(0.23f, 0.62f, 1f));
-        targetArmorFill = CreateBar(targetPanel.transform, new Vector2(8f, -78f), new Color(0.72f, 0.72f, 0.75f));
-        targetHullFill = CreateBar(targetPanel.transform, new Vector2(8f, -94f), new Color(0.86f, 0.31f, 0.31f));
-        targetShieldValueText = CreateBarValueText(targetShieldFill, 252f);
-        targetArmorValueText = CreateBarValueText(targetArmorFill, 252f);
-        targetHullValueText = CreateBarValueText(targetHullFill, 252f);
-
-        enemyHeaderText = CreateText("EnemyHeader", panel.transform, "ID          TYPE        DIST       STATUS", 12, FontStyle.Bold, new Color(0.52f, 0.68f, 0.8f));
-        SetAnchoredRect(enemyHeaderText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(10f, -176f), new Vector2(-10f, -196f));
-
-        RectTransform rowsRoot = new GameObject("EnemyRows", typeof(RectTransform)).GetComponent<RectTransform>();
-        rowsRoot.SetParent(panel.transform, false);
-        rowsRoot.anchorMin = new Vector2(0f, 1f);
-        rowsRoot.anchorMax = new Vector2(1f, 1f);
-        rowsRoot.pivot = new Vector2(0.5f, 1f);
-        rowsRoot.sizeDelta = new Vector2(-18f, 430f);
-        rowsRoot.anchoredPosition = new Vector2(0f, -204f);
-
-        for (int i = 0; i < 9; i++)
-        {
-            EnemyRow row = CreateEnemyRow(rowsRoot, i);
-            enemyRows.Add(row);
-        }
-
-        capacitorText = CreateText("CapText", panel.transform, "Capacitor: 100%", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(capacitorText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 78f), new Vector2(-10f, 102f));
-        capacitorText.gameObject.SetActive(false);
-
-        targetDisplayText = CreateText("TargetDisplay", panel.transform, "Target: none", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(targetDisplayText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 52f), new Vector2(-10f, 76f));
-        targetDisplayText.gameObject.SetActive(false);
-
-        shipText = CreateText("ShipText", panel.transform, "Ship: none", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(shipText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 26f), new Vector2(-10f, 50f));
-        shipText.gameObject.SetActive(false);
-
-        levelText = CreateText("LevelText", panel.transform, "Level: 1", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(levelText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 0f), new Vector2(-10f, 24f));
-        levelText.gameObject.SetActive(false);
-
-        experienceText = CreateText("ExperienceText", panel.transform, "XP: 0 / 100", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(experienceText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -24f), new Vector2(-10f, 0f));
-        experienceText.gameObject.SetActive(false);
     }
 
     private void CreateCombatLogPanel(Transform parent)
@@ -2772,49 +2430,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         panel.gameObject.SetActive(false);
     }
 
-    private void CreatePlayerStatusHud(Transform parent)
-    {
-        Image panel = CreateImage("PlayerStatus", parent, new Color(0.03f, 0.07f, 0.1f, 0.86f));
-        RectTransform rect = panel.rectTransform;
-        rect.anchorMin = new Vector2(0.5f, 0f);
-        rect.anchorMax = new Vector2(0.5f, 0f);
-        rect.pivot = new Vector2(0.5f, 0f);
-        rect.sizeDelta = new Vector2(320f, 142f);
-        rect.anchoredPosition = new Vector2(-120f, 16f);
-        AddOutline(panel.gameObject, new Color(0.15f, 0.32f, 0.44f, 1f));
-
-        playerStatusTitleText = CreateText("Label", panel.transform, "SHIP STATUS", 16, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
-        SetAnchoredRect(playerStatusTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -8f), new Vector2(-12f, -28f));
-        playerLevelBadgeText = CreateText("LevelBadge", panel.transform, "LVL 1", 13, FontStyle.Bold, new Color(1f, 0.9f, 0.42f));
-        playerLevelBadgeText.alignment = TextAlignmentOptions.Right;
-        SetAnchoredRect(playerLevelBadgeText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-94f, -8f), new Vector2(-12f, -28f));
-
-        playerShieldFill = CreateLabeledBar(panel.transform, "Shield", new Vector2(12f, -40f), new Color(0.23f, 0.62f, 1f));
-        playerArmorFill = CreateLabeledBar(panel.transform, "Armor", new Vector2(12f, -64f), new Color(0.72f, 0.72f, 0.75f));
-        playerHullFill = CreateLabeledBar(panel.transform, "Hull", new Vector2(12f, -88f), new Color(0.86f, 0.31f, 0.31f));
-        playerExperienceFill = CreateLabeledBar(panel.transform, "XP", new Vector2(12f, -112f), new Color(0.58f, 0.42f, 1f));
-        playerShieldValueText = CreateBarValueText(playerShieldFill, 180f);
-        playerArmorValueText = CreateBarValueText(playerArmorFill, 180f);
-        playerHullValueText = CreateBarValueText(playerHullFill, 180f);
-        playerExperienceValueText = CreateBarValueText(playerExperienceFill, 180f);
-
-        TMP_Text capacitorLabel = CreateText("CapLabel", panel.transform, "Cap", 13, FontStyle.Bold, new Color(0.95f, 0.9f, 0.6f));
-        SetAnchoredRect(capacitorLabel.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-86f, 18f), new Vector2(-50f, 34f));
-        capacitorFill = CreateImage("CapacitorFill", panel.transform, new Color(0.95f, 0.85f, 0.35f, 1f));
-        RectTransform capRect = capacitorFill.rectTransform;
-        capRect.anchorMin = new Vector2(1f, 0f);
-        capRect.anchorMax = new Vector2(1f, 0f);
-        capRect.pivot = new Vector2(0f, 0.5f);
-        capRect.sizeDelta = new Vector2(30f, 60f);
-        capRect.anchoredPosition = new Vector2(-44f, 46f);
-        AddOutline(capacitorFill.gameObject, new Color(0.96f, 0.82f, 0.32f, 1f));
-
-        capacitorValueText = CreateText("CapValue", panel.transform, string.Empty, 10, FontStyle.Bold, new Color(1f, 0.95f, 0.68f));
-        capacitorValueText.alignment = TextAlignmentOptions.Center;
-        capacitorValueText.textWrappingMode = TextWrappingModes.NoWrap;
-        SetAnchoredRect(capacitorValueText.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-94f, 0f), new Vector2(-10f, 16f));
-    }
-
     private void CreateModuleHud(Transform parent)
     {
         RectTransform root = new GameObject("ModulePanel", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -2861,59 +2476,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         pauseHudButtonView = CreateMenuButton(parent, "PauseButton", new Vector2(0f, 1f), new Vector2(46f, -34f), new Vector2(76f, 38f));
         pauseHudButtonView.Label.text = "MENU";
         pauseHudButtonView.Label.fontSize = 14f;
-    }
-
-    private void CreateEquipmentHud(Transform parent)
-    {
-        RectTransform panel = new GameObject("EquipmentPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup)).GetComponent<RectTransform>();
-        panel.SetParent(parent, false);
-        panel.anchorMin = new Vector2(0.5f, 0f);
-        panel.anchorMax = new Vector2(0.5f, 0f);
-        panel.pivot = new Vector2(0.5f, 0f);
-        panel.anchoredPosition = new Vector2(-120f, 145f);
-        panel.sizeDelta = new Vector2(420f, 130f);
-
-        Image panelBackground = panel.GetComponent<Image>();
-        panelBackground.color = new Color(0.03f, 0.07f, 0.1f, 0.86f);
-        AddOutline(panelBackground.gameObject, new Color(0.15f, 0.32f, 0.44f, 1f));
-
-        VerticalLayoutGroup verticalLayout = panel.GetComponent<VerticalLayoutGroup>();
-        verticalLayout.padding = new RectOffset(10, 10, 8, 8);
-        verticalLayout.spacing = 8f;
-        verticalLayout.childControlWidth = true;
-        verticalLayout.childControlHeight = false;
-        verticalLayout.childForceExpandWidth = false;
-        verticalLayout.childForceExpandHeight = false;
-
-        RectTransform weaponsRow = CreateEquipmentRow(panel, "WeaponsRow");
-        RectTransform modulesRow = CreateEquipmentRow(panel, "ModulesRow");
-
-        EquipmentUIController runtimeController = panel.gameObject.AddComponent<EquipmentUIController>();
-        runtimeController.Configure(this, slotUiPrefab, weaponsRow, modulesRow);
-        equipmentUiController = runtimeController;
-    }
-
-    private static RectTransform CreateEquipmentRow(Transform parent, string objectName)
-    {
-        RectTransform row = new GameObject(objectName, typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter)).GetComponent<RectTransform>();
-        row.SetParent(parent, false);
-        row.anchorMin = new Vector2(0f, 0.5f);
-        row.anchorMax = new Vector2(1f, 0.5f);
-        row.pivot = new Vector2(0.5f, 0.5f);
-        row.sizeDelta = new Vector2(0f, 52f);
-
-        HorizontalLayoutGroup horizontalLayout = row.GetComponent<HorizontalLayoutGroup>();
-        horizontalLayout.spacing = 10f;
-        horizontalLayout.childAlignment = TextAnchor.MiddleLeft;
-        horizontalLayout.childControlWidth = true;
-        horizontalLayout.childControlHeight = true;
-        horizontalLayout.childForceExpandWidth = false;
-        horizontalLayout.childForceExpandHeight = false;
-
-        ContentSizeFitter fitter = row.GetComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        return row;
     }
 
     private void CreateVirtualJoystick(Transform parent)
@@ -3806,54 +3368,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private EnemyRow CreateEnemyRow(RectTransform parent, int index)
-    {
-        Image rowBackground = CreateImage("EnemyRow_" + index, parent, new Color(0.06f, 0.11f, 0.16f, 0.95f));
-        RectTransform rowRect = rowBackground.rectTransform;
-        rowRect.anchorMin = new Vector2(0f, 1f);
-        rowRect.anchorMax = new Vector2(1f, 1f);
-        rowRect.pivot = new Vector2(0.5f, 1f);
-        rowRect.sizeDelta = new Vector2(0f, 46f);
-        rowRect.anchoredPosition = new Vector2(0f, -index * 52f);
-        AddOutline(rowBackground.gameObject, new Color(0.12f, 0.24f, 0.34f, 1f));
-
-        TMP_Text text = CreateText("RowText", rowBackground.transform, string.Empty, 12, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
-        SetAnchoredRect(text.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -4f), new Vector2(-8f, -18f));
-
-        Image shieldFill = CreateMiniBar(rowBackground.transform, new Vector2(132f, -24f), new Color(0.23f, 0.62f, 1f));
-        Image armorFill = CreateMiniBar(rowBackground.transform, new Vector2(132f, -32f), new Color(0.72f, 0.72f, 0.75f));
-        Image hullFill = CreateMiniBar(rowBackground.transform, new Vector2(132f, -40f), new Color(0.86f, 0.31f, 0.31f));
-
-        return new EnemyRow
-        {
-            RootTransform = rowRect,
-            RootText = text,
-            ShieldFill = shieldFill,
-            ArmorFill = armorFill,
-            HullFill = hullFill
-        };
-    }
-
-    private Image CreateMiniBar(Transform parent, Vector2 anchoredPosition, Color fillColor)
-    {
-        Image background = CreateImage("BarBg", parent, new Color(0.12f, 0.17f, 0.2f, 1f));
-        RectTransform bgRect = background.rectTransform;
-        bgRect.anchorMin = new Vector2(0f, 1f);
-        bgRect.anchorMax = new Vector2(0f, 1f);
-        bgRect.pivot = new Vector2(0f, 1f);
-        bgRect.sizeDelta = new Vector2(110f, 4f);
-        bgRect.anchoredPosition = anchoredPosition;
-
-        Image fill = CreateImage("Fill", background.transform, fillColor);
-        RectTransform fillRect = fill.rectTransform;
-        fillRect.anchorMin = new Vector2(0f, 0f);
-        fillRect.anchorMax = new Vector2(0f, 1f);
-        fillRect.pivot = new Vector2(0f, 0.5f);
-        fillRect.sizeDelta = new Vector2(110f, 0f);
-        fillRect.anchoredPosition = Vector2.zero;
-        return fill;
-    }
-
     private void HandleInput(float deltaTime)
     {
         Keyboard keyboard = Keyboard.current;
@@ -4505,65 +4019,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
-    private void UpdateUI()
-    {
-        if (player == null)
-        {
-            return;
-        }
-
-        if (healthBar != null)
-        {
-            healthBar.value = player.HullPercent;
-        }
-
-        if (scoreText != null)
-        {
-            scoreText.text = player.Experience.ToString();
-        }
-
-        if (waveText != null)
-        {
-            waveText.text = wave.ToString();
-        }
-    }
-
-    private void UpdateEnemyRows()
-    {
-        enemies.Sort((left, right) =>
-            Vector3.Distance(left.Transform.position, player.Transform.position)
-                .CompareTo(Vector3.Distance(right.Transform.position, player.Transform.position)));
-
-        for (int i = 0; i < enemyRows.Count; i++)
-        {
-            bool active = i < enemies.Count;
-            enemyRows[i].RootTransform.gameObject.SetActive(active);
-            if (!active)
-            {
-                enemyRows[i].Enemy = null;
-                continue;
-            }
-
-            EnemyShip enemy = enemies[i];
-            enemyRows[i].Enemy = enemy;
-            float distance = Vector3.Distance(player.Transform.position, enemy.Transform.position);
-            enemyRows[i].RootText.text = string.Format(
-                "{0,-7}  {1,-11}  {2,4:0.0}km",
-                enemy.Id,
-                enemy.Type,
-                distance);
-
-            SetFillWidth(enemyRows[i].ShieldFill.rectTransform, enemy.ShieldPercent, 110f);
-            SetFillWidth(enemyRows[i].ArmorFill.rectTransform, enemy.ArmorPercent, 110f);
-            SetFillWidth(enemyRows[i].HullFill.rectTransform, enemy.HullPercent, 110f);
-
-            Image background = enemyRows[i].RootTransform.GetComponent<Image>();
-            background.color = targetingController != null && enemy == targetingController.TargetEnemy
-                ? new Color(0.12f, 0.3f, 0.42f, 1f)
-                : new Color(0.06f, 0.11f, 0.16f, 0.95f);
-        }
-    }
-
     private void UpdateModuleVisual(ModuleState module)
     {
         combatHudPresenter?.UpdateModuleVisual(module);
@@ -4612,49 +4067,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         uiFactory.AddOutline(target, color);
     }
 
-    private Image CreateBar(Transform parent, Vector2 anchoredPosition, Color fillColor)
-    {
-        return uiFactory.CreateBar(parent, squareSprite, anchoredPosition, fillColor);
-    }
-
-    private Image CreateLabeledBar(Transform parent, string label, Vector2 anchoredPosition, Color fillColor)
-    {
-        return uiFactory.CreateLabeledBar(parent, squareSprite, uiFont, label, anchoredPosition, fillColor);
-    }
-
-    private TMP_Text CreateBarValueText(Image fillImage, float width)
-    {
-        Transform parent = fillImage != null ? fillImage.transform.parent : null;
-        if (parent == null)
-        {
-            return null;
-        }
-
-        TMP_Text valueText = CreateText("Value", parent, string.Empty, 10, FontStyle.Bold, Color.white);
-        valueText.alignment = TextAlignmentOptions.Center;
-        valueText.textWrappingMode = TextWrappingModes.NoWrap;
-        valueText.raycastTarget = false;
-        SetAnchoredRect(valueText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        return valueText;
-    }
-
-    private static string FormatBarValue(float current, float max)
-    {
-        return Mathf.RoundToInt(Mathf.Max(0f, current)) + " / " + Mathf.RoundToInt(Mathf.Max(0f, max));
-    }
-
     private void SetAnchoredRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
     {
         uiFactory.SetAnchoredRect(rect, anchorMin, anchorMax, offsetMin, offsetMax);
     }
 
-    private void SetFillWidth(RectTransform rect, float percent, float maxWidth)
-    {
-        uiFactory.SetFillWidth(rect, percent, maxWidth);
-    }
-
-    private void SetFillHeight(RectTransform rect, float percent, float maxHeight)
-    {
-        uiFactory.SetFillHeight(rect, percent, maxHeight);
-    }
 }

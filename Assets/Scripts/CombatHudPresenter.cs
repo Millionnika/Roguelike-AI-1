@@ -28,6 +28,9 @@ public sealed class CombatHudPresenter : MonoBehaviour
     private Font uiFont;
     private Sprite squareSprite;
 
+    private TMP_Text overviewTitleText;
+    private TMP_Text enemyHeaderText;
+    private TMP_Text playerStatusTitleText;
     private TMP_Text statusText;
     private TMP_Text targetNameText;
     private TMP_Text targetDistanceText;
@@ -156,6 +159,13 @@ public sealed class CombatHudPresenter : MonoBehaviour
         if (healthBar != null) healthBar.value = context.Player.HullPercent;
         if (scoreText != null) scoreText.text = context.Player.Experience.ToString();
         if (waveText != null) waveText.text = context.CurrentWave.ToString();
+    }
+
+    internal void RefreshLocalizedTexts()
+    {
+        if (overviewTitleText != null) overviewTitleText.text = Localize("overview");
+        if (enemyHeaderText != null) enemyHeaderText.text = Localize("enemy_header");
+        if (playerStatusTitleText != null) playerStatusTitleText.text = Localize("ship_status");
     }
 
     internal void UpdateModuleVisual(ModuleState module)
@@ -347,6 +357,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
         }
 
         overviewPanelRect = panel.GetComponent<RectTransform>();
+        overviewTitleText = FindText(panel, "Title");
         Transform target = panel.Find("TargetPanel");
         targetPanel = FindImage(panel, "TargetPanel");
         targetNameText = FindText(target, "TargetName");
@@ -357,6 +368,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
         targetShieldValueText = FindIndexedText(target, "Value", 0);
         targetArmorValueText = FindIndexedText(target, "Value", 1);
         targetHullValueText = FindIndexedText(target, "Value", 2);
+        enemyHeaderText = FindText(panel, "EnemyHeader");
         capacitorText = FindText(panel, "CapText");
         targetDisplayText = FindText(panel, "TargetDisplay");
         shipText = FindText(panel, "ShipText");
@@ -397,6 +409,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
             return;
         }
 
+        playerStatusTitleText = FindText(panel, "Label");
         playerShieldFill = FindImage(panel, "ShieldBg/ShieldFill");
         playerArmorFill = FindImage(panel, "ArmorBg/ArmorFill");
         playerHullFill = FindImage(panel, "HullBg/HullFill");
@@ -459,7 +472,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
         rect.anchoredPosition = new Vector2(-10f, 0f);
         AddOutline(panel.gameObject, new Color(0.12f, 0.28f, 0.4f, 1f));
 
-        TMP_Text overviewTitleText = CreateText("Title", panel.transform, "OVERVIEW", 20, FontStyle.Bold, new Color(0.52f, 0.8f, 1f));
+        overviewTitleText = CreateText("Title", panel.transform, "OVERVIEW", 20, FontStyle.Bold, new Color(0.52f, 0.8f, 1f));
         RectTransform titleRect = overviewTitleText.rectTransform;
         titleRect.anchorMin = new Vector2(0f, 1f);
         titleRect.anchorMax = new Vector2(1f, 1f);
@@ -488,7 +501,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
         targetArmorValueText = CreateBarValueText(targetArmorFill);
         targetHullValueText = CreateBarValueText(targetHullFill);
 
-        TMP_Text enemyHeaderText = CreateText("EnemyHeader", panel.transform, "ID          TYPE        DIST       STATUS", 12, FontStyle.Bold, new Color(0.52f, 0.68f, 0.8f));
+        enemyHeaderText = CreateText("EnemyHeader", panel.transform, "ID          TYPE        DIST       STATUS", 12, FontStyle.Bold, new Color(0.52f, 0.68f, 0.8f));
         SetAnchoredRect(enemyHeaderText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(10f, -176f), new Vector2(-10f, -196f));
 
         RectTransform rowsRoot = new GameObject("EnemyRows", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -533,8 +546,8 @@ public sealed class CombatHudPresenter : MonoBehaviour
         rect.anchoredPosition = new Vector2(-120f, 16f);
         AddOutline(panel.gameObject, new Color(0.15f, 0.32f, 0.44f, 1f));
 
-        TMP_Text title = CreateText("Label", panel.transform, "SHIP STATUS", 16, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
-        SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -8f), new Vector2(-12f, -28f));
+        playerStatusTitleText = CreateText("Label", panel.transform, "SHIP STATUS", 16, FontStyle.Bold, new Color(0.85f, 0.92f, 1f));
+        SetAnchoredRect(playerStatusTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -8f), new Vector2(-12f, -28f));
         playerLevelBadgeText = CreateText("LevelBadge", panel.transform, "LVL 1", 13, FontStyle.Bold, new Color(1f, 0.9f, 0.42f));
         playerLevelBadgeText.alignment = TextAlignmentOptions.Right;
         SetAnchoredRect(playerLevelBadgeText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-94f, -8f), new Vector2(-12f, -28f));

@@ -28696,16 +28696,27 @@ MonoBehaviour:
   waveText: {fileID: 0}
   equipmentUiController: {fileID: 0}
   slotUiPrefab: {fileID: 0}
+  combatAudioController: {fileID: 0}
+  combatLogPresenter: {fileID: 0}
+  combatCameraController: {fileID: 0}
+  encounterFlowController: {fileID: 0}
+  timelineSpawnController: {fileID: 0}
+  enemySpawner: {fileID: 0}
+  targetingController: {fileID: 0}
+  moveCommandVisualController: {fileID: 0}
+  minimapController: {fileID: 0}
+  backgroundController: {fileID: 0}
+  playerShipController: {fileID: 0}
+  combatHudPresenter: {fileID: 0}
+  encounterChoicePresenter: {fileID: 0}
+  nonCombatEncounterPresenter: {fileID: 0}
   shieldHitMaterial: {fileID: 0}
-  startDirectlyFromExternalMenu: 1
+  startDirectlyFromExternalMenu: 0
   mainMenuSceneName: MainMenuScene
   availableShips:
   - {fileID: 11400000, guid: 0ee6c6b9a0b1c644d8595ee8f3c68c16, type: 2}
   - {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
   currentTimeline: {fileID: 11400000, guid: f377acad0504b83458ca04b67eed1de1, type: 2}
-  runManager: {fileID: 1649103440}
-  runMapDirector: {fileID: 1649103439}
-  runEventDirector: {fileID: 1649103438}
   testNextEncounters:
   - {fileID: 11400000, guid: 6653bd4c3e84d254c9ce40c0246bc4bb, type: 2}
   - {fileID: 11400000, guid: 6371f763495561347a30ea3d051d432c, type: 2}
@@ -28713,64 +28724,16 @@ MonoBehaviour:
   - {fileID: 11400000, guid: e9381c7d90631244c822707d18531fef, type: 2}
   - {fileID: 11400000, guid: 4fcb9ce8d001a1f4b846c2de32724102, type: 2}
   - {fileID: 11400000, guid: d0dcfbcfc2740b14bb54d58ad31f8ae2, type: 2}
-  repairHullPercent: 0.2
-  restHullPercent: 0.1
   backgroundLayers:
   - prefab: {fileID: 0}
     parallaxFactor: 0
     tileSize: 0
     gridRadius: 0
-  offscreenViewportMargin: 0.1
-  timelinePhaseDuration: 30
-  timelineDifficultyPerPhase: 0.14
-  targetFrameSourceSprite: {fileID: -4119334708683220384, guid: c46d0db0bda5cb244911db61ae69ecad, type: 3}
-  targetFrameColor: {r: 0.45, g: 0.75, b: 1, a: 0.95}
-  targetLineColor: {r: 1, g: 1, b: 1, a: 0.18431373}
-  targetFramePadding: 0.35
-  targetWorldClickPadding: 0.25
-  targetLineWidth: 0.035
-  targetLineSortingOrder: 1
-  targetLineDashed: 0
-  targetLineDashSize: 0.35
-  targetLineGapSize: 0.2
-  moveCommandLineColor: {r: 0.55, g: 0.9, b: 1, a: 0.45}
-  moveCommandLineWidth: 0.03
-  moveCommandLineSortingOrder: 0
-  moveCommandLineDashed: 1
-  moveCommandLineDashSize: 0.26
-  moveCommandLineGapSize: 0.17
-  moveCommandMarkerSprite: {fileID: 0}
-  moveCommandMarkerColor: {r: 0.78, g: 0.95, b: 1, a: 0.95}
-  moveCommandMarkerSize: 0.28
-  minimapEnabled: 1
-  minimapOrthoSize: 20
-  minimapPanelSize: 200
-  minimapBackgroundColor: {r: 0.03, g: 0.08, b: 0.14, a: 0.82}
   shieldPulseAlpha: 0.12
   shieldPulseSpeed: 3.2
   shieldHitAlphaBoost: 0.55
   shieldHitTintStrength: 0.65
   shieldHitTint: {r: 0.72, g: 0.95, b: 1, a: 1}
-  cameraDefaultOrthographicSize: 11
-  cameraMinOrthographicSize: 5
-  cameraMaxOrthographicSize: 20
-  cameraZoomStep: 1.2
-  cameraZoomSmoothing: 10
-  cameraFollowSmoothing: 6
-  cameraVelocityLookAhead: 0.15
-  shotBaseVolume: 0.4
-  shotPitchRandomRange: 0.08
-  shotVolumeRandomRange: 0.12
-  shotAudioVoices: 4
-  enemyShotSpatialBlend: 0.8
-  enemyShotNearDistance: 2.5
-  enemyShotFarDistance: 18
-  enemyShotNearVolumeMultiplier: 1.05
-  enemyShotFarVolumeMultiplier: 0.35
-  enemyShotPanStrength: 0.75
-  enemyShotPanDistance: 12
-  enemyShotNearPitchOffset: 0.06
-  enemyShotFarPitchOffset: -0.08
 --- !u!1 &1720474482
 GameObject:
   m_ObjectHideFlags: 0
