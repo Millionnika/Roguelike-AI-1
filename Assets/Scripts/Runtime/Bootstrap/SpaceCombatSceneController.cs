@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using SpaceFrontier.Player;
 using TMPro;
 using UnityEngine;
@@ -48,6 +47,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private BackgroundController backgroundController;
     [Tooltip("Компонент, создающий корабль игрока, применяющий ShipDataSO, экипировку, слои и прием урона.")]
     [SerializeField] private PlayerShipController playerShipController;
+    [Tooltip("Компонент, владеющий runtime-модулями игрока: создание, биндинг HUD-слотов и переключение клавишами/кликом.")]
+    [SerializeField] private PlayerModuleController playerModuleController;
     [Header("Боевой HUD")]
     [Tooltip("Компонент отображения боевого HUD: статус игрока, цель, обзор врагов и панель экипировки.")]
     [SerializeField] private CombatHudPresenter combatHudPresenter;
@@ -59,6 +60,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private GameOverPresenter gameOverPresenter;
     [Tooltip("Presenter выбора улучшения при повышении уровня. Отвечает за панель, тексты вариантов и UI-ввод выбора.")]
     [SerializeField] private PerkSelectionPresenter perkSelectionPresenter;
+    [Tooltip("Компонент прогресса игрока: опыт, повышение уровня, выбор улучшений и блокировка gameplay во время выбора.")]
+    [SerializeField] private PlayerProgressionController playerProgressionController;
     [Tooltip("Presenter стартового меню, ангара и настроек. Отвечает за UI, страницы и обработку нажатий меню.")]
     [SerializeField] private StartMenuPresenter startMenuPresenter;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
@@ -102,10 +105,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     }
 
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
-    private readonly List<ModuleState> modules = new List<ModuleState>();
-    private readonly List<PerkChoice> activePerks = new List<PerkChoice>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
-    private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
 
     private IPlatformService platformService;
@@ -130,17 +130,14 @@ public class SpaceCombatSceneController : MonoBehaviour
     private GameObject joystickRootObject;
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
-    private Image joystickBaseImage;
     private Image joystickKnobImage;
 
     private Font uiFont;
     private Sprite squareSprite;
     private Sprite circleSprite;
     private Sprite ringSprite;
-    private Sprite diamondSprite;
 
     private int wave = 1;
-    private bool levelUpPending;
     private bool gameOver;
     private bool gameStarted;
     private bool gamePaused;
@@ -166,10 +163,6 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
     public ShipEquipmentState CurrentEquipmentState => playerShipController != null ? playerShipController.EquipmentState : equipmentState;
-
-    private void OnValidate()
-    {
-    }
 
     internal void ConfigureServices(
         IPlatformService newPlatformService,
@@ -469,6 +462,31 @@ public class SpaceCombatSceneController : MonoBehaviour
         player = playerShipController.Player;
     }
 
+    private void EnsurePlayerModuleController()
+    {
+        if (playerModuleController == null)
+        {
+            playerModuleController = GetComponent<PlayerModuleController>();
+        }
+
+        if (playerModuleController == null)
+        {
+            playerModuleController = FindAnyObjectByType<PlayerModuleController>(FindObjectsInactive.Include);
+        }
+
+        if (playerModuleController == null)
+        {
+            playerModuleController = gameObject.AddComponent<PlayerModuleController>();
+        }
+
+        playerModuleController.Initialize(Localize, LogMessage, UpdateModuleVisual, RefreshEquipmentUi);
+        playerModuleController.SetPlayer(player);
+        if (modulePanelRect != null)
+        {
+            playerModuleController.BindModuleSlots(modulePanelRect);
+        }
+    }
+
     private void EnsureCombatHudPresenter()
     {
         if (combatHudPresenter == null)
@@ -586,7 +604,27 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         perkSelectionPresenter.Initialize(Localize);
-        perkSelectionPresenter.OnPerkSelected = ApplyPerk;
+    }
+
+    private void EnsurePlayerProgressionController()
+    {
+        if (playerProgressionController == null)
+        {
+            playerProgressionController = GetComponent<PlayerProgressionController>();
+        }
+
+        if (playerProgressionController == null)
+        {
+            playerProgressionController = FindAnyObjectByType<PlayerProgressionController>(FindObjectsInactive.Include);
+        }
+
+        if (playerProgressionController == null)
+        {
+            playerProgressionController = gameObject.AddComponent<PlayerProgressionController>();
+        }
+
+        playerProgressionController.Initialize(perkSelectionPresenter, Localize, LogMessage);
+        playerProgressionController.SetPlayer(player);
     }
 
     private void EnsureStartMenuPresenter()
@@ -642,6 +680,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsureConfirmationDialogPresenter();
         EnsureGameOverPresenter();
         EnsurePerkSelectionPresenter();
+        EnsurePlayerProgressionController();
         EnsureStartMenuPresenter();
         EnsureEncounterFlowController();
         EnsureTimelineSpawnController();
@@ -651,11 +690,15 @@ public class SpaceCombatSceneController : MonoBehaviour
         CreateStarterShips();
         BuildWorld();
         EnsurePlayerShipController();
+        EnsurePlayerModuleController();
+        EnsurePlayerProgressionController();
         EnsureEnemySpawner();
         EnsureTargetingController();
         EnsureMoveCommandVisualController();
         EnsureMinimapController();
         SpawnPlayer();
+        EnsurePlayerModuleController();
+        EnsurePlayerProgressionController();
         EnsureBackgroundController();
         EnsureCombatAudioController();
         EnsureCombatCameraController();
@@ -817,7 +860,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (levelUpPending)
+        if (IsLevelUpPending())
         {
             UpdatePerkSelectionInput();
             UpdateHud();
@@ -830,7 +873,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         UpdateTimelineSpawner(deltaTime);
         TryCompleteEncounter();
         backgroundController?.Tick();
-        UpdateEffects(deltaTime);
         UpdateVisuals();
         UpdateHud();
     }
@@ -843,20 +885,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         startMenuPresenter?.TickInput();
-    }
-
-    private static int ReadShipHotkey(Keyboard keyboard)
-    {
-        if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) return 0;
-        if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) return 1;
-        if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) return 2;
-        if (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame) return 3;
-        if (keyboard.digit5Key.wasPressedThisFrame || keyboard.numpad5Key.wasPressedThisFrame) return 4;
-        if (keyboard.digit6Key.wasPressedThisFrame || keyboard.numpad6Key.wasPressedThisFrame) return 5;
-        if (keyboard.digit7Key.wasPressedThisFrame || keyboard.numpad7Key.wasPressedThisFrame) return 6;
-        if (keyboard.digit8Key.wasPressedThisFrame || keyboard.numpad8Key.wasPressedThisFrame) return 7;
-        if (keyboard.digit9Key.wasPressedThisFrame || keyboard.numpad9Key.wasPressedThisFrame) return 8;
-        return -1;
     }
 
     private void LateUpdate()
@@ -947,12 +975,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             float radius = size * 0.48f;
             float innerRadius = size * 0.39f;
             return distance <= radius && distance >= innerRadius ? Color.white : Color.clear;
-        });
-        diamondSprite = CreateFilledSprite(64, 64, (x, y, size) =>
-        {
-            float center = (size - 1) * 0.5f;
-            float normalized = (Mathf.Abs(x - center) + Mathf.Abs(y - center)) / center;
-            return normalized <= 0.95f ? Color.white : Color.clear;
         });
     }
 
@@ -1147,6 +1169,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             combatCameraController.SetTarget(player.Transform);
         }
+        playerModuleController?.SetPlayer(player);
+        playerProgressionController?.SetPlayer(player);
     }
 
     private void SelectShip(int index)
@@ -1194,7 +1218,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         playerShipController.ApplyShipDefinition(ship, resetProgress);
         player = playerShipController.Player;
-        CreateModules(ship.moduleSlotCount, ship);
+        EnsurePlayerModuleController();
+        playerModuleController.SetPlayer(player);
+        playerModuleController.CreateModules(ship.moduleSlotCount, ship);
+        EnsurePlayerProgressionController();
+        playerProgressionController.SetPlayer(player);
     }
 
     private void OnEnemyDamageApplied(EnemyShip enemy, DamageInfo info, DamageResolutionResult result)
@@ -1214,9 +1242,14 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         ShipEquipmentState state = CurrentEquipmentState;
         EquipmentStateChanged?.Invoke(state);
+        RefreshEquipmentUi();
+    }
+
+    private void RefreshEquipmentUi()
+    {
         if (equipmentUiController != null)
         {
-            equipmentUiController.Refresh(state);
+            equipmentUiController.Refresh(CurrentEquipmentState);
         }
     }
 
@@ -1245,12 +1278,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         pauseSettingsOpened = false;
         pendingConfirmAction = ConfirmAction.None;
         confirmationDialogPresenter?.Hide();
-        levelUpPending = false;
+        EnsurePlayerProgressionController();
+        playerProgressionController?.ResetRunState();
         wave = 1;
         enemySpawnSequence = 0;
         targetingController?.ClearTarget();
-        activePerks.Clear();
-        perkSelectionPresenter?.Hide();
         ShowGameOverPanel(false);
         if (combatLogPresenter != null)
         {
@@ -1271,7 +1303,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             timelineSpawnController.ResetRuntime();
             wave = timelineSpawnController.CurrentWave;
         }
-        ResetModules();
+        playerModuleController?.ResetModules();
         if (resetRunState)
         {
             ApplyShipDefinition(availableShips[selectedShipIndex], true);
@@ -1353,7 +1385,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void TryCompleteEncounter()
     {
-        if (gameOver || levelUpPending || encounterFlowController == null)
+        if (gameOver || IsLevelUpPending() || encounterFlowController == null)
         {
             return;
         }
@@ -1415,21 +1447,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         StartRun(false);
     }
 
-    private void ResetModules()
-    {
-        for (int i = 0; i < modules.Count; i++)
-        {
-            modules[i].Active = false;
-            modules[i].WeaponTimer = 0f;
-            UpdateModuleVisual(modules[i]);
-        }
-
-        if (equipmentUiController != null)
-        {
-            equipmentUiController.Refresh(CurrentEquipmentState);
-        }
-    }
-
     private void ShowStartMenu(bool show)
     {
         if (show)
@@ -1461,87 +1478,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             currentLanguage == LanguageOption.RU,
             selectedFpsIndex,
             useVirtualJoystick);
-    }
-
-    private static WeaponDataSO GetPrimaryWeapon(ShipDataSO ship)
-    {
-        if (ship == null || ship.startingWeapons == null)
-        {
-            return null;
-        }
-
-        for (int i = 0; i < ship.startingWeapons.Count; i++)
-        {
-            if (ship.startingWeapons[i] != null)
-            {
-                return ship.startingWeapons[i];
-            }
-        }
-
-        return null;
-    }
-
-    private void CreateModules(int moduleSlotCount, ShipDataSO ship)
-    {
-        modules.Clear();
-        int supportedSlots = Mathf.Clamp(Mathf.Max(1, moduleSlotCount), 1, 4);
-        WeaponDataSO primaryWeapon = GetPrimaryWeapon(ship);
-        float capPerShot = primaryWeapon != null ? primaryWeapon.capacitorPerShot : 0f;
-        float rateOfFire = primaryWeapon != null
-            ? (primaryWeapon.cooldown > 0f ? primaryWeapon.cooldown : primaryWeapon.fireRate)
-            : 1f;
-        float damage = primaryWeapon != null ? primaryWeapon.damage : 0f;
-
-        modules.Add(new ModuleState
-        {
-            Name = "Weapon Group",
-            KeyLabel = "1",
-            Type = ModuleType.Weapon,
-            CapPerShot = capPerShot,
-            RateOfFire = rateOfFire,
-            Damage = damage,
-            OptimalRange = 5.1f,
-            FalloffRange = 3.2f,
-            WeaponData = primaryWeapon
-        });
-
-        if (supportedSlots > 1)
-        {
-            modules.Add(new ModuleState
-            {
-                Name = "Shield Rep",
-                KeyLabel = "2",
-                Type = ModuleType.ShieldRep,
-                CapPerSecond = 7f,
-                RepairPerSecond = 32f
-            });
-        }
-
-        if (supportedSlots > 2)
-        {
-            modules.Add(new ModuleState
-            {
-                Name = "Armor Rep",
-                KeyLabel = "3",
-                Type = ModuleType.ArmorRep,
-                CapPerSecond = 6f,
-                RepairPerSecond = 24f
-            });
-        }
-
-        if (supportedSlots > 3)
-        {
-            modules.Add(new ModuleState
-            {
-                Name = "Afterburn",
-                KeyLabel = "4",
-                Type = ModuleType.Afterburner,
-                CapPerSecond = 5f,
-                SpeedBonus = 1.55f
-            });
-        }
-
-        BindModuleSlots();
     }
 
     private string NextEnemyId()
@@ -1617,20 +1553,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     public void AddExternalExperience(int amount)
     {
-        if (player == null || amount <= 0)
-        {
-            return;
-        }
-
-        player.AddExperience(amount);
-        while (player.Experience >= player.ExperienceToNext && player.ExperienceToNext > 0)
-        {
-            BeginLevelUp();
-            if (levelUpPending)
-            {
-                break;
-            }
-        }
+        playerProgressionController?.AddExternalExperience(amount);
     }
 
     private EnemyShip CreateEnemy(string id, ShipDataSO shipData, Vector3 position, float levelScale)
@@ -1639,20 +1562,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         return enemySpawner != null
             ? enemySpawner.SpawnEnemy(id, shipData, position, levelScale, enemies.Count)
             : null;
-    }
-
-    private static void RefreshWeaponVisuals(List<WeaponDataSO> weapons, List<Transform> muzzles)
-    {
-        if (muzzles == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < muzzles.Count; i++)
-        {
-            WeaponDataSO weapon = weapons != null && i < weapons.Count ? weapons[i] : null;
-            AttachWeaponVisual(weapon, muzzles[i]);
-        }
     }
 
     private static void AttachWeaponVisual(WeaponDataSO weapon, Transform muzzleTransform)
@@ -1714,40 +1623,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         return null;
-    }
-
-    private static Transform FindWeaponMuzzle(Transform root, int index)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        Transform slotsRoot = FindDirectChild(root, "WeaponSlots");
-        if (slotsRoot == null)
-        {
-            slotsRoot = root;
-        }
-
-        Transform indexedSlot = FindDirectChild(slotsRoot, "WeaponSlot_" + (index + 1));
-        if (indexedSlot != null)
-        {
-            Transform muzzle = FindMuzzleTransform(indexedSlot, index);
-            return muzzle != null ? muzzle : indexedSlot;
-        }
-
-        Transform[] children = root.GetComponentsInChildren<Transform>(true);
-        for (int i = 0; i < children.Length; i++)
-        {
-            string name = children[i].name;
-            if (name.IndexOf("muzzle", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                name.IndexOf("weaponslot", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return children[i];
-            }
-        }
-
-        return root;
     }
 
     private static Transform FindMuzzleTransform(Transform slot, int index)
@@ -2017,7 +1892,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         Transform panel = uiRoot.Find("ModulePanel");
         modulePanelRect = panel != null ? panel.GetComponent<RectTransform>() : null;
-        BindModuleSlots();
+        EnsurePlayerModuleController();
+        playerModuleController.BindModuleSlots(modulePanelRect);
     }
 
     private void BindVirtualJoystick(Transform uiRoot)
@@ -2026,29 +1902,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         joystickRootObject = root != null ? root.gameObject : null;
         Transform baseTransform = root != null ? root.Find("Base") : null;
         joystickAreaRect = baseTransform != null ? baseTransform.GetComponent<RectTransform>() : null;
-        joystickBaseImage = baseTransform != null ? baseTransform.GetComponent<Image>() : null;
         joystickKnobImage = FindImage(baseTransform, "Knob");
         joystickHintText = FindText(baseTransform, "Hint");
-    }
-
-    private UiButtonView BindMenuButton(Transform buttonTransform, string id)
-    {
-        if (buttonTransform == null)
-        {
-            return null;
-        }
-
-        EnsureButton(buttonTransform);
-        EnsureButtonScaleAnimator(buttonTransform.gameObject);
-        RectTransform buttonRect = buttonTransform.GetComponent<RectTransform>();
-        NormalizeAuthoredRect(buttonRect);
-        return new UiButtonView
-        {
-            Id = id,
-            Rect = buttonRect,
-            Background = buttonTransform.GetComponent<Image>(),
-            Label = FindText(buttonTransform, "Label")
-        };
     }
 
     private static void EnsureButton(Transform target)
@@ -2198,15 +2053,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             label.alignment = TextAlignmentOptions.Center;
             SetAnchoredRect(label.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(6f, 24f), new Vector2(-6f, -24f));
 
-            if (i < modules.Count)
-            {
-                modules[i].SlotImage = slot;
-                modules[i].SlotKey = key;
-                modules[i].SlotTitle = label;
-            }
         }
 
-        BindModuleSlots();
+        EnsurePlayerModuleController();
+        playerModuleController.BindModuleSlots(modulePanelRect);
     }
 
     private void CreateVirtualJoystick(Transform parent)
@@ -2227,8 +2077,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         joystickAreaRect.sizeDelta = new Vector2(170f, 170f);
         joystickAreaRect.anchoredPosition = new Vector2(26f, 26f);
         AddOutline(baseImage.gameObject, new Color(0.32f, 0.62f, 0.86f, 0.95f));
-        joystickBaseImage = baseImage;
-
         joystickKnobImage = CreateImage("Knob", baseImage.transform, new Color(0.62f, 0.86f, 1f, 0.8f));
         RectTransform knobRect = joystickKnobImage.rectTransform;
         knobRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -2396,11 +2244,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         };
     }
 
-    private bool IsButtonClicked(UiButtonView button, Vector2 screenPosition)
-    {
-        return button != null && RectTransformUtility.RectangleContainsScreenPoint(button.Rect, screenPosition, null);
-    }
-
     private void HandlePausedInput()
     {
         if (HandleConfirmationInput())
@@ -2457,8 +2300,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameStarted = false;
         gameOver = false;
         gamePaused = false;
-        levelUpPending = false;
-        activePerks.Clear();
+        EnsurePlayerProgressionController();
+        playerProgressionController?.ResetRunState();
         ClearEnemies();
         ClearProjectiles();
         ShowPauseMenu(false);
@@ -2597,44 +2440,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.offsetMax = Vector2.zero;
     }
 
-    private void BindModuleSlots()
-    {
-        for (int i = 0; i < 4; i++)
-        {
-            if (modulePanelRect == null)
-            {
-                continue;
-            }
-
-            Transform slotTransform = modulePanelRect.Find("ModuleSlot_" + i);
-            if (slotTransform == null)
-            {
-                continue;
-            }
-
-            Image slotImage = slotTransform.GetComponent<Image>();
-            TMP_Text slotKey = slotTransform.Find("Key") != null ? slotTransform.Find("Key").GetComponent<TMP_Text>() : null;
-            TMP_Text slotTitle = slotTransform.Find("Label") != null ? slotTransform.Find("Label").GetComponent<TMP_Text>() : null;
-
-            if (i < modules.Count)
-            {
-                ModuleState module = modules[i];
-                module.SlotImage = slotImage;
-                module.SlotKey = slotKey;
-                module.SlotTitle = slotTitle;
-                module.SlotKey.text = "[" + module.KeyLabel + "]";
-                module.SlotTitle.text = module.Name;
-                UpdateModuleVisual(module);
-            }
-            else
-            {
-                if (slotKey != null) slotKey.text = string.Empty;
-                if (slotTitle != null) slotTitle.text = string.Empty;
-                if (slotImage != null) slotImage.color = new Color(0.05f, 0.1f, 0.14f, 0.45f);
-            }
-        }
-    }
-
     private void HandleInput(float deltaTime)
     {
         Keyboard keyboard = Keyboard.current;
@@ -2660,7 +2465,7 @@ public class SpaceCombatSceneController : MonoBehaviour
                 return;
             }
 
-            if (TryToggleModuleFromHud(pointerPosition))
+            if (playerModuleController != null && playerModuleController.TryToggleModuleFromHud(pointerPosition))
             {
                 return;
             }
@@ -2677,13 +2482,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             }
         }
 
-        if (keyboard != null)
-        {
-            if (keyboard.digit1Key.wasPressedThisFrame) ToggleModule(0);
-            if (keyboard.digit2Key.wasPressedThisFrame) ToggleModule(1);
-            if (keyboard.digit3Key.wasPressedThisFrame) ToggleModule(2);
-            if (keyboard.digit4Key.wasPressedThisFrame) ToggleModule(3);
-        }
+        playerModuleController?.HandleHotkeys(keyboard);
 
         PointerInputState pointerState = inputService.ReadPointerState();
         if (suppressPointerMovementUntilRelease && (!pointerState.HasPointer || !pointerState.PrimaryPressed))
@@ -2703,46 +2502,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             pointerState,
             pointerWorldPosition);
         movementService.UpdateMovement(player, movementContext, deltaTime);
-    }
-
-    private void ToggleModule(int index)
-    {
-        if (index < 0 || index >= modules.Count)
-        {
-            return;
-        }
-
-        ModuleState module = modules[index];
-        module.Active = !module.Active;
-
-        if (module.Type == ModuleType.Afterburner && !module.Active)
-        {
-            player.SpeedMultiplier = 1f;
-        }
-
-        UpdateModuleVisual(module);
-        LogMessage(module.Name + (module.Active ? Localize("log_module_on") : Localize("log_module_off")));
-    }
-
-    private bool TryToggleModuleFromHud(Vector2 screenPosition)
-    {
-        if (modulePanelRect == null)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < modules.Count; i++)
-        {
-            Transform slotTransform = modulePanelRect.Find("ModuleSlot_" + i);
-            RectTransform slotRect = slotTransform != null ? slotTransform.GetComponent<RectTransform>() : null;
-            if (slotRect != null && RectTransformUtility.RectangleContainsScreenPoint(slotRect, screenPosition, null))
-            {
-                ToggleModule(i);
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private Vector2 GetMovementVector(Keyboard keyboard)
@@ -2777,7 +2536,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             return true;
         }
 
-        if (modulePanelRect != null && RectTransformUtility.RectangleContainsScreenPoint(modulePanelRect, screenPosition, null))
+        if (playerModuleController != null && playerModuleController.IsModulePanelBlocked(screenPosition))
         {
             return true;
         }
@@ -2868,70 +2627,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         return world;
     }
 
-    private static SpriteRenderer FindChildSpriteRenderer(Transform root, string childName)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        Transform[] children = root.GetComponentsInChildren<Transform>(true);
-        for (int i = 0; i < children.Length; i++)
-        {
-            if (!string.Equals(children[i].name, childName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            return children[i].GetComponent<SpriteRenderer>();
-        }
-
-        return null;
-    }
-
-    private static SpriteRenderer FindChildSpriteRendererContaining(Transform root, string token)
-    {
-        if (root == null || string.IsNullOrEmpty(token))
-        {
-            return null;
-        }
-
-        string lowerToken = token.ToLowerInvariant();
-        SpriteRenderer[] renderers = root.GetComponentsInChildren<SpriteRenderer>(true);
-        for (int i = 0; i < renderers.Length; i++)
-        {
-            SpriteRenderer renderer = renderers[i];
-            if (renderer == null)
-            {
-                continue;
-            }
-
-            if (renderer.name.ToLowerInvariant().Contains(lowerToken))
-            {
-                return renderer;
-            }
-        }
-
-        return null;
-    }
-
-    private ShipShieldVisual EnsureShieldVisual(GameObject owner, SpriteRenderer renderer, Color baseColor, float pulseOffset)
-    {
-        if (owner == null || renderer == null)
-        {
-            return null;
-        }
-
-        ShipShieldVisual shieldVisual = owner.GetComponentInChildren<ShipShieldVisual>(true);
-        if (shieldVisual == null)
-        {
-            shieldVisual = owner.AddComponent<ShipShieldVisual>();
-        }
-
-        shieldVisual.Initialize(renderer, shieldHitMaterial, ringSprite, baseColor, pulseOffset);
-        return shieldVisual;
-    }
-
     private void UpdatePlayer(float deltaTime)
     {
         player.UpdateCapacitor(deltaTime);
@@ -2963,7 +2658,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Player = player,
             Enemies = enemies,
-            Modules = modules,
+            Modules = playerModuleController != null ? playerModuleController.Modules : null,
             EquipmentState = CurrentEquipmentState,
             TargetEnemy = targetingController != null ? targetingController.TargetEnemy : null,
             HasPlayerTarget = hasPlayerTarget,
@@ -2985,79 +2680,13 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (result.LevelUpRequested)
         {
-            BeginLevelUp();
+            playerProgressionController?.HandleLevelUpRequested();
         }
-    }
-
-    private void BeginLevelUp()
-    {
-        player.Level++;
-        player.Experience -= player.ExperienceToNext;
-        player.ExperienceToNext = Mathf.RoundToInt(player.ExperienceToNext * 1.5f);
-
-        player.MaxShield += 50f;
-        player.MaxArmor += 40f;
-        player.MaxHull += 30f;
-        player.Shield = player.MaxShield;
-        player.Armor = player.MaxArmor;
-        player.Hull = player.MaxHull;
-
-        levelUpPending = true;
-        activePerks.Clear();
-
-        List<PerkChoice> pool = new List<PerkChoice>
-        {
-            new PerkChoice { Label = Localize("perk_damage"), Apply = () => player.DamageMultiplier += 0.15f },
-            new PerkChoice
-            {
-                Label = Localize("perk_capacitor"),
-                Apply = () =>
-                {
-                    player.MaxCapacitor = Mathf.Round(player.MaxCapacitor * 1.2f);
-                    player.Capacitor = player.MaxCapacitor;
-                }
-            },
-            new PerkChoice
-            {
-                Label = Localize("perk_shield"),
-                Apply = () =>
-                {
-                    player.MaxShield = Mathf.Round(player.MaxShield * 1.25f);
-                    player.Shield = player.MaxShield;
-                }
-            },
-            new PerkChoice { Label = Localize("perk_speed"), Apply = () => player.Speed += 1.1f },
-            new PerkChoice { Label = Localize("perk_repair"), Apply = () => player.RepairMultiplier += 0.3f }
-        };
-
-        while (activePerks.Count < 3 && pool.Count > 0)
-        {
-            int index = UnityEngine.Random.Range(0, pool.Count);
-            activePerks.Add(pool[index]);
-            pool.RemoveAt(index);
-        }
-
-        perkSelectionPresenter?.Show(activePerks);
-        LogMessage(Localize("log_levelup"), "warning");
     }
 
     private void UpdatePerkSelectionInput()
     {
-        perkSelectionPresenter?.TickInput();
-    }
-
-    private void ApplyPerk(int index)
-    {
-        if (index < 0 || index >= activePerks.Count)
-        {
-            return;
-        }
-
-        activePerks[index].Apply?.Invoke();
-        levelUpPending = false;
-        perkSelectionPresenter?.Hide();
-        LogMessage(Localize("log_perk_selected") + activePerks[index].Label, "warning");
-        activePerks.Clear();
+        playerProgressionController?.TickPerkSelectionInput();
     }
 
     private void UpdateTimelineSpawner(float deltaTime)
@@ -3105,10 +2734,6 @@ public class SpaceCombatSceneController : MonoBehaviour
                 gateHintText.text = Localize("timeline_next_event") + timeLeft.ToString("0.0") + Localize("seconds_short");
             }
         }
-    }
-
-    private void UpdateEffects(float deltaTime)
-    {
     }
 
     private void UpdateVisuals()
@@ -3200,6 +2825,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             combatLogPresenter.Refresh();
         }
+        bool levelUpPending = IsLevelUpPending();
         pauseMenuPresenter?.SetHudButtonVisible(gameStarted && !gameOver && !gamePaused && !levelUpPending);
 
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
@@ -3209,7 +2835,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             Player = player,
             Enemies = enemies,
-            Modules = modules,
+            Modules = playerModuleController != null ? playerModuleController.ReadOnlyModules : null,
             EquipmentState = CurrentEquipmentState,
             TargetingController = targetingController,
             CurrentWave = wave,
@@ -3235,6 +2861,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             gateHintText.transform.parent.gameObject.SetActive(false);
         }
+    }
+
+    private bool IsLevelUpPending()
+    {
+        return playerProgressionController != null && playerProgressionController.LevelUpPending;
     }
 
     private void UpdateModuleVisual(ModuleState module)
