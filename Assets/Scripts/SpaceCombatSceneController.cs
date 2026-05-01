@@ -59,6 +59,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private GameOverPresenter gameOverPresenter;
     [Tooltip("Presenter выбора улучшения при повышении уровня. Отвечает за панель, тексты вариантов и UI-ввод выбора.")]
     [SerializeField] private PerkSelectionPresenter perkSelectionPresenter;
+    [Tooltip("Presenter стартового меню, ангара и настроек. Отвечает за UI, страницы и обработку нажатий меню.")]
+    [SerializeField] private StartMenuPresenter startMenuPresenter;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
@@ -93,13 +95,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Tooltip("Р¦РІРµС‚ РїРѕРґСЃРІРµС‚РєРё С‰РёС‚Р° РїСЂРё РїРѕРїР°РґР°РЅРёРё (fallback).")]
     [SerializeField] private Color shieldHitTint = new Color(0.72f, 0.95f, 1f, 1f);
 
-    private enum StartMenuPage
-    {
-        Main,
-        Hangar,
-        Settings
-    }
-
     private enum LanguageOption
     {
         RU,
@@ -109,9 +104,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
     private readonly List<ModuleState> modules = new List<ModuleState>();
     private readonly List<PerkChoice> activePerks = new List<PerkChoice>();
-    private readonly List<ShipCardView> shipCardViews = new List<ShipCardView>();
-    private readonly List<UiButtonView> mainMenuButtons = new List<UiButtonView>();
-    private readonly List<UiButtonView> settingsButtons = new List<UiButtonView>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly StringBuilder sharedBuilder = new StringBuilder(1024);
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
@@ -134,38 +126,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Canvas hudCanvas;
     private TMP_Text gateHintText;
     private TMP_Text statusText;
-    private TMP_Text startMenuShipNameText;
-    private TMP_Text startMenuRoleText;
-    private TMP_Text startMenuDescriptionText;
-    private TMP_Text startMenuStatsText;
-    private TMP_Text startMenuHintText;
-    private TMP_Text hangarTitleText;
-    private TMP_Text hangarSubtitleText;
-    private TMP_Text mainMenuTitleText;
-    private TMP_Text mainMenuSubtitleText;
-    private TMP_Text settingsTitleText;
-    private TMP_Text settingsSubtitleText;
-    private TMP_Text settingsLanguageLabelText;
-    private TMP_Text settingsFpsLabelText;
     private TMP_Text joystickHintText;
-    private GameObject startMenuObject;
-    private GameObject mainMenuPanelObject;
-    private GameObject hangarPanelObject;
-    private GameObject settingsPanelObject;
     private GameObject joystickRootObject;
-    private Image startMenuPreviewImage;
-    private Image startButtonImage;
-    private TMP_Text startButtonText;
-    private RectTransform startButtonRect;
-    private UiButtonView newGameButtonView;
-    private UiButtonView continueButtonView;
-    private UiButtonView settingsMenuButtonView;
-    private UiButtonView exitButtonView;
-    private UiButtonView hangarBackButtonView;
-    private UiButtonView settingsBackButtonView;
-    private UiButtonView languageRuButtonView;
-    private UiButtonView languageEngButtonView;
-    private UiButtonView[] fpsButtonViews = new UiButtonView[4];
     private RectTransform modulePanelRect;
     private RectTransform joystickAreaRect;
     private Image joystickBaseImage;
@@ -187,7 +149,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
     private LanguageOption currentLanguage = LanguageOption.RU;
-    private StartMenuPage startMenuPage = StartMenuPage.Main;
     private bool useVirtualJoystick;
     private bool joystickDragging;
     private Vector2 joystickVector;
@@ -628,6 +589,35 @@ public class SpaceCombatSceneController : MonoBehaviour
         perkSelectionPresenter.OnPerkSelected = ApplyPerk;
     }
 
+    private void EnsureStartMenuPresenter()
+    {
+        if (startMenuPresenter == null)
+        {
+            startMenuPresenter = GetComponent<StartMenuPresenter>();
+        }
+
+        if (startMenuPresenter == null)
+        {
+            startMenuPresenter = FindAnyObjectByType<StartMenuPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (startMenuPresenter == null)
+        {
+            startMenuPresenter = gameObject.AddComponent<StartMenuPresenter>();
+        }
+
+        startMenuPresenter.Initialize(uiFactory, uiFont, squareSprite, Localize, GetShipRoleText, GetShipDescriptionText, fpsOptions);
+        startMenuPresenter.OnContinueRequested = ResumeRun;
+        startMenuPresenter.OnNewGameRequested = () => startMenuPresenter.SetPage(StartMenuPage.Hangar);
+        startMenuPresenter.OnSettingsRequested = () => startMenuPresenter.SetPage(StartMenuPage.Settings);
+        startMenuPresenter.OnExitRequested = () => RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
+        startMenuPresenter.OnShipSelected = SelectShip;
+        startMenuPresenter.OnStartRunRequested = () => StartRun();
+        startMenuPresenter.OnLanguageToggleRequested = SetLanguageByIndex;
+        startMenuPresenter.OnFpsToggleRequested = SetFpsIndex;
+        startMenuPresenter.OnBackRequested = HandleStartMenuBackRequested;
+    }
+
     private float GetPlayerHullPercent()
     {
         return playerShipController != null ? playerShipController.GetHullPercent() : player != null ? player.HullPercent : 0f;
@@ -652,6 +642,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsureConfirmationDialogPresenter();
         EnsureGameOverPresenter();
         EnsurePerkSelectionPresenter();
+        EnsureStartMenuPresenter();
         EnsureEncounterFlowController();
         EnsureTimelineSpawnController();
         ValidateSerializedReferences();
@@ -851,142 +842,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        Keyboard keyboard = Keyboard.current;
-
-        if (keyboard != null)
-        {
-            if (keyboard.escapeKey.wasPressedThisFrame)
-            {
-                if (startMenuPage == StartMenuPage.Hangar || startMenuPage == StartMenuPage.Settings)
-                {
-                    if (pauseSettingsOpened && gamePaused)
-                    {
-                        pauseSettingsOpened = false;
-                        ShowStartMenu(false);
-                        ShowPauseMenu(true);
-                    }
-                    else
-                    {
-                        SetStartMenuPage(StartMenuPage.Main);
-                    }
-                }
-            }
-
-            if (startMenuPage == StartMenuPage.Hangar)
-            {
-                int hotkeyShipIndex = ReadShipHotkey(keyboard);
-                if (hotkeyShipIndex >= 0 && availableShips != null && hotkeyShipIndex < availableShips.Count)
-                {
-                    SelectShip(hotkeyShipIndex);
-                }
-
-                if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame)
-                {
-                    StartRun();
-                }
-            }
-            else if (startMenuPage == StartMenuPage.Settings)
-            {
-                if (keyboard.digit1Key.wasPressedThisFrame) SetLanguage(LanguageOption.RU);
-                if (keyboard.digit2Key.wasPressedThisFrame) SetLanguage(LanguageOption.ENG);
-                if (keyboard.f1Key.wasPressedThisFrame) SetFpsIndex(0);
-                if (keyboard.f2Key.wasPressedThisFrame) SetFpsIndex(1);
-                if (keyboard.f3Key.wasPressedThisFrame) SetFpsIndex(2);
-                if (keyboard.f4Key.wasPressedThisFrame) SetFpsIndex(3);
-            }
-        }
-
-        Vector2 position;
-        if (TryGetPrimaryPointerDown(out position))
-        {
-            if (startMenuPage == StartMenuPage.Main)
-            {
-                if (IsButtonClicked(continueButtonView, position))
-                {
-                    ResumeRun();
-                    return;
-                }
-
-                if (IsButtonClicked(newGameButtonView, position))
-                {
-                    SetStartMenuPage(StartMenuPage.Hangar);
-                    return;
-                }
-
-                if (IsButtonClicked(settingsMenuButtonView, position))
-                {
-                    SetStartMenuPage(StartMenuPage.Settings);
-                    return;
-                }
-
-                if (IsButtonClicked(exitButtonView, position))
-                {
-                    RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
-                    return;
-                }
-            }
-            else if (startMenuPage == StartMenuPage.Hangar)
-            {
-                for (int i = 0; i < shipCardViews.Count; i++)
-                {
-                    if (RectTransformUtility.RectangleContainsScreenPoint(shipCardViews[i].Rect, position, null))
-                    {
-                        SelectShip(i);
-                        return;
-                    }
-                }
-
-                if (startButtonRect != null && RectTransformUtility.RectangleContainsScreenPoint(startButtonRect, position, null))
-                {
-                    StartRun();
-                    return;
-                }
-
-                if (IsButtonClicked(hangarBackButtonView, position))
-                {
-                    SetStartMenuPage(StartMenuPage.Main);
-                    return;
-                }
-            }
-            else if (startMenuPage == StartMenuPage.Settings)
-            {
-                if (IsButtonClicked(languageRuButtonView, position))
-                {
-                    SetLanguage(LanguageOption.RU);
-                    return;
-                }
-
-                if (IsButtonClicked(languageEngButtonView, position))
-                {
-                    SetLanguage(LanguageOption.ENG);
-                    return;
-                }
-
-                for (int i = 0; i < fpsButtonViews.Length; i++)
-                {
-                    if (IsButtonClicked(fpsButtonViews[i], position))
-                    {
-                        SetFpsIndex(i);
-                        return;
-                    }
-                }
-
-                if (IsButtonClicked(settingsBackButtonView, position))
-                {
-                    if (pauseSettingsOpened && gamePaused)
-                    {
-                        pauseSettingsOpened = false;
-                        ShowStartMenu(false);
-                        ShowPauseMenu(true);
-                    }
-                    else
-                    {
-                        SetStartMenuPage(StartMenuPage.Main);
-                    }
-                    return;
-                }
-            }
-        }
+        startMenuPresenter?.TickInput();
     }
 
     private static int ReadShipHotkey(Keyboard keyboard)
@@ -1032,6 +888,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         RefreshLocalizedTexts();
     }
 
+    private void SetLanguageByIndex(int index)
+    {
+        SetLanguage(index == 0 ? LanguageOption.RU : LanguageOption.ENG);
+    }
+
     private void SetFpsIndex(int index)
     {
         selectedFpsIndex = Mathf.Clamp(index, 0, fpsOptions.Length - 1);
@@ -1045,10 +906,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (combatLogPresenter != null) combatLogPresenter.SetTitle(Localize("combat_log"));
         if (gateHintText != null) gateHintText.text = Localize("warp_inactive");
         perkSelectionPresenter?.RefreshLocalizedTexts();
+        gameOverPresenter?.RefreshLocalizedTexts();
+        pauseMenuPresenter?.RefreshLocalizedTexts();
+        confirmationDialogPresenter?.RefreshLocalizedTexts();
         if (joystickHintText != null) joystickHintText.text = Localize("joystick_hint");
-        RefreshStartMenuTexts();
-        RefreshSettingsButtons();
-        UpdateStartMenuVisuals();
+        RefreshStartMenuPresenter();
     }
 
     private string GetShipRoleText(ShipDataSO ship)
@@ -1296,7 +1158,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         selectedShipIndex = Mathf.Clamp(index, 0, availableShips.Count - 1);
         ApplyShipDefinition(availableShips[selectedShipIndex], false);
-        UpdateStartMenuVisuals();
+        RefreshStartMenuPresenter();
     }
 
     private int GetInitialShipIndex()
@@ -1570,9 +1432,13 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void ShowStartMenu(bool show)
     {
-        if (startMenuObject != null)
+        if (show)
         {
-            startMenuObject.SetActive(show);
+            startMenuPresenter?.Show();
+        }
+        else
+        {
+            startMenuPresenter?.Hide();
         }
 
         if (joystickRootObject != null)
@@ -1582,109 +1448,19 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (show)
         {
-            SetStartMenuPage(StartMenuPage.Main);
+            RefreshStartMenuPresenter();
         }
     }
 
-    private void UpdateStartMenuVisuals()
+    private void RefreshStartMenuPresenter()
     {
-        if (availableShips == null || availableShips.Count == 0 || selectedShipIndex < 0 || selectedShipIndex >= availableShips.Count)
-        {
-            return;
-        }
-
-        ShipDataSO ship = availableShips[selectedShipIndex];
-        if (ship == null)
-        {
-            return;
-        }
-        if (startMenuShipNameText != null)
-        {
-            startMenuShipNameText.text = ship.displayName;
-            if (startMenuRoleText != null)
-            {
-                startMenuRoleText.text = GetShipRoleText(ship);
-            }
-            if (startMenuDescriptionText != null)
-            {
-                startMenuDescriptionText.text = GetShipDescriptionText(ship);
-            }
-            if (startMenuStatsText != null)
-            {
-                string speedLabel = Localize("stat_speed");
-                string shieldLabel = Localize("stat_shield");
-                string armorLabel = Localize("stat_armor");
-                string hullLabel = Localize("stat_hull");
-                string capacitorLabel = Localize("stat_capacitor");
-                string rechargeLabel = Localize("stat_recharge");
-                string weaponSlotsLabel = Localize("stat_weapon_slots");
-                string moduleSlotsLabel = Localize("stat_module_slots");
-
-                startMenuStatsText.text =
-                    speedLabel + ": " + ship.maxSpeed.ToString("0.0") +
-                    "    " + shieldLabel + ": " + Mathf.RoundToInt(ship.maxShield) +
-                    "    " + armorLabel + ": " + Mathf.RoundToInt(ship.maxArmor) +
-                    "    " + hullLabel + ": " + Mathf.RoundToInt(ship.maxHull) +
-                    "\n" + capacitorLabel + ": " + Mathf.RoundToInt(ship.capacitor) +
-                    "    " + rechargeLabel + ": " + ship.capacitorRechargeTime.ToString("0") + "s" +
-                    "    " + weaponSlotsLabel + ": " + Mathf.Max(0, ship.weaponSlotCount) +
-                    "    " + moduleSlotsLabel + ": " + Mathf.Max(0, ship.moduleSlotCount);
-            }
-            if (startMenuPreviewImage != null)
-            {
-                startMenuPreviewImage.sprite = ship.shipIcon;
-                startMenuPreviewImage.color = ship.shipIcon != null ? Color.white : ship.accentColor;
-            }
-        }
-
-        if (startButtonImage != null)
-        {
-            startButtonImage.color = Color.Lerp(new Color(0.12f, 0.3f, 0.42f, 1f), ship.accentColor, 0.45f);
-            if (startButtonText != null)
-            {
-                startButtonText.text = Localize("start_operation") + " " + ship.displayName.ToUpperInvariant();
-            }
-        }
-
-        int cardCount = Mathf.Min(shipCardViews.Count, availableShips.Count);
-        for (int i = 0; i < cardCount; i++)
-        {
-            ShipDataSO cardShip = availableShips[i];
-            if (cardShip == null)
-            {
-                continue;
-            }
-            bool isSelected = i == selectedShipIndex;
-            if (shipCardViews[i].Background != null)
-            {
-                shipCardViews[i].Background.color = isSelected
-                ? new Color(0.12f, 0.26f, 0.36f, 1f)
-                : new Color(0.06f, 0.12f, 0.17f, 0.96f);
-            }
-            if (shipCardViews[i].Title != null)
-            {
-                shipCardViews[i].Title.text = cardShip.displayName + "\n<size=16>" + GetShipRoleText(cardShip) + "</size>";
-                shipCardViews[i].Title.color = isSelected ? cardShip.accentColor : Color.white;
-            }
-            if (shipCardViews[i].Stats != null)
-            {
-                string shieldShort = Localize("stat_shield");
-                string armorShort = Localize("stat_armor");
-                string speedShort = Localize("stat_speed");
-                string gunsShort = Localize("stat_guns");
-
-                shipCardViews[i].Stats.text =
-                    shieldShort + " " + Mathf.RoundToInt(cardShip.maxShield) +
-                    "  " + armorShort + " " + Mathf.RoundToInt(cardShip.maxArmor) +
-                    "\n" + speedShort + " " + cardShip.maxSpeed.ToString("0.0") +
-                    "  " + gunsShort + " " + Mathf.Max(0, cardShip.weaponSlotCount);
-            }
-        }
-
-        if (startMenuHintText != null)
-        {
-            startMenuHintText.text = useVirtualJoystick ? Localize("hangar_hint_mobile") : Localize("hangar_hint_desktop");
-        }
+        startMenuPresenter?.Refresh(
+            availableShips,
+            selectedShipIndex,
+            gameStarted && !gameOver,
+            currentLanguage == LanguageOption.RU,
+            selectedFpsIndex,
+            useVirtualJoystick);
     }
 
     private static WeaponDataSO GetPrimaryWeapon(ShipDataSO ship)
@@ -2121,7 +1897,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             gameOverPresenter.Bind(uiRoot);
             EnsureConfirmationDialogPresenter();
             confirmationDialogPresenter.Bind(uiRoot);
-            BindStartMenu(uiRoot);
+            EnsureStartMenuPresenter();
+            startMenuPresenter.Bind(uiRoot, availableShips);
             BindVirtualJoystick(uiRoot);
             EnsureMinimapController();
             minimapController?.Initialize(player, uiRoot);
@@ -2151,7 +1928,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameOverPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
         EnsureConfirmationDialogPresenter();
         confirmationDialogPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
-        CreateStartMenu(uiRoot);
+        EnsureStartMenuPresenter();
+        startMenuPresenter.Build(uiRoot, availableShips);
         if (useVirtualJoystick)
         {
             CreateVirtualJoystick(uiRoot);
@@ -2240,81 +2018,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         Transform panel = uiRoot.Find("ModulePanel");
         modulePanelRect = panel != null ? panel.GetComponent<RectTransform>() : null;
         BindModuleSlots();
-    }
-
-    private void BindStartMenu(Transform uiRoot)
-    {
-        Transform root = uiRoot.Find("StartMenu");
-        startMenuObject = root != null ? root.gameObject : null;
-        Transform panel = root != null ? root.Find("Panel") : null;
-        Transform main = panel != null ? panel.Find("MainMenuPanel") : null;
-        Transform hangar = panel != null ? panel.Find("HangarPanel") : null;
-        Transform settings = panel != null ? panel.Find("SettingsPanel") : null;
-
-        mainMenuPanelObject = main != null ? main.gameObject : null;
-        hangarPanelObject = hangar != null ? hangar.gameObject : null;
-        settingsPanelObject = settings != null ? settings.gameObject : null;
-
-        mainMenuTitleText = FindText(main, "Title");
-        mainMenuSubtitleText = FindText(main, "Subtitle");
-        continueButtonView = BindMenuButton(main != null ? main.Find("main_continue") : null, "main_continue");
-        newGameButtonView = BindMenuButton(main != null ? main.Find("main_new_game") : null, "main_new_game");
-        settingsMenuButtonView = BindMenuButton(main != null ? main.Find("main_settings") : null, "main_settings");
-        exitButtonView = BindMenuButton(main != null ? main.Find("main_exit") : null, "main_exit");
-
-        hangarTitleText = FindText(hangar, "Title");
-        hangarSubtitleText = FindText(hangar, "Subtitle");
-        BindShipCards(hangar);
-        Transform infoPanel = hangar != null ? hangar.Find("InfoPanel") : null;
-        startMenuPreviewImage = FindImage(infoPanel, "Preview");
-        startMenuShipNameText = FindText(infoPanel, "ShipName");
-        startMenuRoleText = FindText(infoPanel, "Role");
-        startMenuDescriptionText = FindText(infoPanel, "Description");
-        startMenuStatsText = FindText(infoPanel, "Stats");
-        startMenuHintText = FindText(hangar, "Hint");
-        startButtonImage = FindImage(hangar, "StartButton");
-        startButtonRect = startButtonImage != null ? startButtonImage.rectTransform : null;
-        startButtonText = FindText(hangar, "StartButton/Label");
-        EnsureButton(startButtonImage != null ? startButtonImage.transform : null);
-        hangarBackButtonView = BindMenuButton(hangar != null ? hangar.Find("hangar_back") : null, "hangar_back");
-
-        settingsTitleText = FindText(settings, "Title");
-        settingsSubtitleText = FindText(settings, "Subtitle");
-        Transform settingsBox = settings != null ? settings.Find("SettingsBox") : null;
-        settingsLanguageLabelText = FindText(settingsBox, "LanguageLabel");
-        languageRuButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_ru") : null, "lang_ru");
-        languageEngButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_eng") : null, "lang_eng");
-        settingsFpsLabelText = FindText(settingsBox, "FpsLabel");
-        for (int i = 0; i < fpsOptions.Length; i++)
-        {
-            fpsButtonViews[i] = BindMenuButton(settingsBox != null ? settingsBox.Find("fps_" + fpsOptions[i]) : null, "fps_" + fpsOptions[i]);
-        }
-        settingsBackButtonView = BindMenuButton(settings != null ? settings.Find("settings_back") : null, "settings_back");
-        SetStartMenuPage(StartMenuPage.Main);
-    }
-
-    private void BindShipCards(Transform hangar)
-    {
-        shipCardViews.Clear();
-        Transform cardsRoot = hangar != null ? hangar.Find("Cards") : null;
-        int shipCount = availableShips != null ? availableShips.Count : 0;
-        for (int i = 0; i < shipCount; i++)
-        {
-            Transform card = cardsRoot != null ? cardsRoot.Find("ShipCard_" + i) : null;
-            if (card == null)
-            {
-                continue;
-            }
-
-            EnsureButton(card);
-            shipCardViews.Add(new ShipCardView
-            {
-                Rect = card.GetComponent<RectTransform>(),
-                Background = card.GetComponent<Image>(),
-                Title = FindText(card, "Title"),
-                Stats = FindText(card, "Stats")
-            });
-        }
     }
 
     private void BindVirtualJoystick(Transform uiRoot)
@@ -2667,187 +2370,6 @@ public class SpaceCombatSceneController : MonoBehaviour
             actionButtonView.Label);
     }
 
-    private void CreateStartMenu(Transform parent)
-    {
-        startMenuObject = new GameObject("StartMenu", typeof(RectTransform));
-        startMenuObject.transform.SetParent(parent, false);
-        RectTransform startMenuRect = startMenuObject.GetComponent<RectTransform>();
-        startMenuRect.anchorMin = Vector2.zero;
-        startMenuRect.anchorMax = Vector2.one;
-        startMenuRect.offsetMin = Vector2.zero;
-        startMenuRect.offsetMax = Vector2.zero;
-        Image dim = CreateImage("Dimmer", startMenuObject.transform, new Color(0f, 0f, 0f, 0.62f));
-        RectTransform dimRect = dim.rectTransform;
-        dimRect.anchorMin = Vector2.zero;
-        dimRect.anchorMax = Vector2.one;
-        dimRect.offsetMin = Vector2.zero;
-        dimRect.offsetMax = Vector2.zero;
-
-        Image panel = CreateImage("Panel", startMenuObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.96f));
-        RectTransform panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(980f, 620f);
-        AddOutline(panel.gameObject, new Color(0.2f, 0.42f, 0.58f, 1f));
-
-        mainMenuPanelObject = new GameObject("MainMenuPanel", typeof(RectTransform));
-        mainMenuPanelObject.transform.SetParent(panel.transform, false);
-        StretchToParent(mainMenuPanelObject.GetComponent<RectTransform>());
-
-        hangarPanelObject = new GameObject("HangarPanel", typeof(RectTransform));
-        hangarPanelObject.transform.SetParent(panel.transform, false);
-        StretchToParent(hangarPanelObject.GetComponent<RectTransform>());
-
-        settingsPanelObject = new GameObject("SettingsPanel", typeof(RectTransform));
-        settingsPanelObject.transform.SetParent(panel.transform, false);
-        StretchToParent(settingsPanelObject.GetComponent<RectTransform>());
-
-        CreateMainMenuPanel(mainMenuPanelObject.transform);
-        CreateHangarPanel(hangarPanelObject.transform);
-        CreateSettingsPanel(settingsPanelObject.transform);
-        SetStartMenuPage(StartMenuPage.Main);
-    }
-
-    private void CreateMainMenuPanel(Transform parent)
-    {
-        mainMenuTitleText = CreateText("Title", parent, string.Empty, 42, FontStyle.Bold, new Color(0.88f, 0.95f, 1f));
-        mainMenuTitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(mainMenuTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(40f, -80f), new Vector2(-40f, -130f));
-
-        mainMenuSubtitleText = CreateText("Subtitle", parent, string.Empty, 20, FontStyle.Normal, new Color(0.62f, 0.82f, 0.98f));
-        mainMenuSubtitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(mainMenuSubtitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(60f, -132f), new Vector2(-60f, -170f));
-
-        continueButtonView = CreateMenuButton(parent, "main_continue", new Vector2(0.5f, 0.5f), new Vector2(0f, 146f), new Vector2(280f, 56f));
-        newGameButtonView = CreateMenuButton(parent, "main_new_game", new Vector2(0.5f, 0.5f), new Vector2(0f, 72f), new Vector2(280f, 56f));
-        settingsMenuButtonView = CreateMenuButton(parent, "main_settings", new Vector2(0.5f, 0.5f), new Vector2(0f, -2f), new Vector2(280f, 56f));
-        exitButtonView = CreateMenuButton(parent, "main_exit", new Vector2(0.5f, 0.5f), new Vector2(0f, -76f), new Vector2(280f, 56f));
-    }
-
-    private void CreateHangarPanel(Transform parent)
-    {
-        hangarTitleText = CreateText("Title", parent, string.Empty, 34, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        hangarTitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(hangarTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -24f), new Vector2(-26f, -64f));
-
-        hangarSubtitleText = CreateText("Subtitle", parent, string.Empty, 18, FontStyle.Normal, new Color(0.58f, 0.8f, 0.96f));
-        hangarSubtitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(hangarSubtitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -68f), new Vector2(-26f, -98f));
-
-        RectTransform cardsRoot = new GameObject("Cards", typeof(RectTransform)).GetComponent<RectTransform>();
-        cardsRoot.SetParent(parent, false);
-        cardsRoot.anchorMin = new Vector2(0f, 1f);
-        cardsRoot.anchorMax = new Vector2(1f, 1f);
-        cardsRoot.pivot = new Vector2(0.5f, 1f);
-        cardsRoot.sizeDelta = new Vector2(-60f, 210f);
-        cardsRoot.anchoredPosition = new Vector2(0f, -124f);
-
-        shipCardViews.Clear();
-        int shipCount = availableShips != null ? availableShips.Count : 0;
-        for (int i = 0; i < shipCount; i++)
-        {
-            shipCardViews.Add(CreateShipCard(cardsRoot, i));
-        }
-
-        Image infoPanel = CreateImage("InfoPanel", parent, new Color(0.05f, 0.11f, 0.16f, 0.98f));
-        RectTransform infoRect = infoPanel.rectTransform;
-        infoRect.anchorMin = new Vector2(0.5f, 0f);
-        infoRect.anchorMax = new Vector2(0.5f, 0f);
-        infoRect.pivot = new Vector2(0.5f, 0f);
-        infoRect.sizeDelta = new Vector2(900f, 240f);
-        infoRect.anchoredPosition = new Vector2(0f, 104f);
-        AddOutline(infoPanel.gameObject, new Color(0.16f, 0.34f, 0.48f, 1f));
-
-        startMenuPreviewImage = CreateImage("Preview", infoPanel.transform, Color.white);
-        RectTransform previewRect = startMenuPreviewImage.rectTransform;
-        previewRect.anchorMin = new Vector2(0f, 0.5f);
-        previewRect.anchorMax = new Vector2(0f, 0.5f);
-        previewRect.pivot = new Vector2(0f, 0.5f);
-        previewRect.sizeDelta = new Vector2(150f, 150f);
-        previewRect.anchoredPosition = new Vector2(28f, 0f);
-        startMenuPreviewImage.sprite = null;
-
-        startMenuShipNameText = CreateText("ShipName", infoPanel.transform, "-", 28, FontStyle.Bold, Color.white);
-        SetAnchoredRect(startMenuShipNameText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(200f, -22f), new Vector2(-26f, -58f));
-
-        startMenuRoleText = CreateText("Role", infoPanel.transform, "-", 18, FontStyle.Bold, new Color(0.7f, 0.88f, 1f));
-        SetAnchoredRect(startMenuRoleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(200f, -58f), new Vector2(-26f, -90f));
-
-        startMenuDescriptionText = CreateText("Description", infoPanel.transform, "-", 16, FontStyle.Normal, new Color(0.86f, 0.92f, 1f));
-        startMenuDescriptionText.alignment = TextAlignmentOptions.TopLeft;
-        startMenuDescriptionText.textWrappingMode = TextWrappingModes.Normal;
-        startMenuDescriptionText.overflowMode = TextOverflowModes.Overflow;
-        SetAnchoredRect(startMenuDescriptionText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(200f, -96f), new Vector2(-26f, -156f));
-
-        startMenuStatsText = CreateText("Stats", infoPanel.transform, "-", 15, FontStyle.Normal, new Color(0.92f, 0.95f, 1f));
-        startMenuStatsText.alignment = TextAlignmentOptions.TopLeft;
-        SetAnchoredRect(startMenuStatsText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(200f, 24f), new Vector2(-26f, 84f));
-
-        startMenuHintText = CreateText("Hint", parent, string.Empty, 16, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        startMenuHintText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(startMenuHintText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(26f, 74f), new Vector2(-26f, 102f));
-
-        startButtonImage = CreateImage("StartButton", parent, new Color(0.12f, 0.3f, 0.42f, 1f));
-        startButtonRect = startButtonImage.rectTransform;
-        startButtonRect.anchorMin = new Vector2(0.5f, 0f);
-        startButtonRect.anchorMax = new Vector2(0.5f, 0f);
-        startButtonRect.pivot = new Vector2(0.5f, 0f);
-        startButtonRect.sizeDelta = new Vector2(260f, 54f);
-        startButtonRect.anchoredPosition = new Vector2(130f, 18f);
-        AddOutline(startButtonImage.gameObject, new Color(0.52f, 0.82f, 1f, 1f));
-        startButtonImage.gameObject.AddComponent<Button>();
-
-        startButtonText = CreateText("Label", startButtonImage.transform, string.Empty, 20, FontStyle.Bold, Color.white);
-        startButtonText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(startButtonText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0f), new Vector2(0f, 0f));
-
-        hangarBackButtonView = CreateMenuButton(parent, "hangar_back", new Vector2(0.5f, 0f), new Vector2(-130f, 18f), new Vector2(220f, 54f));
-    }
-
-    private void CreateSettingsPanel(Transform parent)
-    {
-        settingsTitleText = CreateText("Title", parent, string.Empty, 34, FontStyle.Bold, new Color(0.87f, 0.95f, 1f));
-        settingsTitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(settingsTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -36f), new Vector2(-26f, -76f));
-
-        settingsSubtitleText = CreateText("Subtitle", parent, string.Empty, 18, FontStyle.Normal, new Color(0.58f, 0.8f, 0.96f));
-        settingsSubtitleText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(settingsSubtitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(26f, -84f), new Vector2(-26f, -116f));
-
-        Image settingsBox = CreateImage("SettingsBox", parent, new Color(0.05f, 0.11f, 0.16f, 0.98f));
-        RectTransform boxRect = settingsBox.rectTransform;
-        boxRect.anchorMin = new Vector2(0.5f, 0.5f);
-        boxRect.anchorMax = new Vector2(0.5f, 0.5f);
-        boxRect.pivot = new Vector2(0.5f, 0.5f);
-        boxRect.sizeDelta = new Vector2(760f, 300f);
-        boxRect.anchoredPosition = new Vector2(0f, 10f);
-        AddOutline(settingsBox.gameObject, new Color(0.16f, 0.34f, 0.48f, 1f));
-
-        settingsLanguageLabelText = CreateText("LanguageLabel", settingsBox.transform, string.Empty, 22, FontStyle.Bold, Color.white);
-        SetAnchoredRect(settingsLanguageLabelText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(28f, -32f), new Vector2(-28f, -70f));
-
-        languageRuButtonView = CreateMenuButton(settingsBox.transform, "lang_ru", new Vector2(0f, 1f), new Vector2(28f, -108f), new Vector2(140f, 50f));
-        languageRuButtonView.Rect.anchorMax = new Vector2(0f, 1f);
-        languageRuButtonView.Rect.pivot = new Vector2(0f, 1f);
-        languageEngButtonView = CreateMenuButton(settingsBox.transform, "lang_eng", new Vector2(0f, 1f), new Vector2(186f, -108f), new Vector2(140f, 50f));
-        languageEngButtonView.Rect.anchorMax = new Vector2(0f, 1f);
-        languageEngButtonView.Rect.pivot = new Vector2(0f, 1f);
-
-        settingsFpsLabelText = CreateText("FpsLabel", settingsBox.transform, string.Empty, 22, FontStyle.Bold, Color.white);
-        SetAnchoredRect(settingsFpsLabelText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(28f, -164f), new Vector2(-28f, -202f));
-
-        for (int i = 0; i < fpsOptions.Length; i++)
-        {
-            UiButtonView button = CreateMenuButton(settingsBox.transform, "fps_" + fpsOptions[i], new Vector2(0f, 1f), new Vector2(28f + i * 164f, -240f), new Vector2(140f, 50f));
-            button.Rect.anchorMax = new Vector2(0f, 1f);
-            button.Rect.pivot = new Vector2(0f, 1f);
-            fpsButtonViews[i] = button;
-        }
-
-        settingsBackButtonView = CreateMenuButton(parent, "settings_back", new Vector2(0.5f, 0f), new Vector2(0f, 28f), new Vector2(240f, 54f));
-    }
-
     private UiButtonView CreateMenuButton(Transform parent, string id, Vector2 anchor, Vector2 anchoredPosition, Vector2 size)
     {
         Image buttonImage = CreateImage(id, parent, new Color(0.08f, 0.16f, 0.22f, 0.98f));
@@ -2874,77 +2396,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         };
     }
 
-    private void SetStartMenuPage(StartMenuPage page)
-    {
-        startMenuPage = page;
-        if (mainMenuPanelObject != null) mainMenuPanelObject.SetActive(page == StartMenuPage.Main);
-        if (hangarPanelObject != null) hangarPanelObject.SetActive(page == StartMenuPage.Hangar);
-        if (settingsPanelObject != null) settingsPanelObject.SetActive(page == StartMenuPage.Settings);
-        RefreshLocalizedTexts();
-    }
-
-    private void RefreshStartMenuTexts()
-    {
-        if (mainMenuTitleText != null) mainMenuTitleText.text = Localize("main_title");
-        if (mainMenuSubtitleText != null) mainMenuSubtitleText.text = Localize("main_subtitle");
-        if (continueButtonView != null)
-        {
-            continueButtonView.Label.text = Localize("menu_continue");
-            continueButtonView.Rect.gameObject.SetActive(gameStarted && !gameOver);
-        }
-        if (newGameButtonView != null) newGameButtonView.Label.text = Localize("menu_new_game");
-        if (settingsMenuButtonView != null) settingsMenuButtonView.Label.text = Localize("menu_settings");
-        if (exitButtonView != null) exitButtonView.Label.text = Localize("menu_exit");
-
-        if (hangarTitleText != null) hangarTitleText.text = Localize("hangar_title");
-        if (hangarSubtitleText != null) hangarSubtitleText.text = Localize("hangar_subtitle");
-        if (hangarBackButtonView != null) hangarBackButtonView.Label.text = Localize("back");
-        if (startButtonText != null) startButtonText.text = Localize("start_operation");
-        if (startMenuHintText != null)
-        {
-            startMenuHintText.text = useVirtualJoystick ? Localize("hangar_hint_mobile") : Localize("hangar_hint_desktop");
-        }
-
-        if (settingsTitleText != null) settingsTitleText.text = Localize("settings_title");
-        if (settingsSubtitleText != null) settingsSubtitleText.text = Localize("settings_subtitle");
-        if (settingsLanguageLabelText != null) settingsLanguageLabelText.text = Localize("settings_language");
-        if (settingsFpsLabelText != null) settingsFpsLabelText.text = Localize("settings_fps");
-        if (settingsBackButtonView != null) settingsBackButtonView.Label.text = Localize("back");
-        if (languageRuButtonView != null) languageRuButtonView.Label.text = Localize("lang_ru");
-        if (languageEngButtonView != null) languageEngButtonView.Label.text = Localize("lang_eng");
-        gameOverPresenter?.RefreshLocalizedTexts();
-        pauseMenuPresenter?.RefreshLocalizedTexts();
-        confirmationDialogPresenter?.RefreshLocalizedTexts();
-        for (int i = 0; i < fpsButtonViews.Length; i++)
-        {
-            if (fpsButtonViews[i] != null)
-            {
-                fpsButtonViews[i].Label.text = fpsOptions[i].ToString();
-            }
-        }
-    }
-
-    private void RefreshSettingsButtons()
-    {
-        UpdateButtonState(languageRuButtonView, currentLanguage == LanguageOption.RU, new Color(0.45f, 0.72f, 1f, 1f));
-        UpdateButtonState(languageEngButtonView, currentLanguage == LanguageOption.ENG, new Color(0.45f, 0.72f, 1f, 1f));
-        for (int i = 0; i < fpsButtonViews.Length; i++)
-        {
-            UpdateButtonState(fpsButtonViews[i], i == selectedFpsIndex, new Color(1f, 0.7f, 0.36f, 1f));
-        }
-    }
-
-    private void UpdateButtonState(UiButtonView button, bool active, Color accent)
-    {
-        if (button == null)
-        {
-            return;
-        }
-
-        button.Background.color = active ? Color.Lerp(new Color(0.08f, 0.16f, 0.22f, 1f), accent, 0.55f) : new Color(0.08f, 0.16f, 0.22f, 0.98f);
-        button.Label.color = active ? Color.white : new Color(0.88f, 0.94f, 1f);
-    }
-
     private bool IsButtonClicked(UiButtonView button, Vector2 screenPosition)
     {
         return button != null && RectTransformUtility.RectangleContainsScreenPoint(button.Rect, screenPosition, null);
@@ -2964,7 +2415,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (startMenuObject != null && startMenuObject.activeSelf)
+        if (startMenuPresenter != null && startMenuPresenter.IsVisible)
         {
             HandleStartMenuInput();
             return;
@@ -3013,7 +2464,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         ShowPauseMenu(false);
         ShowGameOverPanel(false);
         ShowStartMenu(true);
-        SetStartMenuPage(StartMenuPage.Main);
+        startMenuPresenter?.SetPage(StartMenuPage.Main);
         UpdateHud();
     }
 
@@ -3051,7 +2502,21 @@ public class SpaceCombatSceneController : MonoBehaviour
         ShowPauseMenu(false);
         pauseSettingsOpened = true;
         ShowStartMenu(true);
-        SetStartMenuPage(StartMenuPage.Settings);
+        startMenuPresenter?.SetPage(StartMenuPage.Settings);
+    }
+
+    private void HandleStartMenuBackRequested()
+    {
+        if (pauseSettingsOpened && gamePaused)
+        {
+            pauseSettingsOpened = false;
+            ShowStartMenu(false);
+            ShowPauseMenu(true);
+        }
+        else
+        {
+            startMenuPresenter?.SetPage(StartMenuPage.Main);
+        }
     }
 
     private void ExitGame()
@@ -3130,36 +2595,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.anchorMax = Vector2.one;
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
-    }
-
-    private ShipCardView CreateShipCard(RectTransform parent, int index)
-    {
-        Image background = CreateImage("ShipCard_" + index, parent, new Color(0.06f, 0.12f, 0.17f, 0.96f));
-        RectTransform rect = background.rectTransform;
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.sizeDelta = new Vector2(280f, 170f);
-        rect.anchoredPosition = new Vector2(index * 292f, 0f);
-        AddOutline(background.gameObject, new Color(0.14f, 0.28f, 0.38f, 1f));
-        background.gameObject.AddComponent<Button>();
-
-        TMP_Text title = CreateText("Title", background.transform, "-", 22, FontStyle.Bold, Color.white);
-        SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -18f), new Vector2(-14f, -54f));
-
-        TMP_Text stats = CreateText("Stats", background.transform, "-", 15, FontStyle.Normal, new Color(0.8f, 0.9f, 1f));
-        stats.alignment = TextAlignmentOptions.TopLeft;
-        stats.textWrappingMode = TextWrappingModes.Normal;
-        stats.overflowMode = TextOverflowModes.Overflow;
-        SetAnchoredRect(stats.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -58f), new Vector2(-14f, -148f));
-
-        return new ShipCardView
-        {
-            Rect = rect,
-            Background = background,
-            Title = title,
-            Stats = stats
-        };
     }
 
     private void BindModuleSlots()
