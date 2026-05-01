@@ -57,6 +57,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private ConfirmationDialogPresenter confirmationDialogPresenter;
     [Tooltip("Presenter экрана поражения: показ панели Game Over и обработка кнопок повтора, меню и выхода.")]
     [SerializeField] private GameOverPresenter gameOverPresenter;
+    [Tooltip("Presenter выбора улучшения при повышении уровня. Отвечает за панель, тексты вариантов и UI-ввод выбора.")]
+    [SerializeField] private PerkSelectionPresenter perkSelectionPresenter;
     [Tooltip("Presenter панели выбора следующей локации. Отвечает только за показ вариантов и обработку нажатий UI.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
@@ -132,10 +134,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Canvas hudCanvas;
     private TMP_Text gateHintText;
     private TMP_Text statusText;
-    private TMP_Text perkTitleText;
-    private TMP_Text perkHintText;
-    private readonly TMP_Text[] perkOptionTexts = new TMP_Text[3];
-    private readonly RectTransform[] perkOptionRects = new RectTransform[3];
     private TMP_Text startMenuShipNameText;
     private TMP_Text startMenuRoleText;
     private TMP_Text startMenuDescriptionText;
@@ -150,7 +148,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     private TMP_Text settingsLanguageLabelText;
     private TMP_Text settingsFpsLabelText;
     private TMP_Text joystickHintText;
-    private GameObject perkPanelObject;
     private GameObject startMenuObject;
     private GameObject mainMenuPanelObject;
     private GameObject hangarPanelObject;
@@ -610,6 +607,27 @@ public class SpaceCombatSceneController : MonoBehaviour
         gameOverPresenter.OnExitRequested = () => RequestConfirmation(ConfirmAction.ExitGame, Localize("confirm_exit"));
     }
 
+    private void EnsurePerkSelectionPresenter()
+    {
+        if (perkSelectionPresenter == null)
+        {
+            perkSelectionPresenter = GetComponent<PerkSelectionPresenter>();
+        }
+
+        if (perkSelectionPresenter == null)
+        {
+            perkSelectionPresenter = FindAnyObjectByType<PerkSelectionPresenter>(FindObjectsInactive.Include);
+        }
+
+        if (perkSelectionPresenter == null)
+        {
+            perkSelectionPresenter = gameObject.AddComponent<PerkSelectionPresenter>();
+        }
+
+        perkSelectionPresenter.Initialize(Localize);
+        perkSelectionPresenter.OnPerkSelected = ApplyPerk;
+    }
+
     private float GetPlayerHullPercent()
     {
         return playerShipController != null ? playerShipController.GetHullPercent() : player != null ? player.HullPercent : 0f;
@@ -633,6 +651,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsurePauseMenuPresenter();
         EnsureConfirmationDialogPresenter();
         EnsureGameOverPresenter();
+        EnsurePerkSelectionPresenter();
         EnsureEncounterFlowController();
         EnsureTimelineSpawnController();
         ValidateSerializedReferences();
@@ -1025,7 +1044,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         combatHudPresenter?.RefreshLocalizedTexts();
         if (combatLogPresenter != null) combatLogPresenter.SetTitle(Localize("combat_log"));
         if (gateHintText != null) gateHintText.text = Localize("warp_inactive");
-        if (perkTitleText != null) perkTitleText.text = Localize("perk_title");
+        perkSelectionPresenter?.RefreshLocalizedTexts();
         if (joystickHintText != null) joystickHintText.text = Localize("joystick_hint");
         RefreshStartMenuTexts();
         RefreshSettingsButtons();
@@ -1369,7 +1388,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         enemySpawnSequence = 0;
         targetingController?.ClearTarget();
         activePerks.Clear();
-        perkPanelObject.SetActive(false);
+        perkSelectionPresenter?.Hide();
         ShowGameOverPanel(false);
         if (combatLogPresenter != null)
         {
@@ -2096,7 +2115,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             BindModulePanel(uiRoot);
             EnsurePauseMenuPresenter();
             pauseMenuPresenter.Bind(uiRoot);
-            BindPerkPanel(uiRoot);
+            EnsurePerkSelectionPresenter();
+            perkSelectionPresenter.Bind(uiRoot);
             EnsureGameOverPresenter();
             gameOverPresenter.Bind(uiRoot);
             EnsureConfirmationDialogPresenter();
@@ -2125,7 +2145,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsurePauseMenuPresenter();
         pauseMenuPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
         CreateStatusLabel(uiRoot);
-        CreatePerkPanel(uiRoot);
+        EnsurePerkSelectionPresenter();
+        perkSelectionPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
         EnsureGameOverPresenter();
         gameOverPresenter.Build(uiRoot, uiFactory, uiFont, squareSprite);
         EnsureConfirmationDialogPresenter();
@@ -2219,26 +2240,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         Transform panel = uiRoot.Find("ModulePanel");
         modulePanelRect = panel != null ? panel.GetComponent<RectTransform>() : null;
         BindModuleSlots();
-    }
-
-    private void BindPerkPanel(Transform uiRoot)
-    {
-        Transform root = uiRoot.Find("PerkPanel");
-        perkPanelObject = root != null ? root.gameObject : null;
-        Transform content = root != null ? root.Find("Content") : null;
-        perkTitleText = FindText(content, "Title");
-        perkHintText = FindText(content, "Choices");
-        for (int i = 0; i < perkOptionTexts.Length; i++)
-        {
-            Transform option = content != null ? content.Find("PerkOption_" + i) : null;
-            perkOptionRects[i] = option != null ? option.GetComponent<RectTransform>() : null;
-            perkOptionTexts[i] = FindText(option, "Label");
-            EnsureButton(option);
-        }
-        if (perkPanelObject != null)
-        {
-            perkPanelObject.SetActive(false);
-        }
     }
 
     private void BindStartMenu(Transform uiRoot)
@@ -2548,61 +2549,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         rect.sizeDelta = new Vector2(700f, 28f);
         rect.anchoredPosition = new Vector2(-150f, -10f);
         statusText.gameObject.SetActive(false);
-    }
-
-    private void CreatePerkPanel(Transform parent)
-    {
-        perkPanelObject = new GameObject("PerkPanel", typeof(RectTransform));
-        perkPanelObject.transform.SetParent(parent, false);
-        RectTransform perkRootRect = perkPanelObject.GetComponent<RectTransform>();
-        perkRootRect.anchorMin = Vector2.zero;
-        perkRootRect.anchorMax = Vector2.one;
-        perkRootRect.offsetMin = Vector2.zero;
-        perkRootRect.offsetMax = Vector2.zero;
-
-        Image dim = CreateImage("Dimmer", perkPanelObject.transform, new Color(0f, 0f, 0f, 0.45f));
-        RectTransform dimRect = dim.rectTransform;
-        dimRect.anchorMin = Vector2.zero;
-        dimRect.anchorMax = Vector2.one;
-        dimRect.offsetMin = Vector2.zero;
-        dimRect.offsetMax = Vector2.zero;
-
-        Image panel = CreateImage("Content", perkPanelObject.transform, new Color(0.05f, 0.11f, 0.16f, 0.97f));
-        RectTransform panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(560f, 250f);
-        AddOutline(panel.gameObject, new Color(0.32f, 0.64f, 0.8f, 1f));
-
-        perkTitleText = CreateText("Title", panel.transform, "LEVEL UP", 28, FontStyle.Bold, new Color(1f, 0.87f, 0.38f));
-        SetAnchoredRect(perkTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(18f, -18f), new Vector2(-18f, -56f));
-
-        perkHintText = CreateText("Choices", panel.transform, string.Empty, 18, FontStyle.Bold, new Color(0.88f, 0.94f, 1f));
-        perkHintText.alignment = TextAlignmentOptions.Center;
-        SetAnchoredRect(perkHintText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(24f, 18f), new Vector2(-24f, 44f));
-
-        for (int i = 0; i < perkOptionTexts.Length; i++)
-        {
-            Image option = CreateImage("PerkOption_" + i, panel.transform, new Color(0.08f, 0.16f, 0.22f, 0.96f));
-            option.gameObject.AddComponent<Button>();
-            RectTransform optionRect = option.rectTransform;
-            optionRect.anchorMin = new Vector2(0f, 1f);
-            optionRect.anchorMax = new Vector2(1f, 1f);
-            optionRect.pivot = new Vector2(0.5f, 1f);
-            optionRect.sizeDelta = new Vector2(-48f, 42f);
-            optionRect.anchoredPosition = new Vector2(0f, -72f - i * 50f);
-            AddOutline(option.gameObject, new Color(0.22f, 0.42f, 0.58f, 1f));
-
-            TMP_Text optionText = CreateText("Label", option.transform, string.Empty, 17, FontStyle.Bold, Color.white);
-            optionText.alignment = TextAlignmentOptions.Center;
-            SetAnchoredRect(optionText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-
-            perkOptionRects[i] = optionRect;
-            perkOptionTexts[i] = optionText;
-        }
-
-        perkPanelObject.SetActive(false);
     }
 
     private void EnsureEncounterChoiceUi()
@@ -3622,7 +3568,6 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.Hull = player.MaxHull;
 
         levelUpPending = true;
-        perkPanelObject.SetActive(true);
         activePerks.Clear();
 
         List<PerkChoice> pool = new List<PerkChoice>
@@ -3657,58 +3602,13 @@ public class SpaceCombatSceneController : MonoBehaviour
             pool.RemoveAt(index);
         }
 
-        for (int i = 0; i < activePerks.Count; i++)
-        {
-            if (i < perkOptionTexts.Length && perkOptionTexts[i] != null)
-            {
-                perkOptionTexts[i].text = (i + 1) + ". " + activePerks[i].Label;
-                perkOptionTexts[i].transform.parent.gameObject.SetActive(true);
-            }
-        }
-
-        for (int i = activePerks.Count; i < perkOptionTexts.Length; i++)
-        {
-            if (perkOptionTexts[i] != null)
-            {
-                perkOptionTexts[i].text = string.Empty;
-                perkOptionTexts[i].transform.parent.gameObject.SetActive(false);
-            }
-        }
-
-        perkHintText.text = Localize("perk_pick");
+        perkSelectionPresenter?.Show(activePerks);
         LogMessage(Localize("log_levelup"), "warning");
     }
 
     private void UpdatePerkSelectionInput()
     {
-        Keyboard keyboard = Keyboard.current;
-        if (keyboard != null)
-        {
-            if (keyboard.digit1Key.wasPressedThisFrame) ApplyPerk(0);
-            if (keyboard.digit2Key.wasPressedThisFrame) ApplyPerk(1);
-            if (keyboard.digit3Key.wasPressedThisFrame) ApplyPerk(2);
-        }
-
-        Vector2 pointerPosition;
-        if (TryGetPrimaryPointerDown(out pointerPosition))
-        {
-            TryApplyPerkFromPointer(pointerPosition);
-        }
-    }
-
-    private bool TryApplyPerkFromPointer(Vector2 screenPosition)
-    {
-        for (int i = 0; i < activePerks.Count && i < perkOptionRects.Length; i++)
-        {
-            RectTransform optionRect = perkOptionRects[i];
-            if (optionRect != null && RectTransformUtility.RectangleContainsScreenPoint(optionRect, screenPosition, null))
-            {
-                ApplyPerk(i);
-                return true;
-            }
-        }
-
-        return false;
+        perkSelectionPresenter?.TickInput();
     }
 
     private void ApplyPerk(int index)
@@ -3720,7 +3620,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         activePerks[index].Apply?.Invoke();
         levelUpPending = false;
-        perkPanelObject.SetActive(false);
+        perkSelectionPresenter?.Hide();
         LogMessage(Localize("log_perk_selected") + activePerks[index].Label, "warning");
         activePerks.Clear();
     }
