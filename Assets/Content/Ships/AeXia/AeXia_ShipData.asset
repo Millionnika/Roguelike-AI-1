@@ -51,7 +51,7 @@ MonoBehaviour:
   startingWeapons:
   - {fileID: 11400000, guid: a9fd8e4d4723a8c488f366d54f8fa722, type: 2}
   - {fileID: 11400000, guid: a9fd8e4d4723a8c488f366d54f8fa722, type: 2}
-  - {fileID: 11400000, guid: a9fd8e4d4723a8c488f366d54f8fa722, type: 2}
+  - {fileID: 11400000, guid: 5f8c8bc240106114da90bb5c8ceb5e29, type: 2}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}
