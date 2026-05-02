@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SpaceFrontier.Player;
 using UnityEngine;
 
 public readonly struct EncounterCompletionContext
@@ -49,12 +50,18 @@ public sealed class EncounterFlowController : MonoBehaviour
     [Header("UI локаций")]
     [Tooltip("Presenter панели выбора следующей локации.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
+    [Tooltip("Presenter визуальной карты сектора. Используется, если в пресете включен режим Sector Map.")]
+    [SerializeField] private SectorMapPresenter sectorMapPresenter;
     [Tooltip("Presenter панели небоёвой локации.")]
     [SerializeField] private NonCombatEncounterPresenter nonCombatEncounterPresenter;
     [Tooltip("Presenter панели выбора награды после завершения локации.")]
     [SerializeField] private RewardChoicePresenter rewardChoicePresenter;
     [Tooltip("Контроллер применения наград к ресурсам и параметрам игрока.")]
     [SerializeField] private RunRewardController runRewardController;
+    [Tooltip("Контроллер логики карты сектора 5x5.")]
+    [SerializeField] private SectorMapController sectorMapController;
+    [Tooltip("Контроллер автоматического варпа к выбранному сектору.")]
+    [SerializeField] private SectorWarpController sectorWarpController;
 
     [Header("Резервные варианты")]
     [Tooltip("Резервный список следующих локаций. Используется, если RunMapDirector отсутствует или не смог сгенерировать варианты.")]
@@ -72,11 +79,15 @@ public sealed class EncounterFlowController : MonoBehaviour
     private bool awaitingRewardSelection;
     private EncounterSO activeNonCombatEncounter;
     private Action<EncounterSO> startCombatEncounter;
+    private Action onSectorTravelStarted;
     private Func<float> getPlayerHullPercent;
+    private Func<PlayerShip> getPlayerShip;
     private Action<float> restorePlayerHull;
     private Action<string, string> logMessage;
 
     public bool IsEncounterChoiceVisible => encounterChoicePresenter != null && encounterChoicePresenter.IsVisible;
+    public bool IsSectorMapVisible => sectorMapPresenter != null && sectorMapPresenter.IsVisible;
+    public bool IsSectorWarpInProgress => sectorWarpController != null && sectorWarpController.IsWarping;
     public bool IsNonCombatVisible => nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.IsVisible;
     public bool IsRewardChoiceVisible => rewardChoicePresenter != null && rewardChoicePresenter.IsVisible;
     public RunManager RunManager => runManager;
@@ -109,12 +120,16 @@ public sealed class EncounterFlowController : MonoBehaviour
 
     public void Initialize(
         Action<EncounterSO> startCombatCallback,
+        Action onSectorTravelStartedCallback,
         Func<float> playerHullPercentReader,
+        Func<PlayerShip> playerShipReader,
         Action<float> restoreHullCallback,
         Action<string, string> logCallback)
     {
         startCombatEncounter = startCombatCallback;
+        onSectorTravelStarted = onSectorTravelStartedCallback;
         getPlayerHullPercent = playerHullPercentReader;
+        getPlayerShip = playerShipReader;
         restorePlayerHull = restoreHullCallback;
         logMessage = logCallback;
         EnsureReferences();
@@ -148,6 +163,13 @@ public sealed class EncounterFlowController : MonoBehaviour
 
         runManager.StartRun();
         RunPresetSO activePreset = ActiveRunPreset;
+        bool sectorMapReady = TryInitializeSectorMapForRun(activePreset);
+        if (sectorMapReady && sectorMapController != null && sectorMapController.CurrentEncounter != null)
+        {
+            runManager.SelectEncounter(sectorMapController.CurrentEncounter);
+            return;
+        }
+
         if (runManager.CurrentEncounter == null && activePreset != null && activePreset.startingEncounter != null)
         {
             runManager.SelectEncounter(activePreset.startingEncounter);
@@ -159,6 +181,7 @@ public sealed class EncounterFlowController : MonoBehaviour
         encounterCompleted = false;
         activeNonCombatEncounter = null;
         HideChoices();
+        HideSectorMap();
         HideNonCombat();
         HideRewardChoices();
     }
@@ -263,6 +286,11 @@ public sealed class EncounterFlowController : MonoBehaviour
         activeChoices.Clear();
     }
 
+    public void HideSectorMap()
+    {
+        sectorMapPresenter?.Hide();
+    }
+
     public void HideNonCombat()
     {
         nonCombatEncounterPresenter?.Hide();
@@ -307,7 +335,7 @@ public sealed class EncounterFlowController : MonoBehaviour
         EnsureReferences();
         runRewardController?.ApplyReward(reward);
         HideRewardChoices();
-        ShowChoices();
+        ShowNextEncounterSelection();
     }
 
     private void ShowRewardsOrChoices(EncounterSO completedEncounter)
@@ -317,7 +345,7 @@ public sealed class EncounterFlowController : MonoBehaviour
             return;
         }
 
-        ShowChoices();
+        ShowNextEncounterSelection();
     }
 
     private bool TryShowRewardChoices(EncounterSO completedEncounter)
@@ -362,6 +390,16 @@ public sealed class EncounterFlowController : MonoBehaviour
         return true;
     }
 
+    private void ShowNextEncounterSelection()
+    {
+        if (TryShowSectorMap())
+        {
+            return;
+        }
+
+        ShowChoices();
+    }
+
     private void ShowChoices()
     {
         EnsureReferences();
@@ -386,6 +424,77 @@ public sealed class EncounterFlowController : MonoBehaviour
         }
 
         encounterChoicePresenter?.ShowChoices(activeChoices, SelectEncounter);
+    }
+
+    private bool TryShowSectorMap()
+    {
+        RunPresetSO activePreset = ActiveRunPreset;
+        if (!ShouldUseSectorMap(activePreset))
+        {
+            HideSectorMap();
+            return false;
+        }
+
+        EnsureSectorMapControllerReference();
+        EnsureSectorMapPresenterReference();
+        if (sectorMapController == null || sectorMapPresenter == null)
+        {
+            Debug.LogWarning("EncounterFlowController: карта сектора включена в пресете, но SectorMapController или SectorMapPresenter не найден. Используется старый выбор локаций.", this);
+            return false;
+        }
+
+        sectorMapController.MarkCurrentCompleted();
+        if (!sectorMapController.HasAvailableNextNodes())
+        {
+            Debug.Log("EncounterFlowController: доступные узлы карты сектора закончились. Используется старый выбор локаций.", this);
+            return false;
+        }
+
+        HideChoices();
+        IReadOnlyList<SectorMapNode> reachableNodes = sectorMapController.GetReachableNextNodes();
+        sectorMapPresenter.Show(sectorMapController.Nodes, reachableNodes, OnSectorNodeSelected);
+        return true;
+    }
+
+    private void OnSectorNodeSelected(SectorMapNode node)
+    {
+        if (sectorMapController == null || node == null)
+        {
+            return;
+        }
+
+        bool selected = sectorMapController.SelectNode(node);
+        if (!selected)
+        {
+            return;
+        }
+
+        HideSectorMap();
+        StartSectorTravelOrImmediate(node);
+    }
+
+    private void StartSectorTravelOrImmediate(SectorMapNode node)
+    {
+        if (node == null || node.encounter == null)
+        {
+            return;
+        }
+
+        EnsureSectorWarpControllerReference();
+        PlayerShip playerShip = getPlayerShip != null ? getPlayerShip() : null;
+        if (sectorWarpController == null || playerShip == null)
+        {
+            Debug.LogWarning("EncounterFlowController: не найден SectorWarpController или корабль игрока. Локация стартует без перелета.", this);
+            SelectEncounter(node.encounter);
+            return;
+        }
+
+        onSectorTravelStarted?.Invoke();
+        bool started = sectorWarpController.StartWarp(playerShip, node.WorldPosition, () => SelectEncounter(node.encounter));
+        if (!started)
+        {
+            SelectEncounter(node.encounter);
+        }
     }
 
     private void ShowNonCombatEncounter(EncounterSO encounter)
@@ -533,9 +642,12 @@ public sealed class EncounterFlowController : MonoBehaviour
         EnsureRunMapDirectorReference();
         EnsureRunEventDirectorReference();
         EnsureEncounterChoicePresenterReference();
+        EnsureSectorMapPresenterReference();
         EnsureNonCombatPresenterReference();
         EnsureRewardChoicePresenterReference();
         EnsureRunRewardControllerReference();
+        EnsureSectorMapControllerReference();
+        EnsureSectorWarpControllerReference();
     }
 
     private void EnsureRunManagerReference()
@@ -587,6 +699,20 @@ public sealed class EncounterFlowController : MonoBehaviour
         }
     }
 
+    private void EnsureSectorMapPresenterReference()
+    {
+        if (sectorMapPresenter != null)
+        {
+            return;
+        }
+
+        sectorMapPresenter = FindAnyObjectByType<SectorMapPresenter>(FindObjectsInactive.Include);
+        if (sectorMapPresenter == null)
+        {
+            sectorMapPresenter = gameObject.AddComponent<SectorMapPresenter>();
+        }
+    }
+
     private void EnsureRewardChoicePresenterReference()
     {
         if (rewardChoicePresenter == null)
@@ -601,6 +727,76 @@ public sealed class EncounterFlowController : MonoBehaviour
         {
             runRewardController = FindAnyObjectByType<RunRewardController>(FindObjectsInactive.Include);
         }
+    }
+
+    private void EnsureSectorMapControllerReference()
+    {
+        if (sectorMapController != null)
+        {
+            return;
+        }
+
+        sectorMapController = FindAnyObjectByType<SectorMapController>(FindObjectsInactive.Include);
+        if (sectorMapController == null)
+        {
+            sectorMapController = gameObject.AddComponent<SectorMapController>();
+        }
+    }
+
+    private void EnsureSectorWarpControllerReference()
+    {
+        if (sectorWarpController != null)
+        {
+            return;
+        }
+
+        sectorWarpController = FindAnyObjectByType<SectorWarpController>(FindObjectsInactive.Include);
+        if (sectorWarpController == null)
+        {
+            sectorWarpController = gameObject.AddComponent<SectorWarpController>();
+        }
+    }
+
+    private bool TryInitializeSectorMapForRun(RunPresetSO activePreset)
+    {
+        if (!ShouldUseSectorMap(activePreset))
+        {
+            HideSectorMap();
+            return false;
+        }
+
+        EnsureSectorMapControllerReference();
+        if (sectorMapController == null)
+        {
+            Debug.LogWarning("EncounterFlowController: карта сектора включена, но SectorMapController не найден. Используется старый старт локации.", this);
+            return false;
+        }
+
+        sectorMapController.Initialize(activePreset.sectorMapConfig, activePreset);
+        if (sectorMapController.CurrentEncounter == null)
+        {
+            Debug.LogWarning("EncounterFlowController: карта сектора не смогла выбрать стартовый узел. Используется старый старт локации.", this);
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ShouldUseSectorMap(RunPresetSO preset)
+    {
+        return preset != null && preset.useSectorMap && preset.sectorMapConfig != null;
+    }
+
+    public bool TryGetCurrentSectorWorldPosition(out Vector3 position)
+    {
+        position = Vector3.zero;
+        if (sectorMapController == null || sectorMapController.CurrentNode == null)
+        {
+            return false;
+        }
+
+        position = sectorMapController.CurrentNode.WorldPosition;
+        return true;
     }
 
     private void Log(string message, string kind)

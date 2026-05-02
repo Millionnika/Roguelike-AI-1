@@ -20,6 +20,12 @@ public sealed class RunPresetSO : ScriptableObject
     [Tooltip("Стартовая локация забега. Необязательно. Если назначена, первый бой может брать таймлайн отсюда вместо ручного currentTimeline.")]
     public EncounterSO startingEncounter;
 
+    [Header("Карта сектора (MVP)")]
+    [Tooltip("Включает прохождение по карте сектора 5x5 с движением только вперед. Если выключено, используется старый выбор следующих локаций.")]
+    public bool useSectorMap;
+    [Tooltip("Конфиг карты сектора. Используется только если включен Use Sector Map.")]
+    public SectorMapConfigSO sectorMapConfig;
+
     [Header("Простой режим настройки")]
     [Tooltip("Включает простой дизайнерский режим: пресет становится главным местом, где видно таймлайны боев и базовые небоевые локации. Текущая генерация все равно использует EncounterPoolSO и RunMapConfigSO.")]
     public bool useSimpleMode = true;

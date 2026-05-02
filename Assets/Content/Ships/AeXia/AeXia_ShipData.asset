@@ -42,6 +42,7 @@ MonoBehaviour:
   capacitorRechargeTime: 92
   capacitorRechargeRate: 1.4
   scoreReward: 40
+  scrapDropAmount: 0
   weaponSlotCount: 3
   moduleSlotCount: 3
   damageMultiplier: 1
@@ -55,6 +56,12 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
+  engineVfxPrefab: {fileID: 2683546806237445005, guid: 7d49c672cd4a762428bbae0492527d89, type: 3}
+  engineIdleEmissionRate: 1
+  engineMovingEmissionRate: 18
+  engineAfterburnerEmissionMultiplier: 2
+  engineEmissionLerpSpeed: 8
+  engineVfxScale: 1
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
-  shipIcon: {fileID: -6481520680327269525, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
+  shipIcon: {fileID: 2394634068722355287, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}

@@ -360,7 +360,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         encounterFlowController.ImportFallbackEncounters(testNextEncounters);
-        encounterFlowController.Initialize(StartSelectedCombatEncounter, GetPlayerHullPercent, RestorePlayerHull, LogMessage);
+        encounterFlowController.Initialize(
+            StartSelectedCombatEncounter,
+            OnSectorTravelStarted,
+            GetPlayerHullPercent,
+            GetPlayerShip,
+            RestorePlayerHull,
+            LogMessage);
         EnsureRunRewardController();
     }
 
@@ -940,6 +946,12 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
+        if (IsSectorMapPanelVisible())
+        {
+            UpdateHud();
+            return;
+        }
+
         float deltaTime = Time.deltaTime;
 
         Keyboard keyboard = Keyboard.current;
@@ -953,6 +965,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (IsLevelUpPending())
         {
             UpdatePerkSelectionInput();
+            UpdateHud();
+            return;
+        }
+
+        if (IsSectorWarpInProgress())
+        {
+            backgroundController?.Tick();
+            UpdateVisuals();
             UpdateHud();
             return;
         }
@@ -1402,6 +1422,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             PreparePlayerForNextEncounter();
         }
+
+        TrySnapPlayerToCurrentSector();
         encounterStartHullPercent = player != null ? player.HullPercent : 1f;
         LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
@@ -1447,6 +1469,16 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool IsNonCombatPanelVisible()
     {
         return encounterFlowController != null && encounterFlowController.IsNonCombatVisible;
+    }
+
+    private bool IsSectorMapPanelVisible()
+    {
+        return encounterFlowController != null && encounterFlowController.IsSectorMapVisible;
+    }
+
+    private bool IsSectorWarpInProgress()
+    {
+        return encounterFlowController != null && encounterFlowController.IsSectorWarpInProgress;
     }
 
     private bool IsRewardChoicePanelVisible()
@@ -1570,6 +1602,41 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void StartSelectedCombatEncounter(EncounterSO encounter)
     {
         StartRun(false);
+    }
+
+    private void OnSectorTravelStarted()
+    {
+        ClearEnemies();
+        ClearProjectiles();
+        if (timelineSpawnController != null)
+        {
+            timelineSpawnController.ResetRuntime();
+            wave = timelineSpawnController.CurrentWave;
+        }
+    }
+
+    private PlayerShip GetPlayerShip()
+    {
+        return player;
+    }
+
+    private void TrySnapPlayerToCurrentSector()
+    {
+        if (player == null || player.Transform == null || encounterFlowController == null)
+        {
+            return;
+        }
+
+        Vector3 sectorPosition;
+        if (!encounterFlowController.TryGetCurrentSectorWorldPosition(out sectorPosition))
+        {
+            return;
+        }
+
+        Vector3 target = new Vector3(sectorPosition.x, sectorPosition.y, player.Transform.position.z);
+        player.Transform.position = target;
+        player.Velocity = Vector2.zero;
+        player.MoveCommandActive = false;
     }
 
     private void ShowStartMenu(bool show)

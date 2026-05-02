@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5d4e9234307b3d4ea7f4ae0e54c9efd, type: 3}
+  m_Name: l_Laser_WeaponData
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  fireMode: 2
+  damageProfile: {fileID: 0}
+  damage: 2
+  cooldown: 1
+  maxRange: 10
+  firingAngle: 30
+  spreadAngle: 0
+  aimTurnSpeed: 720
+  projectileRotationOffset: 90
+  projectilePrefab: {fileID: 0}
+  projectileSpeed: 18
+  projectileMaxDistance: 8
+  projectileLifetime: 1.5
+  projectileVisualScale: 0.16
+  missileTurnSpeed: 240
+  missileSeekRadius: 18
+  missileWobbleAmplitude: 0.08
+  missileWobbleFrequency: 8
+  missileAcceleration: 0.6
+  missileLaunchSpeedMultiplier: 0.35
+  missileLaunchDuration: 0.2
+  missileAimPauseDuration: 0.12
+  missileAimPauseSpeedMultiplier: 0.05
+  missileBoostSpeedMultiplier: 2.8
+  missileBoostAcceleration: 42
+  fireRate: 1
+  capacitorPerShot: 9
+  requiredClass: 0
+  icon: {fileID: 7811212676235371354, guid: af8fedabb74c12546a1dd9ef201a8ab6, type: 3}
+  visualPrefab: {fileID: 658024884894187045, guid: 7f210feeba566b644b0afdcfceba0718, type: 3}
+  impactVfxPrefab: {fileID: 0}
+  impactVfxLifetime: 0.75
+  impactVfxScale: 1
+  projectileTrailPrefab: {fileID: 0}
+  projectileTrailScale: 1
+  detachTrailOnDespawn: 1
+  detachedTrailLifetime: 0.4
+  fireSound: {fileID: 8300000, guid: ceeaff5547355914e9e706f04ba99163, type: 3}

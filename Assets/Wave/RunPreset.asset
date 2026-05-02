@@ -18,6 +18,8 @@ MonoBehaviour:
   runMapConfig: {fileID: 11400000, guid: d652eacb864dcc649b769c2344579d01, type: 2}
   eventDirectorConfig: {fileID: 11400000, guid: dda4424dc72e938409539958be0df2d5, type: 2}
   startingEncounter: {fileID: 11400000, guid: 6653bd4c3e84d254c9ce40c0246bc4bb, type: 2}
+  useSectorMap: 1
+  sectorMapConfig: {fileID: 11400000, guid: 4f24f8c148f842e4be9d57f3fb312c1c, type: 2}
   useSimpleMode: 1
   combatTimelines: []
   eliteTimelines: []
