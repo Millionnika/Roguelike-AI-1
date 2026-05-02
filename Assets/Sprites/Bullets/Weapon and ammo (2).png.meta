@@ -1,0 +1,1300 @@
+fileFormatVersion: 2
+guid: af8fedabb74c12546a1dd9ef201a8ab6
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 7811212676235371354
+    second: Weapon and ammo (2)_0
+  - first:
+      213: 782661000662402953
+    second: Weapon and ammo (2)_1
+  - first:
+      213: -7958424876138870015
+    second: Weapon and ammo (2)_2
+  - first:
+      213: -8001878341866486368
+    second: Weapon and ammo (2)_3
+  - first:
+      213: 2153113774345718711
+    second: Weapon and ammo (2)_4
+  - first:
+      213: -7815717434021927197
+    second: Weapon and ammo (2)_5
+  - first:
+      213: -3607582582112274553
+    second: Weapon and ammo (2)_6
+  - first:
+      213: -868723351112904690
+    second: Weapon and ammo (2)_7
+  - first:
+      213: 9118363586133938528
+    second: Weapon and ammo (2)_8
+  - first:
+      213: 5109339266179499996
+    second: Weapon and ammo (2)_9
+  - first:
+      213: 2906173716252281858
+    second: Weapon and ammo (2)_10
+  - first:
+      213: -1615325773243677125
+    second: Weapon and ammo (2)_11
+  - first:
+      213: 1121917645366652495
+    second: Weapon and ammo (2)_12
+  - first:
+      213: -7478052061035557695
+    second: Weapon and ammo (2)_13
+  - first:
+      213: -7762280963533020504
+    second: Weapon and ammo (2)_14
+  - first:
+      213: -1731186622206253084
+    second: Weapon and ammo (2)_15
+  - first:
+      213: -3725722556225842762
+    second: Weapon and ammo (2)_16
+  - first:
+      213: 7799309386662785457
+    second: Weapon and ammo (2)_17
+  - first:
+      213: -1644576435537074799
+    second: Weapon and ammo (2)_18
+  - first:
+      213: -9144121785302201836
+    second: Weapon and ammo (2)_19
+  - first:
+      213: 8238342649966375640
+    second: Weapon and ammo (2)_20
+  - first:
+      213: 4021647129734235559
+    second: Weapon and ammo (2)_21
+  - first:
+      213: 8237743096595758583
+    second: Weapon and ammo (2)_22
+  - first:
+      213: 8107650501251833288
+    second: Weapon and ammo (2)_23
+  - first:
+      213: 6337150440912734242
+    second: Weapon and ammo (2)_24
+  - first:
+      213: -8656906459676651163
+    second: Weapon and ammo (2)_25
+  - first:
+      213: -5823085639656878941
+    second: Weapon and ammo (2)_26
+  - first:
+      213: -3658913227282213354
+    second: Weapon and ammo (2)_27
+  - first:
+      213: 3490467443168726590
+    second: Weapon and ammo (2)_28
+  - first:
+      213: -8336968868686372699
+    second: Weapon and ammo (2)_29
+  - first:
+      213: -2414154934518740921
+    second: Weapon and ammo (2)_30
+  - first:
+      213: 3002166175800293934
+    second: Weapon and ammo (2)_31
+  - first:
+      213: -2739491000207447230
+    second: Weapon and ammo (2)_32
+  - first:
+      213: 5995525656363436924
+    second: Weapon and ammo (2)_33
+  - first:
+      213: 8551549096494851036
+    second: Weapon and ammo (2)_34
+  - first:
+      213: 9043569133074763386
+    second: Weapon and ammo (2)_35
+  - first:
+      213: 2931755370020013929
+    second: Weapon and ammo (2)_36
+  - first:
+      213: -7194072517968679276
+    second: Weapon and ammo (2)_37
+  - first:
+      213: 3300507662087526389
+    second: Weapon and ammo (2)_38
+  - first:
+      213: -6357485868288610084
+    second: Weapon and ammo (2)_39
+  - first:
+      213: -9071883471199745310
+    second: Weapon and ammo (2)_40
+  - first:
+      213: 7280437572842202447
+    second: Weapon and ammo (2)_41
+  - first:
+      213: 3915305506481308538
+    second: Weapon and ammo (2)_42
+  - first:
+      213: 7412091838506325954
+    second: Weapon and ammo (2)_43
+  - first:
+      213: 6610102017739039804
+    second: Weapon and ammo (2)_44
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 638
+        width: 313
+        height: 130
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a53a9002b80076c60800000000000000
+      internalID: 7811212676235371354
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_1
+      rect:
+        serializedVersion: 2
+        x: 389
+        y: 646
+        width: 310
+        height: 80
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 987c80c88029cda00800000000000000
+      internalID: 782661000662402953
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_2
+      rect:
+        serializedVersion: 2
+        x: 756
+        y: 639
+        width: 244
+        height: 96
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 10b4c1e9dbefd8190800000000000000
+      internalID: -7958424876138870015
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_3
+      rect:
+        serializedVersion: 2
+        x: 1075
+        y: 628
+        width: 333
+        height: 140
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0a508293b0e93f090800000000000000
+      internalID: -8001878341866486368
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_4
+      rect:
+        serializedVersion: 2
+        x: 46
+        y: 517
+        width: 270
+        height: 97
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7bb80e0f19561ed10800000000000000
+      internalID: 2153113774345718711
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_5
+      rect:
+        serializedVersion: 2
+        x: 390
+        y: 525
+        width: 242
+        height: 82
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3e6ab48376ef88390800000000000000
+      internalID: -7815717434021927197
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_6
+      rect:
+        serializedVersion: 2
+        x: 764
+        y: 516
+        width: 227
+        height: 101
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 787bf4f51ca4fedc0800000000000000
+      internalID: -3607582582112274553
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_7
+      rect:
+        serializedVersion: 2
+        x: 1107
+        y: 517
+        width: 247
+        height: 98
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e0014d007bca1f3f0800000000000000
+      internalID: -868723351112904690
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_8
+      rect:
+        serializedVersion: 2
+        x: 46
+        y: 389
+        width: 263
+        height: 114
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 061de54de5fea8e70800000000000000
+      internalID: 9118363586133938528
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_9
+      rect:
+        serializedVersion: 2
+        x: 389
+        y: 394
+        width: 272
+        height: 103
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cd7859dfdf408e640800000000000000
+      internalID: 5109339266179499996
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_10
+      rect:
+        serializedVersion: 2
+        x: 761
+        y: 388
+        width: 255
+        height: 117
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 20c4bcce89dc45820800000000000000
+      internalID: 2906173716252281858
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_11
+      rect:
+        serializedVersion: 2
+        x: 1106
+        y: 392
+        width: 221
+        height: 107
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b36074184c53599e0800000000000000
+      internalID: -1615325773243677125
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_12
+      rect:
+        serializedVersion: 2
+        x: 34
+        y: 369
+        width: 1340
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f4e625f772ad19f00800000000000000
+      internalID: 1121917645366652495
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_13
+      rect:
+        serializedVersion: 2
+        x: 39
+        y: 300
+        width: 142
+        height: 43
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1cc091a554f983890800000000000000
+      internalID: -7478052061035557695
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_14
+      rect:
+        serializedVersion: 2
+        x: 194
+        y: 281
+        width: 165
+        height: 75
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8a266d90796d64490800000000000000
+      internalID: -7762280963533020504
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_15
+      rect:
+        serializedVersion: 2
+        x: 385
+        y: 299
+        width: 137
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4e7ec7770f699f7e0800000000000000
+      internalID: -1731186622206253084
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_16
+      rect:
+        serializedVersion: 2
+        x: 531
+        y: 297
+        width: 167
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6b19f7823139b4cc0800000000000000
+      internalID: -3725722556225842762
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_17
+      rect:
+        serializedVersion: 2
+        x: 713
+        y: 295
+        width: 147
+        height: 53
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1b1b76d8096bc3c60800000000000000
+      internalID: 7799309386662785457
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_18
+      rect:
+        serializedVersion: 2
+        x: 888
+        y: 280
+        width: 131
+        height: 83
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 195a5d9f17a4d29e0800000000000000
+      internalID: -1644576435537074799
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_19
+      rect:
+        serializedVersion: 2
+        x: 1053
+        y: 283
+        width: 138
+        height: 76
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 41ac6241fad891180800000000000000
+      internalID: -9144121785302201836
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_20
+      rect:
+        serializedVersion: 2
+        x: 1208
+        y: 289
+        width: 167
+        height: 66
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8d23235ddf8745270800000000000000
+      internalID: 8238342649966375640
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_21
+      rect:
+        serializedVersion: 2
+        x: 33
+        y: 210
+        width: 155
+        height: 54
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7a547c3c1c2cfc730800000000000000
+      internalID: 4021647129734235559
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_22
+      rect:
+        serializedVersion: 2
+        x: 236
+        y: 193
+        width: 92
+        height: 89
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7fd348f63b7525270800000000000000
+      internalID: 8237743096595758583
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_23
+      rect:
+        serializedVersion: 2
+        x: 384
+        y: 207
+        width: 141
+        height: 61
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8cd122abc29248070800000000000000
+      internalID: 8107650501251833288
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_24
+      rect:
+        serializedVersion: 2
+        x: 578
+        y: 193
+        width: 92
+        height: 90
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 22840d610c412f750800000000000000
+      internalID: 6337150440912734242
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_25
+      rect:
+        serializedVersion: 2
+        x: 724
+        y: 217
+        width: 135
+        height: 43
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5615031f07d7cd780800000000000000
+      internalID: -8656906459676651163
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_26
+      rect:
+        serializedVersion: 2
+        x: 888
+        y: 206
+        width: 134
+        height: 65
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3acc297767e303fa0800000000000000
+      internalID: -5823085639656878941
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_27
+      rect:
+        serializedVersion: 2
+        x: 1064
+        y: 213
+        width: 130
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6169dd73ecde83dc0800000000000000
+      internalID: -3658913227282213354
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_28
+      rect:
+        serializedVersion: 2
+        x: 1230
+        y: 214
+        width: 126
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e3e432275a1a07030800000000000000
+      internalID: 3490467443168726590
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_29
+      rect:
+        serializedVersion: 2
+        x: 28
+        y: 133
+        width: 157
+        height: 38
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5a0657e2cf22d4c80800000000000000
+      internalID: -8336968868686372699
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_30
+      rect:
+        serializedVersion: 2
+        x: 206
+        y: 135
+        width: 153
+        height: 36
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7480147b0e23f7ed0800000000000000
+      internalID: -2414154934518740921
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_31
+      rect:
+        serializedVersion: 2
+        x: 408
+        y: 108
+        width: 93
+        height: 90
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e2af4411b36d9a920800000000000000
+      internalID: 3002166175800293934
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_32
+      rect:
+        serializedVersion: 2
+        x: 558
+        y: 121
+        width: 125
+        height: 62
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 24b6143237f5bf9d0800000000000000
+      internalID: -2739491000207447230
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_33
+      rect:
+        serializedVersion: 2
+        x: 729
+        y: 123
+        width: 125
+        height: 58
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c7b884d91d2643350800000000000000
+      internalID: 5995525656363436924
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_34
+      rect:
+        serializedVersion: 2
+        x: 895
+        y: 120
+        width: 120
+        height: 64
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cd363ef58943da670800000000000000
+      internalID: 8551549096494851036
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_35
+      rect:
+        serializedVersion: 2
+        x: 1085
+        y: 108
+        width: 90
+        height: 89
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a7ecb9e2636318d70800000000000000
+      internalID: 9043569133074763386
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_36
+      rect:
+        serializedVersion: 2
+        x: 1221
+        y: 115
+        width: 142
+        height: 75
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9670366d9ffafa820800000000000000
+      internalID: 2931755370020013929
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_37
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 146
+        height: 104
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 49ea3162925892c90800000000000000
+      internalID: -7194072517968679276
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_38
+      rect:
+        serializedVersion: 2
+        x: 243
+        y: 26
+        width: 79
+        height: 78
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5f79e295b32cdcd20800000000000000
+      internalID: 3300507662087526389
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_39
+      rect:
+        serializedVersion: 2
+        x: 416
+        y: 27
+        width: 75
+        height: 75
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cd07714494ca5c7a0800000000000000
+      internalID: -6357485868288610084
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_40
+      rect:
+        serializedVersion: 2
+        x: 538
+        y: 37
+        width: 164
+        height: 56
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2eac66f3c023a1280800000000000000
+      internalID: -9071883471199745310
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_41
+      rect:
+        serializedVersion: 2
+        x: 739
+        y: 30
+        width: 102
+        height: 69
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f45aaaa266f490560800000000000000
+      internalID: 7280437572842202447
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_42
+      rect:
+        serializedVersion: 2
+        x: 898
+        y: 28
+        width: 114
+        height: 73
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a7303fc2d95f55630800000000000000
+      internalID: 3915305506481308538
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_43
+      rect:
+        serializedVersion: 2
+        x: 1053
+        y: 37
+        width: 143
+        height: 55
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2c7ddb4914a0dd660800000000000000
+      internalID: 7412091838506325954
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Weapon and ammo (2)_44
+      rect:
+        serializedVersion: 2
+        x: 1249
+        y: 0
+        width: 159
+        height: 114
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c34ad6863cccbbb50800000000000000
+      internalID: 6610102017739039804
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      Weapon and ammo (2)_0: 7811212676235371354
+      Weapon and ammo (2)_1: 782661000662402953
+      Weapon and ammo (2)_10: 2906173716252281858
+      Weapon and ammo (2)_11: -1615325773243677125
+      Weapon and ammo (2)_12: 1121917645366652495
+      Weapon and ammo (2)_13: -7478052061035557695
+      Weapon and ammo (2)_14: -7762280963533020504
+      Weapon and ammo (2)_15: -1731186622206253084
+      Weapon and ammo (2)_16: -3725722556225842762
+      Weapon and ammo (2)_17: 7799309386662785457
+      Weapon and ammo (2)_18: -1644576435537074799
+      Weapon and ammo (2)_19: -9144121785302201836
+      Weapon and ammo (2)_2: -7958424876138870015
+      Weapon and ammo (2)_20: 8238342649966375640
+      Weapon and ammo (2)_21: 4021647129734235559
+      Weapon and ammo (2)_22: 8237743096595758583
+      Weapon and ammo (2)_23: 8107650501251833288
+      Weapon and ammo (2)_24: 6337150440912734242
+      Weapon and ammo (2)_25: -8656906459676651163
+      Weapon and ammo (2)_26: -5823085639656878941
+      Weapon and ammo (2)_27: -3658913227282213354
+      Weapon and ammo (2)_28: 3490467443168726590
+      Weapon and ammo (2)_29: -8336968868686372699
+      Weapon and ammo (2)_3: -8001878341866486368
+      Weapon and ammo (2)_30: -2414154934518740921
+      Weapon and ammo (2)_31: 3002166175800293934
+      Weapon and ammo (2)_32: -2739491000207447230
+      Weapon and ammo (2)_33: 5995525656363436924
+      Weapon and ammo (2)_34: 8551549096494851036
+      Weapon and ammo (2)_35: 9043569133074763386
+      Weapon and ammo (2)_36: 2931755370020013929
+      Weapon and ammo (2)_37: -7194072517968679276
+      Weapon and ammo (2)_38: 3300507662087526389
+      Weapon and ammo (2)_39: -6357485868288610084
+      Weapon and ammo (2)_4: 2153113774345718711
+      Weapon and ammo (2)_40: -9071883471199745310
+      Weapon and ammo (2)_41: 7280437572842202447
+      Weapon and ammo (2)_42: 3915305506481308538
+      Weapon and ammo (2)_43: 7412091838506325954
+      Weapon and ammo (2)_44: 6610102017739039804
+      Weapon and ammo (2)_5: -7815717434021927197
+      Weapon and ammo (2)_6: -3607582582112274553
+      Weapon and ammo (2)_7: -868723351112904690
+      Weapon and ammo (2)_8: 9118363586133938528
+      Weapon and ammo (2)_9: 5109339266179499996
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

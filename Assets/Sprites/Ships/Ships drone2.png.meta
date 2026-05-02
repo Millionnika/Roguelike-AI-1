@@ -1,0 +1,598 @@
+fileFormatVersion: 2
+guid: f2da1a22a9b05c2409e675fcda72a561
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 8482368105439543777
+    second: Ships drone2_0
+  - first:
+      213: 539383430891374819
+    second: Ships drone2_1
+  - first:
+      213: 7127154625338953413
+    second: Ships drone2_2
+  - first:
+      213: 7298605405230417062
+    second: Ships drone2_3
+  - first:
+      213: -7948033274947028741
+    second: Ships drone2_4
+  - first:
+      213: -2557820031599992522
+    second: Ships drone2_5
+  - first:
+      213: -6473650781869711333
+    second: Ships drone2_6
+  - first:
+      213: 445991666378514187
+    second: Ships drone2_7
+  - first:
+      213: -2557450799432891143
+    second: Ships drone2_8
+  - first:
+      213: -7255537699215332012
+    second: Ships drone2_9
+  - first:
+      213: -3341357524520451410
+    second: Ships drone2_10
+  - first:
+      213: -9197705301531796238
+    second: Ships drone2_11
+  - first:
+      213: -4024361987991495119
+    second: Ships drone2_12
+  - first:
+      213: -8707032513827140018
+    second: Ships drone2_13
+  - first:
+      213: -2368571786062260726
+    second: Ships drone2_14
+  - first:
+      213: 8746515737809230968
+    second: Ships drone2_15
+  - first:
+      213: -3160926430539277620
+    second: Ships drone2_16
+  - first:
+      213: -4455759041309977585
+    second: Ships drone2_17
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Ships drone2_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 779
+        width: 217
+        height: 475
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1e1c3d2b9dc67b570800000000000000
+      internalID: 8482368105439543777
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_1
+      rect:
+        serializedVersion: 2
+        x: 239
+        y: 781
+        width: 186
+        height: 308
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3e803046f564c7700800000000000000
+      internalID: 539383430891374819
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_2
+      rect:
+        serializedVersion: 2
+        x: 451
+        y: 775
+        width: 178
+        height: 315
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5ce4c96de5db8e260800000000000000
+      internalID: 7127154625338953413
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_3
+      rect:
+        serializedVersion: 2
+        x: 651
+        y: 774
+        width: 181
+        height: 316
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a4418642fad94560800000000000000
+      internalID: 7298605405230417062
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_4
+      rect:
+        serializedVersion: 2
+        x: 846
+        y: 775
+        width: 195
+        height: 315
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bf83ccfc8d9e2b190800000000000000
+      internalID: -7948033274947028741
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_5
+      rect:
+        serializedVersion: 2
+        x: 1051
+        y: 776
+        width: 203
+        height: 478
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 631aa11bb3cc08cd0800000000000000
+      internalID: -2557820031599992522
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_6
+      rect:
+        serializedVersion: 2
+        x: 27
+        y: 486
+        width: 178
+        height: 184
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b10e9baa9e8f826a0800000000000000
+      internalID: -6473650781869711333
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_7
+      rect:
+        serializedVersion: 2
+        x: 232
+        y: 490
+        width: 196
+        height: 202
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b0f964fbe0b703600800000000000000
+      internalID: 445991666378514187
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_8
+      rect:
+        serializedVersion: 2
+        x: 452
+        y: 479
+        width: 188
+        height: 213
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9f483414c0c128cd0800000000000000
+      internalID: -2557450799432891143
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_9
+      rect:
+        serializedVersion: 2
+        x: 668
+        y: 484
+        width: 149
+        height: 204
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 45da0df67e62f4b90800000000000000
+      internalID: -7255537699215332012
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_10
+      rect:
+        serializedVersion: 2
+        x: 843
+        y: 475
+        width: 203
+        height: 211
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ea24163e80d11a1d0800000000000000
+      internalID: -3341357524520451410
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_11
+      rect:
+        serializedVersion: 2
+        x: 1059
+        y: 491
+        width: 170
+        height: 192
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2fc587182cf2b5080800000000000000
+      internalID: -9197705301531796238
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_12
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 207
+        height: 387
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 13e9e2a08189628c0800000000000000
+      internalID: -4024361987991495119
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_13
+      rect:
+        serializedVersion: 2
+        x: 250
+        y: 177
+        width: 138
+        height: 214
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e4e8e8d7f086a2780800000000000000
+      internalID: -8707032513827140018
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_14
+      rect:
+        serializedVersion: 2
+        x: 445
+        y: 176
+        width: 168
+        height: 217
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a061fb28284212fd0800000000000000
+      internalID: -2368571786062260726
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_15
+      rect:
+        serializedVersion: 2
+        x: 656
+        y: 193
+        width: 165
+        height: 185
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 87c9b76f8bdd16970800000000000000
+      internalID: 8746515737809230968
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_16
+      rect:
+        serializedVersion: 2
+        x: 849
+        y: 174
+        width: 185
+        height: 205
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cca1092a8222224d0800000000000000
+      internalID: -3160926430539277620
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Ships drone2_17
+      rect:
+        serializedVersion: 2
+        x: 1054
+        y: 175
+        width: 173
+        height: 204
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f04dbf172c6f922c0800000000000000
+      internalID: -4455759041309977585
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      Ships drone2_0: 8482368105439543777
+      Ships drone2_1: 539383430891374819
+      Ships drone2_10: -3341357524520451410
+      Ships drone2_11: -9197705301531796238
+      Ships drone2_12: -4024361987991495119
+      Ships drone2_13: -8707032513827140018
+      Ships drone2_14: -2368571786062260726
+      Ships drone2_15: 8746515737809230968
+      Ships drone2_16: -3160926430539277620
+      Ships drone2_17: -4455759041309977585
+      Ships drone2_2: 7127154625338953413
+      Ships drone2_3: 7298605405230417062
+      Ships drone2_4: -7948033274947028741
+      Ships drone2_5: -2557820031599992522
+      Ships drone2_6: -6473650781869711333
+      Ships drone2_7: 445991666378514187
+      Ships drone2_8: -2557450799432891143
+      Ships drone2_9: -7255537699215332012
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
