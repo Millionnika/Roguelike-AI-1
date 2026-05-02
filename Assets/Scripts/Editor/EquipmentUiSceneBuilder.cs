@@ -383,7 +383,14 @@ public static class EquipmentUiSceneBuilder
         float projectileSpeed,
         float projectileLifetime,
         float projectileMaxDistance,
-        float capacitorPerShot)
+        float capacitorPerShot,
+        GameObject impactVfxPrefab,
+        float impactVfxLifetime,
+        float impactVfxScale,
+        GameObject projectileTrailPrefab,
+        float projectileTrailScale,
+        bool detachTrailOnDespawn,
+        float detachedTrailLifetime)
     {
         string safeName = SanitizeName(sourceName);
         if (string.IsNullOrWhiteSpace(safeName))
@@ -412,6 +419,10 @@ public static class EquipmentUiSceneBuilder
         projectileLifetime = Mathf.Max(0.01f, projectileLifetime);
         projectileMaxDistance = Mathf.Max(0.1f, projectileMaxDistance);
         capacitorPerShot = Mathf.Max(0f, capacitorPerShot);
+        impactVfxLifetime = Mathf.Max(0f, impactVfxLifetime);
+        impactVfxScale = Mathf.Max(0.01f, impactVfxScale);
+        projectileTrailScale = Mathf.Max(0.01f, projectileTrailScale);
+        detachedTrailLifetime = Mathf.Max(0f, detachedTrailLifetime);
 
         EnsureFolder("Assets/Content");
         EnsureFolder(WeaponFactoryRootDir);
@@ -462,7 +473,14 @@ public static class EquipmentUiSceneBuilder
             projectileSpeed,
             projectileLifetime,
             projectileMaxDistance,
-            capacitorPerShot);
+            capacitorPerShot,
+            impactVfxPrefab,
+            impactVfxLifetime,
+            impactVfxScale,
+            projectileTrailPrefab,
+            projectileTrailScale,
+            detachTrailOnDespawn,
+            detachedTrailLifetime);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -940,7 +958,14 @@ public static class EquipmentUiSceneBuilder
         float projectileSpeed,
         float projectileLifetime,
         float projectileMaxDistance,
-        float capacitorPerShot)
+        float capacitorPerShot,
+        GameObject impactVfxPrefab,
+        float impactVfxLifetime,
+        float impactVfxScale,
+        GameObject projectileTrailPrefab,
+        float projectileTrailScale,
+        bool detachTrailOnDespawn,
+        float detachedTrailLifetime)
     {
         WeaponDataSO weaponData = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(weaponDataPath);
         if (weaponData == null)
@@ -955,6 +980,13 @@ public static class EquipmentUiSceneBuilder
         weaponData.projectilePrefab = projectilePrefab;
         weaponData.icon = icon;
         weaponData.visualPrefab = visualPrefab;
+        weaponData.impactVfxPrefab = impactVfxPrefab;
+        weaponData.impactVfxLifetime = Mathf.Max(0f, impactVfxLifetime);
+        weaponData.impactVfxScale = Mathf.Max(0.01f, impactVfxScale);
+        weaponData.projectileTrailPrefab = projectileTrailPrefab;
+        weaponData.projectileTrailScale = Mathf.Max(0.01f, projectileTrailScale);
+        weaponData.detachTrailOnDespawn = detachTrailOnDespawn;
+        weaponData.detachedTrailLifetime = Mathf.Max(0f, detachedTrailLifetime);
         weaponData.fireSound = fireSound;
         weaponData.damage = Mathf.Max(1f, damage);
         weaponData.cooldown = Mathf.Max(0.01f, cooldown);
@@ -1098,6 +1130,13 @@ public sealed class WeaponFactoryWizard : ScriptableWizard
     public float projectileLifetime = 1.5f;
     public float projectileMaxDistance = 8f;
     public float capacitorPerShot = 9f;
+    public GameObject impactVfxPrefab;
+    public float impactVfxLifetime = 0.75f;
+    public float impactVfxScale = 1f;
+    public GameObject projectileTrailPrefab;
+    public float projectileTrailScale = 1f;
+    public bool detachTrailOnDespawn = true;
+    public float detachedTrailLifetime = 0.4f;
 
     private void OnWizardUpdate()
     {
@@ -1141,6 +1180,10 @@ public sealed class WeaponFactoryWizard : ScriptableWizard
                 : "Build Weapon создаст WeaponDataSO и visual prefab. Projectile prefab для Hitscan/Beam не нужен.";
         }
 
+        impactVfxLifetime = Mathf.Max(0f, impactVfxLifetime);
+        impactVfxScale = Mathf.Max(0.01f, impactVfxScale);
+        projectileTrailScale = Mathf.Max(0.01f, projectileTrailScale);
+        detachedTrailLifetime = Mathf.Max(0f, detachedTrailLifetime);
         isValid = true;
     }
 
@@ -1160,6 +1203,13 @@ public sealed class WeaponFactoryWizard : ScriptableWizard
             projectileSpeed,
             projectileLifetime,
             projectileMaxDistance,
-            capacitorPerShot);
+            capacitorPerShot,
+            impactVfxPrefab,
+            impactVfxLifetime,
+            impactVfxScale,
+            projectileTrailPrefab,
+            projectileTrailScale,
+            detachTrailOnDespawn,
+            detachedTrailLifetime);
     }
 }

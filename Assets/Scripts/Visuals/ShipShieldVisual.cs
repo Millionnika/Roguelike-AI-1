@@ -28,6 +28,16 @@ public sealed class ShipShieldVisual : MonoBehaviour
     [Tooltip("Цвет подсветки щита в момент попадания.")]
     [SerializeField] private Color hitTint = new Color(0.72f, 0.95f, 1f, 1f);
 
+    [Header("Shield Hit Pulse")]
+    [Tooltip("Длительность короткой вспышки щита после поглощения урона щитом, в секундах.")]
+    [SerializeField, Min(0.05f)] private float shieldHitPulseDuration = 0.18f;
+    [Tooltip("Дополнительная прозрачность щита во время короткой вспышки. Помогает увидеть попадание даже без impact sprite.")]
+    [SerializeField, Range(0f, 2f)] private float shieldHitPulseAlphaBoost = 0.45f;
+    [Tooltip("Цвет короткой вспышки щита при поглощении урона.")]
+    [SerializeField] private Color shieldHitPulseColor = new Color(0.72f, 0.95f, 1f, 1f);
+    [Tooltip("Небольшое увеличение масштаба щита во время вспышки. 0 отключает масштабный pulse.")]
+    [SerializeField, Range(0f, 0.2f)] private float shieldHitPulseScaleBoost = 0.04f;
+
     [Header("Hit Ripple")]
     [Tooltip("Длительность вспышки/кольца попадания по щиту (секунды).")]
     [SerializeField, Min(0.05f)] private float impactDuration = 0.24f;
@@ -46,6 +56,9 @@ public sealed class ShipShieldVisual : MonoBehaviour
 
     private readonly List<ImpactRipple> activeRipples = new List<ImpactRipple>();
     private float pulseOffset;
+    private float shieldHitPulseTimer;
+    private float shieldHitPulseIntensity;
+    private Vector3 baseShieldScale = Vector3.one;
 
     private sealed class ImpactRipple
     {
@@ -83,6 +96,8 @@ public sealed class ShipShieldVisual : MonoBehaviour
             shieldRenderer.sharedMaterial = shieldMaterial;
         }
 
+        baseShieldScale = shieldRenderer.transform.localScale;
+
         Color rendererColor = shieldRenderer.color;
         if (readBaseColorFromRenderer && rendererColor.a > 0.001f)
         {
@@ -103,17 +118,33 @@ public sealed class ShipShieldVisual : MonoBehaviour
 
         float percent = Mathf.Clamp01(shieldPercent);
         float hit = Mathf.Clamp01(hitFlash);
+        float localHit = GetShieldHitPulse01();
+        float combinedHit = Mathf.Clamp01(Mathf.Max(hit, localHit));
         float pulse = 1f + Mathf.Sin((Time.time + pulseOffset) * pulseSpeed) * pulseAlpha;
-        float alpha = baseColor.a * percent * pulse * (1f + hit * hitAlphaBoost);
+        float alpha = baseColor.a * percent * pulse * (1f + hit * hitAlphaBoost + localHit * shieldHitPulseAlphaBoost);
 
         Color color = Color.Lerp(baseColor, hitTint, hit * hitTintStrength);
+        color = Color.Lerp(color, shieldHitPulseColor, localHit);
         color.a = Mathf.Clamp01(alpha);
         shieldRenderer.color = color;
         shieldRenderer.enabled = color.a > 0.001f;
+
+        if (shieldHitPulseScaleBoost > 0f)
+        {
+            float scale = 1f + combinedHit * shieldHitPulseScaleBoost;
+            shieldRenderer.transform.localScale = baseShieldScale * scale;
+        }
     }
 
     public void PlayImpact(Vector2 worldPoint, float absorbedShieldDamage)
     {
+        if (absorbedShieldDamage <= 0f)
+        {
+            return;
+        }
+
+        TriggerShieldPulse(absorbedShieldDamage);
+
         if (shieldRenderer == null || impactSprite == null)
         {
             return;
@@ -141,11 +172,13 @@ public sealed class ShipShieldVisual : MonoBehaviour
 
     private void Update()
     {
+        UpdateShieldPulse(Time.deltaTime);
         UpdateRipples(Time.deltaTime);
     }
 
     private void OnDisable()
     {
+        ResetShieldPulse();
         ClearRipples();
     }
 
@@ -197,5 +230,48 @@ public sealed class ShipShieldVisual : MonoBehaviour
         }
 
         activeRipples.Clear();
+    }
+
+    private void TriggerShieldPulse(float absorbedShieldDamage)
+    {
+        shieldHitPulseTimer = Mathf.Max(shieldHitPulseTimer, shieldHitPulseDuration);
+        shieldHitPulseIntensity = Mathf.Max(shieldHitPulseIntensity, Mathf.Clamp01(absorbedShieldDamage * impactDamageScale));
+        shieldHitPulseIntensity = Mathf.Max(0.35f, shieldHitPulseIntensity);
+    }
+
+    private void UpdateShieldPulse(float deltaTime)
+    {
+        if (shieldHitPulseTimer <= 0f)
+        {
+            return;
+        }
+
+        shieldHitPulseTimer = Mathf.Max(0f, shieldHitPulseTimer - Mathf.Max(0f, deltaTime));
+        if (shieldHitPulseTimer <= 0f && shieldRenderer != null && shieldHitPulseScaleBoost > 0f)
+        {
+            shieldRenderer.transform.localScale = baseShieldScale;
+        }
+    }
+
+    private float GetShieldHitPulse01()
+    {
+        if (shieldHitPulseTimer <= 0f)
+        {
+            return 0f;
+        }
+
+        float duration = Mathf.Max(0.05f, shieldHitPulseDuration);
+        float normalized = Mathf.Clamp01(shieldHitPulseTimer / duration);
+        return normalized * normalized * shieldHitPulseIntensity;
+    }
+
+    private void ResetShieldPulse()
+    {
+        shieldHitPulseTimer = 0f;
+        shieldHitPulseIntensity = 0f;
+        if (shieldRenderer != null && shieldHitPulseScaleBoost > 0f)
+        {
+            shieldRenderer.transform.localScale = baseShieldScale;
+        }
     }
 }

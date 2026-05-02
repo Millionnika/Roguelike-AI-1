@@ -49,12 +49,18 @@ MonoBehaviour:
   shipPrefab: {fileID: 2101523389554617440, guid: e86f7f022e04de648a0fa89836d72841, type: 3}
   startingWeapons:
   - {fileID: 11400000, guid: b42bd98f441922549a4c41e53a9500e0, type: 2}
-  - {fileID: 11400000, guid: bef525f325d41e94fab7bdc07ca74162, type: 2}
+  - {fileID: 0}
   - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
+  engineVfxPrefab: {fileID: 2683546806237445005, guid: 94be61cc20786d9429e1d309c74f71ea, type: 3}
+  engineIdleEmissionRate: 1
+  engineMovingEmissionRate: 22
+  engineAfterburnerEmissionMultiplier: 4
+  engineEmissionLerpSpeed: 11
+  engineVfxScale: 2
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
   shipIcon: {fileID: -6481520680327269525, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}

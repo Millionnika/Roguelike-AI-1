@@ -5,6 +5,7 @@ using UnityEngine;
 public sealed class ProjectileBehaviour : MonoBehaviour
 {
     private const string WeaponDebugPrefix = "[WeaponDebug]";
+    private const string RuntimeTrailName = "ProjectileTrailInstance";
     private Rigidbody2D body;
     private Collider2D projectileCollider;
     private IPoolService poolService;
@@ -37,6 +38,14 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private float missileBoostAcceleration;
     private Vector2 preferredTargetPoint;
     private Transform missileTarget;
+    private GameObject impactVfxPrefab;
+    private float impactVfxLifetime;
+    private float impactVfxScale = 1f;
+    private GameObject projectileTrailPrefab;
+    private float projectileTrailScale = 1f;
+    private bool detachTrailOnDespawn = true;
+    private float detachedTrailLifetime = 0.4f;
+    private Transform runtimeTrailInstance;
     private readonly List<Collider2D> ignoredOwnerColliders = new List<Collider2D>();
     private readonly List<Collider2D> projectileColliders = new List<Collider2D>();
 
@@ -51,7 +60,14 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         float projectileDamage,
         float projectileSpeed,
         float projectileMaxDistance,
-        float projectileLifetime)
+        float projectileLifetime,
+        GameObject sourceImpactVfxPrefab,
+        float sourceImpactVfxLifetime,
+        float sourceImpactVfxScale,
+        GameObject sourceProjectileTrailPrefab,
+        float sourceProjectileTrailScale,
+        bool sourceDetachTrailOnDespawn,
+        float sourceDetachedTrailLifetime)
     {
         poolService = runtimePoolService;
         prefabKey = sourcePrefab;
@@ -63,6 +79,13 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         speed = Mathf.Max(0.01f, projectileSpeed);
         maxDistance = Mathf.Max(0f, projectileMaxDistance);
         maxLifetime = Mathf.Max(0f, projectileLifetime);
+        impactVfxPrefab = sourceImpactVfxPrefab;
+        impactVfxLifetime = Mathf.Max(0f, sourceImpactVfxLifetime);
+        impactVfxScale = Mathf.Max(0.01f, sourceImpactVfxScale);
+        projectileTrailPrefab = sourceProjectileTrailPrefab;
+        projectileTrailScale = Mathf.Max(0.01f, sourceProjectileTrailScale);
+        detachTrailOnDespawn = sourceDetachTrailOnDespawn;
+        detachedTrailLifetime = Mathf.Max(0f, sourceDetachedTrailLifetime);
         lifeTimer = 0f;
         traveledDistance = 0f;
         previousPosition = transform.position;
@@ -72,7 +95,9 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         this.preferredTargetPoint = preferredTargetPoint;
 
         EnsurePhysicsComponents();
+        CleanupProjectileTrail(false);
         ConfigureOwnerCollisionIgnores();
+        AttachProjectileTrail();
 
         isMissile = weaponData != null && weaponData.fireMode == FireMode.Missile;
         missileTurnSpeed = weaponData != null ? Mathf.Max(1f, weaponData.missileTurnSpeed) : 180f;
@@ -122,6 +147,7 @@ public sealed class ProjectileBehaviour : MonoBehaviour
     private void OnDisable()
     {
         RestoreOwnerCollisionIgnores();
+        CleanupProjectileTrail(false);
     }
 
     private void FixedUpdate()
@@ -333,13 +359,36 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         };
 
         damageable.TakeDamage(info);
+        SpawnImpactVfx(hitPoint);
         Debug.Log($"{WeaponDebugPrefix} Projectile damage applied to {other.name}: {damage:0.##}");
         Despawn();
+    }
+
+    private void SpawnImpactVfx(Vector2 hitPoint)
+    {
+        if (impactVfxPrefab == null)
+        {
+            return;
+        }
+
+        GameObject impactObject = Instantiate(impactVfxPrefab);
+        if (impactObject == null)
+        {
+            return;
+        }
+
+        Transform impactTransform = impactObject.transform;
+        impactTransform.position = new Vector3(hitPoint.x, hitPoint.y, 0f);
+        impactTransform.rotation = Quaternion.FromToRotation(Vector3.up, direction);
+        impactTransform.localScale = Vector3.one * impactVfxScale;
+
+        Destroy(impactObject, Mathf.Max(0.01f, impactVfxLifetime));
     }
 
     private void Despawn()
     {
         activeProjectile = false;
+        CleanupProjectileTrail(true);
         RestoreOwnerCollisionIgnores();
         MoveProjectile(Vector2.zero, 0f);
 
@@ -350,6 +399,148 @@ public sealed class ProjectileBehaviour : MonoBehaviour
         }
 
         Destroy(gameObject);
+    }
+
+    private void AttachProjectileTrail()
+    {
+        if (projectileTrailPrefab == null)
+        {
+            return;
+        }
+
+        GameObject trailObject = Instantiate(projectileTrailPrefab, transform);
+        if (trailObject == null)
+        {
+            return;
+        }
+
+        runtimeTrailInstance = trailObject.transform;
+        runtimeTrailInstance.name = RuntimeTrailName;
+        runtimeTrailInstance.localPosition = Vector3.zero;
+        runtimeTrailInstance.localRotation = Quaternion.identity;
+        runtimeTrailInstance.localScale = Vector3.one * projectileTrailScale;
+
+        DisableTrailGameplayComponents(trailObject);
+        RestartTrailVisuals(trailObject);
+    }
+
+    private void CleanupProjectileTrail(bool allowDetach)
+    {
+        if (runtimeTrailInstance == null)
+        {
+            Transform existingTrail = transform.Find(RuntimeTrailName);
+            if (existingTrail != null)
+            {
+                runtimeTrailInstance = existingTrail;
+            }
+        }
+
+        if (runtimeTrailInstance == null)
+        {
+            return;
+        }
+
+        Transform trailTransform = runtimeTrailInstance;
+        runtimeTrailInstance = null;
+
+        if (allowDetach && detachTrailOnDespawn && detachedTrailLifetime > 0f)
+        {
+            trailTransform.SetParent(null, true);
+            StopTrailEmission(trailTransform.gameObject, false);
+            Destroy(trailTransform.gameObject, detachedTrailLifetime);
+            return;
+        }
+
+        StopTrailEmission(trailTransform.gameObject, true);
+        Destroy(trailTransform.gameObject);
+    }
+
+    private static void DisableTrailGameplayComponents(GameObject trailObject)
+    {
+        Collider2D[] trailColliders = trailObject.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < trailColliders.Length; i++)
+        {
+            if (trailColliders[i] != null)
+            {
+                trailColliders[i].enabled = false;
+            }
+        }
+
+        Rigidbody2D[] trailBodies = trailObject.GetComponentsInChildren<Rigidbody2D>(true);
+        for (int i = 0; i < trailBodies.Length; i++)
+        {
+            if (trailBodies[i] != null)
+            {
+                trailBodies[i].simulated = false;
+            }
+        }
+    }
+
+    private static void RestartTrailVisuals(GameObject trailObject)
+    {
+        ParticleSystem[] particleSystems = trailObject.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem particleSystem = particleSystems[i];
+            if (particleSystem == null)
+            {
+                continue;
+            }
+
+            ParticleSystem.EmissionModule emission = particleSystem.emission;
+            emission.enabled = true;
+            particleSystem.Clear(true);
+            particleSystem.Play(true);
+        }
+
+        TrailRenderer[] trailRenderers = trailObject.GetComponentsInChildren<TrailRenderer>(true);
+        for (int i = 0; i < trailRenderers.Length; i++)
+        {
+            TrailRenderer trailRenderer = trailRenderers[i];
+            if (trailRenderer == null)
+            {
+                continue;
+            }
+
+            trailRenderer.enabled = true;
+            trailRenderer.emitting = true;
+            trailRenderer.Clear();
+        }
+    }
+
+    private static void StopTrailEmission(GameObject trailObject, bool clearTrailRenderer)
+    {
+        ParticleSystem[] particleSystems = trailObject.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem particleSystem = particleSystems[i];
+            if (particleSystem == null)
+            {
+                continue;
+            }
+
+            particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            if (clearTrailRenderer)
+            {
+                particleSystem.Clear(true);
+            }
+        }
+
+        TrailRenderer[] trailRenderers = trailObject.GetComponentsInChildren<TrailRenderer>(true);
+        for (int i = 0; i < trailRenderers.Length; i++)
+        {
+            TrailRenderer trailRenderer = trailRenderers[i];
+            if (trailRenderer == null)
+            {
+                continue;
+            }
+
+            trailRenderer.emitting = false;
+            if (clearTrailRenderer)
+            {
+                trailRenderer.Clear();
+            }
+        }
     }
 
     private void EnsurePhysicsComponents()

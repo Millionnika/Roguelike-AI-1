@@ -72,6 +72,20 @@ public sealed class WeaponDataSO : ScriptableObject
     public Sprite icon;
     [Tooltip("Статичный визуал на слоте оружия (не префаб летящего снаряда).")]
     public GameObject visualPrefab;
+    [Tooltip("Префаб эффекта попадания. Создаётся в точке успешного попадания снаряда.")]
+    public GameObject impactVfxPrefab;
+    [Tooltip("Сколько секунд эффект попадания живёт перед удалением или возвратом в пул.")]
+    [Min(0f)] public float impactVfxLifetime = 0.75f;
+    [Tooltip("Масштаб эффекта попадания при создании.")]
+    [Min(0.01f)] public float impactVfxScale = 1f;
+    [Tooltip("Префаб следа снаряда. Создаётся на снаряде при выстреле и летит вместе с ним.")]
+    public GameObject projectileTrailPrefab;
+    [Tooltip("Масштаб следа снаряда.")]
+    [Min(0.01f)] public float projectileTrailScale = 1f;
+    [Tooltip("Если включено, след отделяется от снаряда при исчезновении и плавно догорает.")]
+    public bool detachTrailOnDespawn = true;
+    [Tooltip("Сколько секунд отделённый след живёт после исчезновения снаряда.")]
+    [Min(0f)] public float detachedTrailLifetime = 0.4f;
 
     [Header("Звук")]
     [Tooltip("Звуковой клип выстрела.")]
@@ -86,5 +100,9 @@ public sealed class WeaponDataSO : ScriptableObject
         missileAimPauseSpeedMultiplier = Mathf.Max(0f, missileAimPauseSpeedMultiplier);
         missileBoostSpeedMultiplier = Mathf.Max(0.1f, missileBoostSpeedMultiplier);
         missileBoostAcceleration = Mathf.Max(0f, missileBoostAcceleration);
+        impactVfxLifetime = Mathf.Max(0f, impactVfxLifetime);
+        impactVfxScale = Mathf.Max(0.01f, impactVfxScale);
+        projectileTrailScale = Mathf.Max(0.01f, projectileTrailScale);
+        detachedTrailLifetime = Mathf.Max(0f, detachedTrailLifetime);
     }
 }

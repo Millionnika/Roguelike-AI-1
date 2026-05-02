@@ -42,4 +42,7 @@ MonoBehaviour:
   requiredClass: 0
   icon: {fileID: 4428408081873876340, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
   visualPrefab: {fileID: 2610444728062856946, guid: bad5a5180ba2bb64d94043bb8b31a7a2, type: 3}
+  impactVfxPrefab: {fileID: 384781918360307009, guid: 74c839d327c45ef4dbd9db6bb54cbcf0, type: 3}
+  impactVfxLifetime: 0.75
+  impactVfxScale: 1
   fireSound: {fileID: 8300000, guid: eb026bb0346990f40af63845de0f3f48, type: 3}

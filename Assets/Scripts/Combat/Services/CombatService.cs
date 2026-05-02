@@ -607,7 +607,14 @@ internal sealed class CombatService : ICombatService
             renderer.sortingOrder = 6;
         }
 
-        ConfigureProjectileTrail(projectileObject, ownerFaction);
+        if (weapon.Data.projectileTrailPrefab == null)
+        {
+            ConfigureProjectileTrail(projectileObject, ownerFaction);
+        }
+        else
+        {
+            DisableFallbackProjectileTrail(projectileObject);
+        }
 
         ProjectileBehaviour behaviour = projectileObject.GetComponent<ProjectileBehaviour>();
         if (behaviour == null)
@@ -633,7 +640,14 @@ internal sealed class CombatService : ICombatService
             projectileDamage: shotDamage,
             projectileSpeed: Mathf.Max(0.5f, weapon.Data.projectileSpeed),
             projectileMaxDistance: maxDistance,
-            projectileLifetime: lifetime);
+            projectileLifetime: lifetime,
+            sourceImpactVfxPrefab: weapon.Data.impactVfxPrefab,
+            sourceImpactVfxLifetime: weapon.Data.impactVfxLifetime,
+            sourceImpactVfxScale: weapon.Data.impactVfxScale,
+            sourceProjectileTrailPrefab: weapon.Data.projectileTrailPrefab,
+            sourceProjectileTrailScale: weapon.Data.projectileTrailScale,
+            sourceDetachTrailOnDespawn: weapon.Data.detachTrailOnDespawn,
+            sourceDetachedTrailLifetime: weapon.Data.detachedTrailLifetime);
 
         CombatLayerUtility.ApplyProjectileLayer(projectileObject, ownerFaction);
         Debug.Log(
@@ -658,6 +672,7 @@ internal sealed class CombatService : ICombatService
         trail.minVertexDistance = 0.02f;
         trail.widthMultiplier = 0.08f;
         trail.autodestruct = false;
+        trail.enabled = true;
         trail.emitting = true;
         trail.sortingOrder = 5;
         trail.material = GetProjectileTrailMaterial();
@@ -667,6 +682,34 @@ internal sealed class CombatService : ICombatService
         Color end = new Color(start.r, start.g, start.b, 0f);
         trail.startColor = start;
         trail.endColor = end;
+        trail.Clear();
+    }
+
+    private static void DisableFallbackProjectileTrail(GameObject projectileObject)
+    {
+        if (projectileObject == null)
+        {
+            return;
+        }
+
+        TrailRenderer trail = projectileObject.GetComponent<TrailRenderer>();
+        if (trail == null)
+        {
+            return;
+        }
+
+        bool looksLikeGeneratedFallback =
+            trail.sharedMaterial == GetProjectileTrailMaterial() ||
+            (Mathf.Approximately(trail.time, 0.28f) &&
+             Mathf.Approximately(trail.widthMultiplier, 0.08f) &&
+             trail.sortingOrder == 5);
+        if (!looksLikeGeneratedFallback)
+        {
+            return;
+        }
+
+        trail.emitting = false;
+        trail.enabled = false;
         trail.Clear();
     }
 
