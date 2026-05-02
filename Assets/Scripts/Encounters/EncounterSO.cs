@@ -32,6 +32,8 @@ public sealed class EncounterSO : ScriptableObject
     [Header("Текст для игрока")]
     [Tooltip("Краткое описание локации. Показывается во временной панели небоевых узлов и может использоваться в выборе маршрута.")]
     [TextArea(2, 4)] public string shortDescription;
+    [Tooltip("Таблица наград, из которой выбираются варианты после завершения этой локации.")]
+    public RewardTableSO rewardTable;
 
     private void OnValidate()
     {

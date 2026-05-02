@@ -75,6 +75,8 @@ public sealed class ShipDataSO : ScriptableObject
     [Min(0.1f)] public float capacitorRechargeRate = 1.2f;
     [Tooltip("Очки за уничтожение этого корабля.")]
     [Min(0)] public int scoreReward = 40;
+    [Tooltip("Количество Scrap, которое выпадет из этого корабля при уничтожении. Если 0, используется случайное значение 1-3.")]
+    [Min(0)] public int scrapDropAmount = 0;
 
     [Header("Loadout")]
     [Tooltip("Количество слотов оружия.")]

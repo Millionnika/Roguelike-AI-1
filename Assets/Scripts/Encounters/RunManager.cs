@@ -35,6 +35,8 @@ public sealed class RunManager : MonoBehaviour
     [SerializeField, Min(0)] private int completedEncounterCount;
     [Tooltip("Показывает, что runtime-забег уже был запущен.")]
     [SerializeField] private bool runStarted;
+    [Tooltip("Runtime-ресурсы текущего забега (Scrap и другие простые валюты MVP).")]
+    [SerializeField] private RunResources runResources;
 
     private EncounterResult lastEncounterResult;
 
@@ -43,9 +45,20 @@ public sealed class RunManager : MonoBehaviour
     public int CompletedEncounterCount => completedEncounterCount;
     public bool RunStarted => runStarted;
     public EncounterResult LastEncounterResult => lastEncounterResult;
+    public RunResources Resources => runResources;
 
     private void Awake()
     {
+        if (runResources == null)
+        {
+            runResources = GetComponent<RunResources>();
+        }
+
+        if (runResources == null)
+        {
+            runResources = gameObject.AddComponent<RunResources>();
+        }
+
         DontDestroyOnLoad(gameObject);
     }
 
@@ -54,6 +67,7 @@ public sealed class RunManager : MonoBehaviour
         runStarted = true;
         completedEncounterCount = 0;
         lastEncounterResult = default;
+        runResources?.ResetRunResources();
     }
 
     public void SelectEncounter(EncounterSO encounter)
@@ -74,5 +88,20 @@ public sealed class RunManager : MonoBehaviour
         lastEncounterResult = result;
         completedEncounterCount++;
         currentEncounter = null;
+    }
+
+    public void AddScrap(int amount)
+    {
+        runResources?.AddScrap(amount);
+    }
+
+    public bool SpendScrap(int amount)
+    {
+        return runResources != null && runResources.SpendScrap(amount);
+    }
+
+    public void ResetRunResources()
+    {
+        runResources?.ResetRunResources();
     }
 }

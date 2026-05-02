@@ -19,6 +19,7 @@ internal sealed class CombatUpdateContext
     public Action<string, string> LogMessage;
     public Action<ModuleState> UpdateModuleVisual;
     public Action<WeaponDataSO, Vector3, CombatFaction> PlayWeaponShot;
+    public Action<Vector3, EnemyShip> SpawnScrapPickup;
 }
 
 internal readonly struct CombatUpdateResult
@@ -969,6 +970,10 @@ internal sealed class CombatService : ICombatService
         context.LogMessage?.Invoke(enemy.Id + context.Localize("log_destroyed"), "warning");
         int reward = enemy.ScoreValue > 0 ? enemy.ScoreValue : 40;
         context.Player.AddExperience(reward + context.Wave * 8);
+        if (enemy.Transform != null)
+        {
+            context.SpawnScrapPickup?.Invoke(enemy.Transform.position, enemy);
+        }
         context.Enemies.Remove(enemy);
 
         if (enemy.Transform != null)

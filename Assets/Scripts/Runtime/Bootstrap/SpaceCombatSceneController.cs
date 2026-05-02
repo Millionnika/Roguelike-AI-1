@@ -68,6 +68,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
     [Tooltip("Presenter панели небоевой локации. Отвечает только за показ заглушки и обработку кнопки действия.")]
     [SerializeField] private NonCombatEncounterPresenter nonCombatEncounterPresenter;
+    [Tooltip("Presenter панели выбора награды после завершения локации.")]
+    [SerializeField] private RewardChoicePresenter rewardChoicePresenter;
+    [Tooltip("Контроллер применения наград MVP и Scrap.")]
+    [SerializeField] private RunRewardController runRewardController;
     [Tooltip("Inspector: shield hit material")]
     [SerializeField] private Material shieldHitMaterial;
     [Tooltip("Если включено, встроенное старт-меню отключается и бой начинается сразу после загрузки сцены.")]
@@ -299,6 +303,45 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
+    private void EnsureRewardChoicePresenter()
+    {
+        if (rewardChoicePresenter == null)
+        {
+            rewardChoicePresenter = GetComponent<RewardChoicePresenter>();
+        }
+
+        if (rewardChoicePresenter == null)
+        {
+            rewardChoicePresenter = FindAnyObjectByType<RewardChoicePresenter>(FindObjectsInactive.Include);
+        }
+
+        if (rewardChoicePresenter == null)
+        {
+            rewardChoicePresenter = gameObject.AddComponent<RewardChoicePresenter>();
+        }
+    }
+
+    private void EnsureRunRewardController()
+    {
+        if (runRewardController == null)
+        {
+            runRewardController = GetComponent<RunRewardController>();
+        }
+
+        if (runRewardController == null)
+        {
+            runRewardController = FindAnyObjectByType<RunRewardController>(FindObjectsInactive.Include);
+        }
+
+        if (runRewardController == null)
+        {
+            runRewardController = gameObject.AddComponent<RunRewardController>();
+        }
+
+        RunManager manager = encounterFlowController != null ? encounterFlowController.RunManager : null;
+        runRewardController.Initialize(manager, () => player, LogMessage);
+    }
+
     private void EnsureEncounterFlowController()
     {
         if (encounterFlowController == null)
@@ -318,6 +361,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         encounterFlowController.ImportFallbackEncounters(testNextEncounters);
         encounterFlowController.Initialize(StartSelectedCombatEncounter, GetPlayerHullPercent, RestorePlayerHull, LogMessage);
+        EnsureRunRewardController();
     }
 
     private void EnsureTimelineSpawnController()
@@ -690,6 +734,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         startMenuPresenter = GetOrAddSceneComponent<StartMenuPresenter>();
         encounterChoicePresenter = GetOrAddSceneComponent<EncounterChoicePresenter>();
         nonCombatEncounterPresenter = GetOrAddSceneComponent<NonCombatEncounterPresenter>();
+        rewardChoicePresenter = GetOrAddSceneComponent<RewardChoicePresenter>();
+        runRewardController = GetOrAddSceneComponent<RunRewardController>();
         combatAudioController = GetOrAddSceneComponent<CombatAudioController>();
         combatLogPresenter = GetOrAddSceneComponent<CombatLogPresenter>();
 
@@ -710,6 +756,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsureCombatCameraController();
         EnsureEncounterChoicePresenter();
         EnsureNonCombatEncounterPresenter();
+        EnsureRewardChoicePresenter();
+        EnsureRunRewardController();
         EnsurePauseMenuPresenter();
         EnsureConfirmationDialogPresenter();
         EnsureGameOverPresenter();
@@ -744,6 +792,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         BuildHud();
         EnsureEncounterChoiceUi();
         EnsureNonCombatUi();
+        EnsureRewardChoiceUi();
         ApplyPerformanceSettings();
         RefreshLocalizedTexts();
 
@@ -866,6 +915,13 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (gameOver)
         {
             HandleGameOverInput();
+            UpdateHud();
+            return;
+        }
+
+        if (IsRewardChoicePanelVisible())
+        {
+            HandleRewardChoiceInput();
             UpdateHud();
             return;
         }
@@ -1391,6 +1447,41 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool IsNonCombatPanelVisible()
     {
         return encounterFlowController != null && encounterFlowController.IsNonCombatVisible;
+    }
+
+    private bool IsRewardChoicePanelVisible()
+    {
+        return encounterFlowController != null && encounterFlowController.IsRewardChoiceVisible;
+    }
+
+    private void HandleRewardChoiceInput()
+    {
+        Vector2 pointerPosition;
+        if (TryGetPrimaryPointerDown(out pointerPosition) &&
+            encounterFlowController != null &&
+            encounterFlowController.TryHandleRewardChoicePointer(pointerPosition))
+        {
+            return;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            return;
+        }
+
+        if (keyboard.digit1Key.wasPressedThisFrame)
+        {
+            encounterFlowController?.TrySelectRewardChoiceIndex(0);
+        }
+        else if (keyboard.digit2Key.wasPressedThisFrame)
+        {
+            encounterFlowController?.TrySelectRewardChoiceIndex(1);
+        }
+        else if (keyboard.digit3Key.wasPressedThisFrame)
+        {
+            encounterFlowController?.TrySelectRewardChoiceIndex(2);
+        }
     }
 
     private void HandleNonCombatInput()
@@ -2252,6 +2343,63 @@ public class SpaceCombatSceneController : MonoBehaviour
             actionButtonView.Label);
     }
 
+    private void EnsureRewardChoiceUi()
+    {
+        if (rewardChoicePresenter != null && rewardChoicePresenter.HasPanel)
+        {
+            return;
+        }
+
+        if (hudCanvas == null)
+        {
+            return;
+        }
+
+        EnsureRewardChoicePresenter();
+        GameObject panelObject = new GameObject("RewardChoicePanel", typeof(RectTransform));
+        panelObject.transform.SetParent(hudCanvas.transform, false);
+        RectTransform rootRect = panelObject.GetComponent<RectTransform>();
+        StretchToParent(rootRect);
+
+        Image dim = CreateImage("Dimmer", panelObject.transform, new Color(0f, 0f, 0f, 0.58f));
+        StretchToParent(dim.rectTransform);
+
+        Image panel = CreateImage("Panel", panelObject.transform, new Color(0.04f, 0.08f, 0.12f, 0.98f));
+        RectTransform panelRect = panel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(590f, 330f);
+        AddOutline(panel.gameObject, new Color(0.38f, 0.54f, 0.22f, 1f));
+
+        TMP_Text titleText = CreateText("Title", panel.transform, "Выберите награду", 28, FontStyle.Bold, Color.white);
+        titleText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -66f));
+
+        List<Button> buttons = new List<Button>();
+        List<TMP_Text> labels = new List<TMP_Text>();
+        for (int i = 0; i < 3; i++)
+        {
+            UiButtonView buttonView = CreateMenuButton(
+                panel.transform,
+                "reward_choice_" + (i + 1),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 56f - i * 78f),
+                new Vector2(480f, 66f));
+
+            if (buttonView.Label != null)
+            {
+                buttonView.Label.fontSize = 16f;
+                buttonView.Label.textWrappingMode = TextWrappingModes.Normal;
+            }
+
+            buttons.Add(buttonView.Rect.GetComponent<Button>());
+            labels.Add(buttonView.Label);
+        }
+
+        rewardChoicePresenter.Configure(panelObject, titleText, buttons, labels);
+    }
+
     private UiButtonView CreateMenuButton(Transform parent, string id, Vector2 anchor, Vector2 anchoredPosition, Vector2 size)
     {
         Image buttonImage = CreateImage(id, parent, new Color(0.08f, 0.16f, 0.22f, 0.98f));
@@ -2703,7 +2851,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             Localize = Localize,
             LogMessage = LogMessage,
             UpdateModuleVisual = UpdateModuleVisual,
-            PlayWeaponShot = playWeaponShot
+            PlayWeaponShot = playWeaponShot,
+            SpawnScrapPickup = SpawnScrapPickup
         };
 
         CombatUpdateResult result = combatService.UpdateFrame(context, deltaTime);
@@ -2721,6 +2870,35 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void UpdatePerkSelectionInput()
     {
         playerProgressionController?.TickPerkSelectionInput();
+    }
+
+    private void SpawnScrapPickup(Vector3 position, EnemyShip enemy)
+    {
+        RunResources resources = encounterFlowController != null && encounterFlowController.RunManager != null
+            ? encounterFlowController.RunManager.Resources
+            : null;
+
+        if (resources == null || worldRoot == null)
+        {
+            return;
+        }
+
+        int amount = enemy != null && enemy.ScrapDropAmount > 0 ? enemy.ScrapDropAmount : UnityEngine.Random.Range(1, 4);
+        GameObject pickupObject = new GameObject("ScrapPickup");
+        pickupObject.transform.SetParent(worldRoot, true);
+        pickupObject.transform.position = new Vector3(position.x, position.y, 0f);
+
+        SpriteRenderer renderer = pickupObject.AddComponent<SpriteRenderer>();
+        renderer.sprite = circleSprite;
+        renderer.color = new Color(0.95f, 0.84f, 0.25f, 0.95f);
+        renderer.sortingOrder = 18;
+
+        ScrapPickupBehaviour pickup = pickupObject.AddComponent<ScrapPickupBehaviour>();
+        pickup.Initialize(
+            amount,
+            resources,
+            player != null ? player.Transform : null,
+            (collectedAmount, total) => LogMessage("Scrap +" + collectedAmount + " (всего: " + total + ")", "warning"));
     }
 
     private void UpdateTimelineSpawner(float deltaTime)
@@ -2865,6 +3043,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         string shipName = (availableShips != null && availableShips.Count > 0 && selectedShipIndex >= 0 && selectedShipIndex < availableShips.Count)
             ? availableShips[selectedShipIndex].displayName
             : "-";
+        int scrapAmount = 0;
+        if (encounterFlowController != null && encounterFlowController.RunManager != null && encounterFlowController.RunManager.Resources != null)
+        {
+            scrapAmount = encounterFlowController.RunManager.Resources.Scrap;
+        }
         combatHudPresenter?.Tick(new CombatHudContext
         {
             Player = player,
@@ -2877,7 +3060,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             GameOver = gameOver,
             LevelUpPending = levelUpPending,
             UseVirtualJoystick = useVirtualJoystick,
-            ShipName = shipName
+            ShipName = shipName,
+            Scrap = scrapAmount
         });
 
         if (statusText != null && (combatHudPresenter == null || combatHudPresenter.StatusText == null))

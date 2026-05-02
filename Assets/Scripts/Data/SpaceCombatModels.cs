@@ -43,6 +43,7 @@ internal sealed class EnemyShip
     public float AttackTimer;
     public float Damage;
     public int ScoreValue;
+    public int ScrapDropAmount;
     public float DriftSpeed;
     public float HitFlashTimer;
     public float AttackFlashTimer;
@@ -61,6 +62,7 @@ internal sealed class EnemyShip
     public float WeaponDamageMultiplier = 1f;
     public readonly List<WeaponInstance> WeaponInstances = new List<WeaponInstance>();
     public GameObject Prefab;
+    public ShipDataSO SourceShipData;
 
     public float ShieldPercent => MaxShield <= 0f ? 0f : Shield / MaxShield;
     public float ArmorPercent => MaxArmor <= 0f ? 0f : Armor / MaxArmor;

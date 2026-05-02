@@ -180,6 +180,7 @@ public sealed class EnemySpawner : MonoBehaviour
             AttackTimer = Random.Range(0f, 0.7f),
             Damage = enemyDamage,
             ScoreValue = shipData.scoreReward > 0 ? shipData.scoreReward : 40,
+            ScrapDropAmount = shipData.scrapDropAmount,
             DriftSpeed = enemyMoveSpeed,
             MaxShield = shieldValue,
             Shield = shieldValue,
@@ -189,6 +190,7 @@ public sealed class EnemySpawner : MonoBehaviour
             Hull = hullValue,
             WeaponDamageMultiplier = Mathf.Max(0.1f, shipData.damageMultiplier) * sanitizedLevelScale,
             Prefab = enemyPrefab,
+            SourceShipData = shipData,
             BaseBodyColor = bodyRenderer != null ? bodyRenderer.color : Color.white,
             BaseShieldColor = shieldRenderer != null && shieldRenderer.color.a > 0.001f ? shieldRenderer.color : shipData.auraColor
         };

@@ -35,35 +35,41 @@ public readonly struct EncounterCompletionContext
 public sealed class EncounterFlowController : MonoBehaviour
 {
     [Header("Пресет забега")]
-    [Tooltip("Единый пресет забега. Используется для стартовой локации и как понятная точка входа настройки. Если поле пустое, работают старые прямые ссылки.")]
+    [Tooltip("Единый пресет забега. Если не назначен, используются прямые ссылки RunManager/RunMapDirector и старые fallback-настройки.")]
     [SerializeField] private RunPresetSO runPreset;
 
     [Header("Связи забега")]
     [Tooltip("Runtime-менеджер забега. Хранит текущую выбранную локацию и счетчик завершенных локаций.")]
     [SerializeField] private RunManager runManager;
-    [Tooltip("Директор генерации следующих локаций. Если не назначен или не сможет сгенерировать варианты, используется резервный список.")]
+    [Tooltip("Директор генерации следующих локаций. Если не назначен или не смог создать варианты, используется резервный список.")]
     [SerializeField] private RunMapDirector runMapDirector;
     [Tooltip("Директор темпа забега. Получает результаты завершенных локаций и влияет на будущие веса выбора.")]
     [SerializeField] private RunEventDirector runEventDirector;
 
     [Header("UI локаций")]
-    [Tooltip("Presenter панели выбора следующей локации. Отвечает за показ вариантов и клики по кнопкам.")]
+    [Tooltip("Presenter панели выбора следующей локации.")]
     [SerializeField] private EncounterChoicePresenter encounterChoicePresenter;
-    [Tooltip("Presenter панели небоевой локации. Отвечает за показ заглушки Shop/Repair/Event/Rest/Resource.")]
+    [Tooltip("Presenter панели небоёвой локации.")]
     [SerializeField] private NonCombatEncounterPresenter nonCombatEncounterPresenter;
+    [Tooltip("Presenter панели выбора награды после завершения локации.")]
+    [SerializeField] private RewardChoicePresenter rewardChoicePresenter;
+    [Tooltip("Контроллер применения наград к ресурсам и параметрам игрока.")]
+    [SerializeField] private RunRewardController runRewardController;
 
     [Header("Резервные варианты")]
     [Tooltip("Резервный список следующих локаций. Используется, если RunMapDirector отсутствует или не смог сгенерировать варианты.")]
     [SerializeField] private List<EncounterSO> fallbackNextEncounters = new List<EncounterSO>();
 
     [Header("Небоевые локации")]
-    [Tooltip("Доля максимального корпуса, восстанавливаемая в Repair-локации. 0.2 означает 20%. Позже будет заменено системой цены ремонта.")]
+    [Tooltip("Доля максимального корпуса, восстанавливаемая в Repair-локации. 0.2 означает 20%.")]
     [SerializeField, Range(0f, 1f)] private float repairHullPercent = 0.2f;
     [Tooltip("Доля максимального корпуса, восстанавливаемая в Rest-локации. 0.1 означает 10%.")]
     [SerializeField, Range(0f, 1f)] private float restHullPercent = 0.1f;
 
     private readonly List<EncounterSO> activeChoices = new List<EncounterSO>();
+    private readonly List<RewardSO> activeRewardChoices = new List<RewardSO>();
     private bool encounterCompleted;
+    private bool awaitingRewardSelection;
     private EncounterSO activeNonCombatEncounter;
     private Action<EncounterSO> startCombatEncounter;
     private Func<float> getPlayerHullPercent;
@@ -72,6 +78,7 @@ public sealed class EncounterFlowController : MonoBehaviour
 
     public bool IsEncounterChoiceVisible => encounterChoicePresenter != null && encounterChoicePresenter.IsVisible;
     public bool IsNonCombatVisible => nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.IsVisible;
+    public bool IsRewardChoiceVisible => rewardChoicePresenter != null && rewardChoicePresenter.IsVisible;
     public RunManager RunManager => runManager;
     public RunPresetSO RunPreset => ActiveRunPreset;
 
@@ -120,11 +127,7 @@ public sealed class EncounterFlowController : MonoBehaviour
             return;
         }
 
-        if (fallbackNextEncounters == null)
-        {
-            fallbackNextEncounters = new List<EncounterSO>();
-        }
-
+        fallbackNextEncounters ??= new List<EncounterSO>();
         for (int i = 0; i < encounters.Count; i++)
         {
             EncounterSO encounter = encounters[i];
@@ -138,14 +141,16 @@ public sealed class EncounterFlowController : MonoBehaviour
     public void StartRun()
     {
         EnsureRunManagerReference();
-        if (runManager != null)
+        if (runManager == null)
         {
-            runManager.StartRun();
-            RunPresetSO activePreset = ActiveRunPreset;
-            if (runManager.CurrentEncounter == null && activePreset != null && activePreset.startingEncounter != null)
-            {
-                runManager.SelectEncounter(activePreset.startingEncounter);
-            }
+            return;
+        }
+
+        runManager.StartRun();
+        RunPresetSO activePreset = ActiveRunPreset;
+        if (runManager.CurrentEncounter == null && activePreset != null && activePreset.startingEncounter != null)
+        {
+            runManager.SelectEncounter(activePreset.startingEncounter);
         }
     }
 
@@ -155,6 +160,7 @@ public sealed class EncounterFlowController : MonoBehaviour
         activeNonCombatEncounter = null;
         HideChoices();
         HideNonCombat();
+        HideRewardChoices();
     }
 
     public WaveTimelineSO GetActiveTimeline(WaveTimelineSO fallbackTimeline)
@@ -185,7 +191,10 @@ public sealed class EncounterFlowController : MonoBehaviour
             return;
         }
 
+        EnsureRunManagerReference();
+        EncounterSO completedEncounter = runManager != null ? runManager.CurrentEncounter : null;
         encounterCompleted = true;
+
         EncounterResult result = new EncounterResult(
             context.completedNodeType,
             context.playerHullPercent,
@@ -195,7 +204,7 @@ public sealed class EncounterFlowController : MonoBehaviour
 
         CompleteEncounterResult(result);
         Log("Локация завершена.", "warning");
-        ShowChoices();
+        ShowRewardsOrChoices(completedEncounter);
     }
 
     public bool TryHandleChoicePointer(Vector2 screenPosition)
@@ -213,13 +222,23 @@ public sealed class EncounterFlowController : MonoBehaviour
         return nonCombatEncounterPresenter != null && nonCombatEncounterPresenter.TryActivateAt(screenPosition);
     }
 
+    public bool TryHandleRewardChoicePointer(Vector2 screenPosition)
+    {
+        return rewardChoicePresenter != null && rewardChoicePresenter.TrySelectAt(screenPosition);
+    }
+
+    public bool TrySelectRewardChoiceIndex(int index)
+    {
+        return rewardChoicePresenter != null && rewardChoicePresenter.SelectByIndex(index);
+    }
+
     public void CompleteActiveNonCombatEncounter()
     {
         EncounterSO encounter = activeNonCombatEncounter;
         if (encounter == null)
         {
             HideNonCombat();
-            ShowChoices();
+            ShowRewardsOrChoices(null);
             return;
         }
 
@@ -235,27 +254,26 @@ public sealed class EncounterFlowController : MonoBehaviour
         Log("Локация завершена: " + GetNodeTypeDisplayName(encounter.nodeType), "warning");
         activeNonCombatEncounter = null;
         HideNonCombat();
-        ShowChoices();
+        ShowRewardsOrChoices(encounter);
     }
 
     public void HideChoices()
     {
-        if (encounterChoicePresenter != null)
-        {
-            encounterChoicePresenter.Hide();
-        }
-
+        encounterChoicePresenter?.Hide();
         activeChoices.Clear();
     }
 
     public void HideNonCombat()
     {
-        if (nonCombatEncounterPresenter != null)
-        {
-            nonCombatEncounterPresenter.Hide();
-        }
-
+        nonCombatEncounterPresenter?.Hide();
         activeNonCombatEncounter = null;
+    }
+
+    public void HideRewardChoices()
+    {
+        rewardChoicePresenter?.Hide();
+        activeRewardChoices.Clear();
+        awaitingRewardSelection = false;
     }
 
     public void SelectEncounter(EncounterSO encounter)
@@ -266,12 +284,10 @@ public sealed class EncounterFlowController : MonoBehaviour
         }
 
         EnsureRunManagerReference();
-        if (runManager != null)
-        {
-            runManager.SelectEncounter(encounter);
-        }
+        runManager?.SelectEncounter(encounter);
 
         HideChoices();
+        HideRewardChoices();
         if (ShouldHandleAsNonCombatPlaceholder(encounter))
         {
             ShowNonCombatEncounter(encounter);
@@ -279,6 +295,71 @@ public sealed class EncounterFlowController : MonoBehaviour
         }
 
         startCombatEncounter?.Invoke(encounter);
+    }
+
+    public void SelectReward(RewardSO reward)
+    {
+        if (!awaitingRewardSelection || reward == null)
+        {
+            return;
+        }
+
+        EnsureReferences();
+        runRewardController?.ApplyReward(reward);
+        HideRewardChoices();
+        ShowChoices();
+    }
+
+    private void ShowRewardsOrChoices(EncounterSO completedEncounter)
+    {
+        if (TryShowRewardChoices(completedEncounter))
+        {
+            return;
+        }
+
+        ShowChoices();
+    }
+
+    private bool TryShowRewardChoices(EncounterSO completedEncounter)
+    {
+        HideRewardChoices();
+        if (completedEncounter == null || completedEncounter.rewardTable == null)
+        {
+            return false;
+        }
+
+        EnsureReferences();
+        if (rewardChoicePresenter == null)
+        {
+            Debug.LogWarning("EncounterFlowController: у локации назначена таблица наград, но RewardChoicePresenter не найден.", this);
+            return false;
+        }
+
+        List<RewardSO> generatedChoices = completedEncounter.rewardTable.GenerateChoices();
+        if (generatedChoices == null || generatedChoices.Count == 0)
+        {
+            Debug.LogWarning("EncounterFlowController: таблица наград пуста или не смогла создать варианты. Переход к выбору следующей локации.", this);
+            return false;
+        }
+
+        activeRewardChoices.Clear();
+        for (int i = 0; i < generatedChoices.Count && activeRewardChoices.Count < 3; i++)
+        {
+            RewardSO reward = generatedChoices[i];
+            if (reward != null)
+            {
+                activeRewardChoices.Add(reward);
+            }
+        }
+
+        if (activeRewardChoices.Count == 0)
+        {
+            return false;
+        }
+
+        awaitingRewardSelection = true;
+        rewardChoicePresenter.Show(activeRewardChoices, SelectReward);
+        return true;
     }
 
     private void ShowChoices()
@@ -300,14 +381,11 @@ public sealed class EncounterFlowController : MonoBehaviour
 
         if (activeChoices.Count == 0)
         {
-            Debug.LogWarning("EncounterFlowController: не настроены варианты следующих локаций. Заполните резервный список или настройте RunMapDirector.", this);
+            Debug.LogWarning("EncounterFlowController: не настроены варианты следующих локаций. Заполните fallback-список или RunMapDirector.", this);
             return;
         }
 
-        if (encounterChoicePresenter != null)
-        {
-            encounterChoicePresenter.ShowChoices(activeChoices, SelectEncounter);
-        }
+        encounterChoicePresenter?.ShowChoices(activeChoices, SelectEncounter);
     }
 
     private void ShowNonCombatEncounter(EncounterSO encounter)
@@ -319,10 +397,7 @@ public sealed class EncounterFlowController : MonoBehaviour
 
         EnsureReferences();
         activeNonCombatEncounter = encounter;
-        if (nonCombatEncounterPresenter != null)
-        {
-            nonCombatEncounterPresenter.Show(encounter, BuildNonCombatDescription(encounter), CompleteActiveNonCombatEncounter);
-        }
+        nonCombatEncounterPresenter?.Show(encounter, BuildNonCombatDescription(encounter), CompleteActiveNonCombatEncounter);
     }
 
     private bool TryGenerateRunMapChoices(List<EncounterSO> results)
@@ -347,16 +422,10 @@ public sealed class EncounterFlowController : MonoBehaviour
     private void CompleteEncounterResult(EncounterResult result)
     {
         EnsureRunManagerReference();
-        if (runManager != null)
-        {
-            runManager.CompleteCurrentEncounter(result);
-        }
+        runManager?.CompleteCurrentEncounter(result);
 
         EnsureRunEventDirectorReference();
-        if (runEventDirector != null)
-        {
-            runEventDirector.OnEncounterCompleted(result);
-        }
+        runEventDirector?.OnEncounterCompleted(result);
     }
 
     private void ApplyNonCombatPlaceholderEffect(EncounterSO encounter)
@@ -379,14 +448,14 @@ public sealed class EncounterFlowController : MonoBehaviour
                 break;
             case LocationNodeType.Resource:
                 Debug.Log("EncounterFlowController: ресурсная локация завершена. Экономика будет добавлена позже.", this);
-                Log("Ресурсы собраны. Награда будет подключена позже.", "warning");
+                Log("Ресурсы собраны. Полная награда будет подключена позже.", "warning");
                 break;
             case LocationNodeType.Shop:
-                Debug.Log("EncounterFlowController: магазин открыт как временная заглушка. Инвентарь магазина будет добавлен позже.", this);
+                Debug.Log("EncounterFlowController: магазин открыт как временная заглушка.", this);
                 Log("Магазин пока работает как заглушка.", "warning");
                 break;
             case LocationNodeType.Event:
-                Debug.Log("EncounterFlowController: событие показано как временная заглушка. Варианты событий будут добавлены позже.", this);
+                Debug.Log("EncounterFlowController: событие показано как временная заглушка.", this);
                 Log("Событие обработано как заглушка.", "warning");
                 break;
         }
@@ -465,6 +534,8 @@ public sealed class EncounterFlowController : MonoBehaviour
         EnsureRunEventDirectorReference();
         EnsureEncounterChoicePresenterReference();
         EnsureNonCombatPresenterReference();
+        EnsureRewardChoicePresenterReference();
+        EnsureRunRewardControllerReference();
     }
 
     private void EnsureRunManagerReference()
@@ -513,6 +584,22 @@ public sealed class EncounterFlowController : MonoBehaviour
         if (nonCombatEncounterPresenter == null)
         {
             nonCombatEncounterPresenter = FindAnyObjectByType<NonCombatEncounterPresenter>(FindObjectsInactive.Include);
+        }
+    }
+
+    private void EnsureRewardChoicePresenterReference()
+    {
+        if (rewardChoicePresenter == null)
+        {
+            rewardChoicePresenter = FindAnyObjectByType<RewardChoicePresenter>(FindObjectsInactive.Include);
+        }
+    }
+
+    private void EnsureRunRewardControllerReference()
+    {
+        if (runRewardController == null)
+        {
+            runRewardController = FindAnyObjectByType<RunRewardController>(FindObjectsInactive.Include);
         }
     }
 

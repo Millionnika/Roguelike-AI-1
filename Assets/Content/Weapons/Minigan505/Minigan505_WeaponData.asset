@@ -41,8 +41,12 @@ MonoBehaviour:
   capacitorPerShot: 5
   requiredClass: 0
   icon: {fileID: 4428408081873876340, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
-  visualPrefab: {fileID: 2610444728062856946, guid: bad5a5180ba2bb64d94043bb8b31a7a2, type: 3}
-  impactVfxPrefab: {fileID: 384781918360307009, guid: 74c839d327c45ef4dbd9db6bb54cbcf0, type: 3}
+  visualPrefab: {fileID: 5364176229209357493, guid: ba8b9f7b53d2bfe46bab6bbe3c40c308, type: 3}
+  impactVfxPrefab: {fileID: 4656672596067251309, guid: c2f1b841607838d4190881ad51491908, type: 3}
   impactVfxLifetime: 0.75
   impactVfxScale: 1
+  projectileTrailPrefab: {fileID: 0}
+  projectileTrailScale: 1
+  detachTrailOnDespawn: 1
+  detachedTrailLifetime: 0.4
   fireSound: {fileID: 8300000, guid: eb026bb0346990f40af63845de0f3f48, type: 3}

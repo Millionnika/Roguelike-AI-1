@@ -39,6 +39,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
     private TMP_Text levelText;
     private TMP_Text experienceText;
     private TMP_Text shipText;
+    private TMP_Text scrapText;
     private Image targetPanel;
     private Image targetShieldFill;
     private Image targetArmorFill;
@@ -143,6 +144,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
 
         if (targetDisplayText != null) targetDisplayText.text = Localize("target_label") + targetDisplayName;
         if (shipText != null) shipText.text = Localize("ship_label") + context.ShipName;
+        if (scrapText != null) scrapText.text = "Лом: " + Mathf.Max(0, context.Scrap);
         if (levelText != null) levelText.text = Localize("level_label") + context.Player.Level;
         if (experienceText != null) experienceText.text = Localize("xp_label") + context.Player.Experience + " / " + context.Player.ExperienceToNext;
 
@@ -372,6 +374,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
         capacitorText = FindText(panel, "CapText");
         targetDisplayText = FindText(panel, "TargetDisplay");
         shipText = FindText(panel, "ShipText");
+        scrapText = FindText(panel, "ScrapText");
         levelText = FindText(panel, "LevelText");
         experienceText = FindText(panel, "ExperienceText");
 
@@ -527,11 +530,14 @@ public sealed class CombatHudPresenter : MonoBehaviour
         shipText = CreateText("ShipText", panel.transform, "Ship: none", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(shipText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 26f), new Vector2(-10f, 50f));
         shipText.gameObject.SetActive(false);
+        scrapText = CreateText("ScrapText", panel.transform, "Лом: 0", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
+        SetAnchoredRect(scrapText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 0f), new Vector2(-10f, 24f));
+        scrapText.gameObject.SetActive(false);
         levelText = CreateText("LevelText", panel.transform, "Level: 1", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(levelText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, 0f), new Vector2(-10f, 24f));
+        SetAnchoredRect(levelText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -24f), new Vector2(-10f, 0f));
         levelText.gameObject.SetActive(false);
         experienceText = CreateText("ExperienceText", panel.transform, "XP: 0 / 100", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
-        SetAnchoredRect(experienceText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -24f), new Vector2(-10f, 0f));
+        SetAnchoredRect(experienceText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -48f), new Vector2(-10f, -24f));
         experienceText.gameObject.SetActive(false);
     }
 
@@ -914,4 +920,5 @@ internal struct CombatHudContext
     public bool LevelUpPending;
     public bool UseVirtualJoystick;
     public string ShipName;
+    public int Scrap;
 }
