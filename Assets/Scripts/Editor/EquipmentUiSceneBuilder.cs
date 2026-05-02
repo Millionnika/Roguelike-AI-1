@@ -183,7 +183,16 @@ public static class EquipmentUiSceneBuilder
             : directory + "/" + safeName + "_Prefab.prefab";
     }
 
-    internal static void BuildShipFromFactory(string sourceName, Sprite shipSprite)
+    internal static void BuildShipFromFactory(
+        string sourceName,
+        Sprite shipSprite,
+        GameObject engineVfxPrefab,
+        float engineIdleEmissionRate,
+        float engineMovingEmissionRate,
+        float engineAfterburnerMultiplier,
+        float engineEmissionLerpSpeed,
+        float engineVfxScale,
+        int enginePointsCount)
     {
         string safeName = SanitizeName(sourceName);
         if (string.IsNullOrWhiteSpace(safeName))
@@ -221,8 +230,15 @@ public static class EquipmentUiSceneBuilder
 
         ShipDataSO existingShipData = AssetDatabase.LoadAssetAtPath<ShipDataSO>(shipDataPath);
         int weaponSlotCount = existingShipData != null ? Mathf.Max(0, existingShipData.weaponSlotCount) : 2;
-        GameObject prefab = CreateFactoryShipPrefab(prefabPath, safeName, shipSprite, weaponSlotCount);
+        GameObject prefab = CreateFactoryShipPrefab(prefabPath, safeName, shipSprite, weaponSlotCount, enginePointsCount);
         ShipDataSO shipData = CreateFactoryShipData(shipDataPath, safeName, shipSprite, prefab);
+        shipData.engineVfxPrefab = engineVfxPrefab;
+        shipData.engineIdleEmissionRate = Mathf.Max(0f, engineIdleEmissionRate);
+        shipData.engineMovingEmissionRate = Mathf.Max(0f, engineMovingEmissionRate);
+        shipData.engineAfterburnerEmissionMultiplier = Mathf.Max(1f, engineAfterburnerMultiplier);
+        shipData.engineEmissionLerpSpeed = Mathf.Max(0f, engineEmissionLerpSpeed);
+        shipData.engineVfxScale = Mathf.Max(0.01f, engineVfxScale);
+        EditorUtility.SetDirty(shipData);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -562,11 +578,11 @@ public static class EquipmentUiSceneBuilder
         return AssetDatabase.LoadAssetAtPath<SlotUI>(PrefabPath);
     }
 
-    private static GameObject CreateFactoryShipPrefab(string prefabPath, string safeName, Sprite shipSprite, int weaponSlotCount)
+    private static GameObject CreateFactoryShipPrefab(string prefabPath, string safeName, Sprite shipSprite, int weaponSlotCount, int enginePointsCount)
     {
         Sprite railgunVisualSprite = AssetDatabase.LoadAssetAtPath<Sprite>(RailgunVisualSpritePath);
         GameObject root = new GameObject(safeName + "_Prefab");
-        BuildCompleteShipHierarchy(root.transform, shipSprite, Mathf.Max(0, weaponSlotCount), railgunVisualSprite);
+        BuildCompleteShipHierarchy(root.transform, shipSprite, Mathf.Max(0, weaponSlotCount), railgunVisualSprite, enginePointsCount);
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
@@ -592,7 +608,7 @@ public static class EquipmentUiSceneBuilder
         }
     }
 
-    private static void BuildCompleteShipHierarchy(Transform root, Sprite shipSprite, int weaponSlotCount, Sprite weaponVisualSprite)
+    private static void BuildCompleteShipHierarchy(Transform root, Sprite shipSprite, int weaponSlotCount, Sprite weaponVisualSprite, int enginePointsCount = 2)
     {
         GameObject body = new GameObject("Body");
         body.transform.SetParent(root, false);
@@ -621,8 +637,7 @@ public static class EquipmentUiSceneBuilder
         thruster.transform.localRotation = Quaternion.identity;
         thruster.transform.localScale = Vector3.one;
 
-        CreateEngineFireAnchor(thruster.transform, "Engine_Fire_L", new Vector3(-0.22f, -0.58f, 0f));
-        CreateEngineFireAnchor(thruster.transform, "Engine_Fire_R", new Vector3(0.22f, -0.58f, 0f));
+        CreateEngineFireAnchors(thruster.transform, enginePointsCount);
         CreateWeaponSlots(root, weaponSlotCount, weaponVisualSprite);
     }
 
@@ -709,6 +724,24 @@ public static class EquipmentUiSceneBuilder
         fire.transform.localPosition = localPosition;
         fire.transform.localRotation = Quaternion.identity;
         fire.transform.localScale = Vector3.one;
+    }
+
+    private static void CreateEngineFireAnchors(Transform parent, int enginePointsCount)
+    {
+        int count = Mathf.Max(1, enginePointsCount);
+        if (count == 2)
+        {
+            CreateEngineFireAnchor(parent, "Engine_Fire_L", new Vector3(-0.22f, -0.58f, 0f));
+            CreateEngineFireAnchor(parent, "Engine_Fire_R", new Vector3(0.22f, -0.58f, 0f));
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            float lerp = count <= 1 ? 0.5f : i / (float)(count - 1);
+            float x = Mathf.Lerp(-0.36f, 0.36f, lerp);
+            CreateEngineFireAnchor(parent, "Engine_Fire_" + (i + 1), new Vector3(x, -0.58f, 0f));
+        }
     }
 
     private static void EnsureEngineFireAnchor(Transform parent, string name, Vector3 localPosition)
@@ -999,6 +1032,13 @@ public sealed class ShipFactoryWizard : ScriptableWizard
 {
     public string shipName = "NewShip";
     public Sprite shipSprite;
+    public GameObject engineVfxPrefab;
+    public float engineIdleEmissionRate = 0f;
+    public float engineMovingEmissionRate = 18f;
+    public float engineAfterburnerMultiplier = 2f;
+    public float engineEmissionLerpSpeed = 8f;
+    public float engineVfxScale = 1f;
+    public int enginePointsCount = 2;
 
     private void OnWizardUpdate()
     {
@@ -1016,6 +1056,12 @@ public sealed class ShipFactoryWizard : ScriptableWizard
             return;
         }
 
+        engineIdleEmissionRate = Mathf.Max(0f, engineIdleEmissionRate);
+        engineMovingEmissionRate = Mathf.Max(0f, engineMovingEmissionRate);
+        engineAfterburnerMultiplier = Mathf.Max(1f, engineAfterburnerMultiplier);
+        engineEmissionLerpSpeed = Mathf.Max(0f, engineEmissionLerpSpeed);
+        engineVfxScale = Mathf.Max(0.01f, engineVfxScale);
+        enginePointsCount = Mathf.Max(1, enginePointsCount);
         errorString = string.Empty;
         helpString = "Build Ship создаст prefab и ShipDataSO в Assets/Content/Ships/<ShipName>.";
         isValid = true;
@@ -1023,7 +1069,16 @@ public sealed class ShipFactoryWizard : ScriptableWizard
 
     private void OnWizardCreate()
     {
-        EquipmentUiSceneBuilder.BuildShipFromFactory(shipName, shipSprite);
+        EquipmentUiSceneBuilder.BuildShipFromFactory(
+            shipName,
+            shipSprite,
+            engineVfxPrefab,
+            engineIdleEmissionRate,
+            engineMovingEmissionRate,
+            engineAfterburnerMultiplier,
+            engineEmissionLerpSpeed,
+            engineVfxScale,
+            enginePointsCount);
     }
 }
 

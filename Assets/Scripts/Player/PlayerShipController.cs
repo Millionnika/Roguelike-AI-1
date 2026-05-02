@@ -282,6 +282,10 @@ public sealed class PlayerShipController : MonoBehaviour
         player.AuraRenderer = aura;
         player.ThrusterRenderer = thruster;
         player.ThrusterEffect = EnsureThrusterEffect(playerVisualInstance);
+        if (player.ThrusterEffect != null)
+        {
+            player.ThrusterEffect.ConfigureFromShipData(ship);
+        }
 
         player.BaseBodyColor = body != null ? body.color : ship.accentColor;
         player.BaseAuraColor = aura != null && aura.color.a > 0.001f ? aura.color : ship.auraColor;

@@ -13,6 +13,7 @@ public sealed class ShipDataSOEditor : Editor
         DrawEnemyAiSection();
         DrawSurvivabilitySection();
         DrawLoadoutSection();
+        DrawEngineVfxSection();
         DrawVisualSection();
 
         serializedObject.ApplyModifiedProperties();
@@ -113,6 +114,42 @@ public sealed class ShipDataSOEditor : Editor
         EditorGUILayout.PropertyField(serializedObject.FindProperty("accentColor"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("auraColor"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("shipIcon"));
+    }
+
+    private void DrawEngineVfxSection()
+    {
+        EditorGUILayout.LabelField("Эффекты двигателя", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(
+            serializedObject.FindProperty("engineVfxPrefab"),
+            new GUIContent(
+                "Engine VFX Prefab",
+                "Префаб эффекта двигателя для этого корабля. Создаётся на всех точках двигателя внутри объекта Thruster."));
+        EditorGUILayout.PropertyField(
+            serializedObject.FindProperty("engineIdleEmissionRate"),
+            new GUIContent(
+                "Idle Emission Rate",
+                "Интенсивность эффекта двигателя, когда корабль почти не движется. 0 = двигатель визуально выключен."));
+        EditorGUILayout.PropertyField(
+            serializedObject.FindProperty("engineMovingEmissionRate"),
+            new GUIContent(
+                "Moving Emission Rate",
+                "Интенсивность эффекта двигателя при движении корабля."));
+        EditorGUILayout.PropertyField(
+            serializedObject.FindProperty("engineAfterburnerEmissionMultiplier"),
+            new GUIContent(
+                "Afterburner Multiplier",
+                "Множитель интенсивности эффекта двигателя при форсаже или максимальной тяге."));
+        EditorGUILayout.PropertyField(
+            serializedObject.FindProperty("engineEmissionLerpSpeed"),
+            new GUIContent(
+                "Emission Lerp Speed",
+                "Скорость плавного изменения интенсивности эффекта двигателя."));
+        EditorGUILayout.PropertyField(
+            serializedObject.FindProperty("engineVfxScale"),
+            new GUIContent(
+                "Engine VFX Scale",
+                "Масштаб создаваемого префаба эффекта двигателя на точках двигателя."));
+        EditorGUILayout.Space(6f);
     }
 
     private static void DrawSlotList(SerializedProperty property, string label)

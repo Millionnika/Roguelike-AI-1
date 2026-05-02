@@ -92,6 +92,20 @@ public sealed class ShipDataSO : ScriptableObject
     [Tooltip("Стартовые модули по слотам.")]
     public List<ModuleDataSO> startingModules = new List<ModuleDataSO>();
 
+    [Header("Эффекты двигателя")]
+    [Tooltip("Префаб эффекта двигателя для этого корабля. Создаётся на всех точках двигателя внутри объекта Thruster.")]
+    public GameObject engineVfxPrefab;
+    [Tooltip("Интенсивность эффекта двигателя, когда корабль почти не движется. 0 = двигатель визуально выключен.")]
+    [Min(0f)] public float engineIdleEmissionRate = 0f;
+    [Tooltip("Интенсивность эффекта двигателя при движении корабля.")]
+    [Min(0f)] public float engineMovingEmissionRate = 18f;
+    [Tooltip("Множитель интенсивности эффекта двигателя при форсаже или максимальной тяге.")]
+    [Min(1f)] public float engineAfterburnerEmissionMultiplier = 2f;
+    [Tooltip("Скорость плавного изменения интенсивности эффекта двигателя.")]
+    [Min(0f)] public float engineEmissionLerpSpeed = 8f;
+    [Tooltip("Масштаб создаваемого префаба эффекта двигателя на точках двигателя.")]
+    [Min(0.01f)] public float engineVfxScale = 1f;
+
     [Header("Visual")]
     [Tooltip("Базовый акцентный цвет корабля.")]
     public Color accentColor = new Color(0.28f, 0.6f, 0.94f, 1f);
@@ -109,6 +123,11 @@ public sealed class ShipDataSO : ScriptableObject
         startingWeapons ??= new List<WeaponDataSO>();
         startingModules ??= new List<ModuleDataSO>();
         capacitorRechargeRate = Mathf.Max(0.1f, capacitorRechargeRate);
+        engineIdleEmissionRate = Mathf.Max(0f, engineIdleEmissionRate);
+        engineMovingEmissionRate = Mathf.Max(0f, engineMovingEmissionRate);
+        engineAfterburnerEmissionMultiplier = Mathf.Max(1f, engineAfterburnerEmissionMultiplier);
+        engineEmissionLerpSpeed = Mathf.Max(0f, engineEmissionLerpSpeed);
+        engineVfxScale = Mathf.Max(0.01f, engineVfxScale);
 
         enemyPreferredDistance = Mathf.Max(0f, enemyPreferredDistance);
         enemyPreferredDistanceFromRange = Mathf.Clamp(enemyPreferredDistanceFromRange, 0.3f, 0.98f);

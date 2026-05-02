@@ -111,6 +111,10 @@ public sealed class EnemySpawner : MonoBehaviour
 
         SpriteRenderer thrusterRenderer = FindChildSpriteRenderer(enemyObject.transform, "Thruster");
         ShipThrusterEffect thrusterEffect = EnsureThrusterEffect(enemyObject);
+        if (thrusterEffect != null)
+        {
+            thrusterEffect.ConfigureFromShipData(shipData);
+        }
 
         float sanitizedLevelScale = Mathf.Max(0.1f, levelScale);
         float shieldValue = Mathf.Max(1f, shipData.maxShield * sanitizedLevelScale);
