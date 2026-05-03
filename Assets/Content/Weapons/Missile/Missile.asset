@@ -40,6 +40,13 @@ MonoBehaviour:
   fireRate: 0.45
   capacitorPerShot: 9
   requiredClass: 0
-  icon: {fileID: 0}
-  visualPrefab: {fileID: 0}
+  icon: {fileID: -3087264978319007404, guid: c4d375201ad035d418c8b02e2444571a, type: 3}
+  visualPrefab: {fileID: 2683546806237445005, guid: 7d49c672cd4a762428bbae0492527d89, type: 3}
+  impactVfxPrefab: {fileID: 0}
+  impactVfxLifetime: 0.75
+  impactVfxScale: 1
+  projectileTrailPrefab: {fileID: 0}
+  projectileTrailScale: 1
+  detachTrailOnDespawn: 1
+  detachedTrailLifetime: 0.4
   fireSound: {fileID: 8300000, guid: 606d91d801d3736449900c3075805664, type: 3}
