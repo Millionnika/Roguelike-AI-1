@@ -42,6 +42,7 @@ MonoBehaviour:
   capacitorRechargeTime: 92
   capacitorRechargeRate: 1.4
   scoreReward: 40
+  scrapDropAmount: 0
   weaponSlotCount: 3
   moduleSlotCount: 3
   damageMultiplier: 1
@@ -49,8 +50,8 @@ MonoBehaviour:
   shipPrefab: {fileID: 2101523389554617440, guid: e86f7f022e04de648a0fa89836d72841, type: 3}
   startingWeapons:
   - {fileID: 11400000, guid: b42bd98f441922549a4c41e53a9500e0, type: 2}
-  - {fileID: 0}
-  - {fileID: 11400000, guid: b9f910b25c2383944b3fe6b2411b8496, type: 2}
+  - {fileID: 11400000, guid: b42bd98f441922549a4c41e53a9500e0, type: 2}
+  - {fileID: 11400000, guid: b42bd98f441922549a4c41e53a9500e0, type: 2}
   startingModules:
   - {fileID: 0}
   - {fileID: 0}
