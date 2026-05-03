@@ -22,6 +22,8 @@ public sealed class SectorMapNode
     public bool completed;
     [Tooltip("Если включено, узел не участвует в маршруте и не должен быть кликабельным.")]
     public bool locked;
+    [Tooltip("Финальный узел маршрута (верхний правый угол карты).")]
+    public bool isFinish;
     [Tooltip("Координаты узлов, в которые можно идти вперед из этого узла.")]
     public List<Vector2Int> nextCoordinates = new List<Vector2Int>();
 

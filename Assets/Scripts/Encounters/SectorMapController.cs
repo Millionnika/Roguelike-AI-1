@@ -48,35 +48,43 @@ public sealed class SectorMapController : MonoBehaviour
             return;
         }
 
-        int width = Mathf.Max(5, config.width);
-        int height = Mathf.Max(5, config.height);
-        int maxX = width - 1;
-        int maxY = height - 1;
-
         EncounterSO fallbackCombat = FindFirstByType(pool, LocationNodeType.Combat) ?? FindFirstEncounter(pool.encounters);
         EncounterSO startEncounter = runPreset != null && runPreset.startingEncounter != null
             ? runPreset.startingEncounter
             : fallbackCombat;
-        EncounterSO bossEncounter = FindFirstByType(pool, LocationNodeType.Boss) ?? fallbackCombat;
+        EncounterSO finishEncounter = FindFirstByType(pool, LocationNodeType.Boss) ?? fallbackCombat;
 
+        // Гарантированно связный route graph: 8 узлов, все соединены в единый маршрут
+        // (0,0) -> (0,1) -> (1,2) -> (2,3) -> (4,4)
+        // (0,0) -> (1,1) -> (1,2) -> (2,2) -> (2,3) -> (4,4)
+        //                    (1,1) -> (2,2) -> (3,3) -> (4,4)
         SectorMapNode start = AddNode(0, 0, startEncounter);
-        SectorMapNode branchA = AddNode(0, 1, PickEncounter(pool, LocationNodeType.Repair, fallbackCombat));
-        SectorMapNode pathA = AddNode(1, 1, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
-        SectorMapNode joinA = AddNode(1, 2, PickEncounter(pool, LocationNodeType.Rest, fallbackCombat));
-        SectorMapNode pathB = AddNode(2, 2, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
-        SectorMapNode branchB = AddNode(2, 3, PickEncounter(pool, LocationNodeType.Event, fallbackCombat));
-        SectorMapNode preBoss = AddNode(Mathf.Max(3, maxX - 1), Mathf.Max(3, maxY - 1), PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
-        SectorMapNode boss = AddNode(maxX, maxY, bossEncounter);
+        SectorMapNode n01 = AddNode(0, 1, PickEncounter(pool, LocationNodeType.Repair, fallbackCombat));
+        SectorMapNode n11 = AddNode(1, 1, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
+        SectorMapNode n12 = AddNode(1, 2, PickEncounter(pool, LocationNodeType.Rest, fallbackCombat));
+        SectorMapNode n22 = AddNode(2, 2, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
+        SectorMapNode n23 = AddNode(2, 3, PickEncounter(pool, LocationNodeType.Event, fallbackCombat));
+        SectorMapNode n33 = AddNode(3, 3, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
+        SectorMapNode finish = AddNode(4, 4, finishEncounter);
+        finish.isFinish = true;
 
-        Connect(start, branchA);
-        Connect(start, pathA);
-        Connect(branchA, joinA);
-        Connect(pathA, joinA);
-        Connect(joinA, pathB);
-        Connect(pathB, preBoss);
-        Connect(pathB, branchB);
-        Connect(branchB, boss);
-        Connect(preBoss, boss);
+        // Слой 1: от старта
+        Connect(start, n01);
+        Connect(start, n11);
+
+        // Слой 2: сходятся в (1,2)
+        Connect(n01, n12);
+        Connect(n11, n12);
+        Connect(n11, n22);
+
+        // Слой 3: расходятся
+        Connect(n12, n23);
+        Connect(n22, n23);
+        Connect(n22, n33);
+
+        // Финиш
+        Connect(n23, finish);
+        Connect(n33, finish);
 
         SetCurrent(start);
         UpdateReachableNodes();
@@ -119,6 +127,13 @@ public sealed class SectorMapController : MonoBehaviour
         }
 
         SetCurrent(node);
+
+        // Если это финиш — не обновляем reachable, карта завершена
+        if (node.isFinish)
+        {
+            return true;
+        }
+
         UpdateReachableNodes();
         return true;
     }
@@ -134,6 +149,11 @@ public sealed class SectorMapController : MonoBehaviour
 
     public bool HasAvailableNextNodes()
     {
+        if (currentNode != null && currentNode.isFinish)
+        {
+            return false;
+        }
+
         IReadOnlyList<SectorMapNode> reachable = GetReachableNextNodes();
         return reachable != null && reachable.Count > 0;
     }
@@ -165,7 +185,8 @@ public sealed class SectorMapController : MonoBehaviour
             }
         }
 
-        if (currentNode == null || currentNode.nextCoordinates == null)
+        // Если текущий узел — финиш, дальше идти некуда
+        if (currentNode == null || currentNode.isFinish || currentNode.nextCoordinates == null)
         {
             return;
         }

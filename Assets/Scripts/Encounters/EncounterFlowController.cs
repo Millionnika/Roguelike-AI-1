@@ -444,6 +444,15 @@ public sealed class EncounterFlowController : MonoBehaviour
         }
 
         sectorMapController.MarkCurrentCompleted();
+
+        // Проверка финиша: если текущий узел — финиш, не показываем карту
+        if (sectorMapController.CurrentNode != null && sectorMapController.CurrentNode.isFinish)
+        {
+            Debug.Log("EncounterFlowController: финиш сектора достигнут. Забег пройден.");
+            Log("Финиш сектора достигнут. Забег пройден.", "warning");
+            return false;
+        }
+
         if (!sectorMapController.HasAvailableNextNodes())
         {
             Debug.Log("EncounterFlowController: доступные узлы карты сектора закончились. Используется старый выбор локаций.", this);

@@ -29,7 +29,11 @@ public sealed class SectorMapPresenter : MonoBehaviour
     [Tooltip("Толщина линий между связанными узлами.")]
     [SerializeField, Min(1f)] private float lineWidth = 5f;
     [Tooltip("Размер шрифта подписи внутри узла.")]
-    [SerializeField, Min(8)] private int fontSize = 12;
+    [SerializeField, Min(8)] private int fontSize = 16;
+    [Tooltip("Отступ карты от краёв панели.")]
+    [SerializeField] private float mapPadding = 60f;
+    [Tooltip("Автоматически центрировать карту внутри панели.")]
+    [SerializeField] private bool centerMapInPanel = true;
     [Tooltip("Показывать координаты узлов для отладки маршрута.")]
     [SerializeField] private bool showDebugCoordinates;
 
@@ -48,8 +52,8 @@ public sealed class SectorMapPresenter : MonoBehaviour
     [SerializeField] private Color lockedNodeColor = new Color(0.08f, 0.09f, 0.11f, 0.68f);
     [Tooltip("Цвет стартового узла.")]
     [SerializeField] private Color startNodeColor = new Color(0.35f, 0.85f, 0.42f, 1f);
-    [Tooltip("Цвет финального или boss-узла.")]
-    [SerializeField] private Color bossNodeColor = new Color(0.82f, 0.18f, 0.24f, 1f);
+    [Tooltip("Цвет финального узла (верхний правый угол карты).")]
+    [SerializeField] private Color finishNodeColor = new Color(0.82f, 0.18f, 0.24f, 1f);
     [Tooltip("Цвет линии к доступному узлу.")]
     [SerializeField] private Color reachableLineColor = new Color(0.28f, 0.84f, 0.42f, 0.95f);
     [Tooltip("Цвет уже пройденной линии маршрута.")]
@@ -175,12 +179,33 @@ public sealed class SectorMapPresenter : MonoBehaviour
 
         float totalWidth = maxX * spacingX;
         float totalHeight = maxY * spacingY;
-        for (int i = 0; i < currentNodes.Count; i++)
+
+        if (centerMapInPanel && mapRoot != null)
         {
-            SectorMapNode node = currentNodes[i];
-            nodePositions[node] = new Vector2(
-                -totalWidth * 0.5f + node.x * spacingX,
-                -totalHeight * 0.5f + node.y * spacingY);
+            // Центрируем карту внутри панели с учётом отступов
+            float panelW = mapRoot.rect.width - mapPadding * 2f;
+            float panelH = mapRoot.rect.height - mapPadding * 2f;
+            float scaleX = totalWidth > 0.01f ? Mathf.Min(1f, panelW / totalWidth) : 1f;
+            float scaleY = totalHeight > 0.01f ? Mathf.Min(1f, panelH / totalHeight) : 1f;
+            float scale = Mathf.Min(scaleX, scaleY);
+
+            for (int i = 0; i < currentNodes.Count; i++)
+            {
+                SectorMapNode node = currentNodes[i];
+                nodePositions[node] = new Vector2(
+                    -totalWidth * 0.5f * scale + node.x * spacingX * scale,
+                    -totalHeight * 0.5f * scale + node.y * spacingY * scale);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < currentNodes.Count; i++)
+            {
+                SectorMapNode node = currentNodes[i];
+                nodePositions[node] = new Vector2(
+                    -totalWidth * 0.5f + node.x * spacingX,
+                    -totalHeight * 0.5f + node.y * spacingY);
+            }
         }
     }
 
@@ -269,20 +294,7 @@ public sealed class SectorMapPresenter : MonoBehaviour
 
     private void BuildNodeContent(Transform parent, SectorMapNode node)
     {
-        Sprite icon = ResolveIcon(node);
-        if (icon != null)
-        {
-            Image iconImage = CreateImage("Icon", parent, Color.white);
-            iconImage.sprite = icon;
-            iconImage.preserveAspect = true;
-            RectTransform iconRect = iconImage.rectTransform;
-            iconRect.anchorMin = new Vector2(0.5f, 0.5f);
-            iconRect.anchorMax = new Vector2(0.5f, 0.5f);
-            iconRect.pivot = new Vector2(0.5f, 0.5f);
-            iconRect.sizeDelta = new Vector2(nodeSize * 0.46f, nodeSize * 0.46f);
-            iconRect.anchoredPosition = Vector2.zero;
-        }
-
+        // Показываем только текст — иконки временно отключены для читаемости
         TMP_Text label = CreateText("Label", parent, BuildNodeLabel(node), fontSize, FontStyle.Bold, Color.white);
         label.alignment = TextAlignmentOptions.Center;
         label.textWrappingMode = TextWrappingModes.Normal;
@@ -296,9 +308,9 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return lockedNodeColor;
         }
 
-        if (node.encounter.nodeType == LocationNodeType.Boss)
+        if (node.isFinish)
         {
-            return node.current ? currentNodeColor : bossNodeColor;
+            return node.current ? currentNodeColor : finishNodeColor;
         }
 
         if (node.x == 0 && node.y == 0)
@@ -400,12 +412,22 @@ public sealed class SectorMapPresenter : MonoBehaviour
 
     private static string GetNodeTypeDisplayName(SectorMapNode node)
     {
-        if (node != null && node.x == 0 && node.y == 0)
+        if (node == null)
+        {
+            return "-";
+        }
+
+        if (node.isFinish)
+        {
+            return "Финиш";
+        }
+
+        if (node.x == 0 && node.y == 0)
         {
             return "Старт";
         }
 
-        return node != null && node.encounter != null ? GetNodeTypeDisplayName(node.encounter.nodeType) : "-";
+        return node.encounter != null ? GetNodeTypeDisplayName(node.encounter.nodeType) : "-";
     }
 
     private static string GetNodeTypeDisplayName(LocationNodeType nodeType)
@@ -463,7 +485,7 @@ public sealed class SectorMapPresenter : MonoBehaviour
         RectTransform rootRect = panelObject.GetComponent<RectTransform>();
         Stretch(rootRect);
 
-        Image dim = CreateImage("Dimmer", panelObject.transform, new Color(0f, 0f, 0f, 0.62f));
+        Image dim = CreateImage("Dimmer", panelObject.transform, new Color(0f, 0f, 0f, 0.88f));
         Stretch(dim.rectTransform);
 
         Image panel = CreateImage("Panel", panelObject.transform, panelBackgroundColor);
