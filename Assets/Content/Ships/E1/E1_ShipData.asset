@@ -20,11 +20,11 @@ MonoBehaviour:
   descriptionRu: "\u0421\u043E\u0437\u0434\u0430\u043D\u043E \u0447\u0435\u0440\u0435\u0437
     Ship Factory."
   shipClass: 0
-  enemyBehaviorPreset: 2
   maxSpeed: 6.5
   acceleration: 11
   rotationSpeed: 8.5
   drag: 1.6
+  enemyBehaviorPreset: 2
   enemyPreferredDistance: 0
   enemyPreferredDistanceFromRange: 0.82
   enemyPreferredDistanceVariance: 0.55
@@ -42,6 +42,7 @@ MonoBehaviour:
   capacitorRechargeTime: 92
   capacitorRechargeRate: 1.2
   scoreReward: 40
+  scrapDropAmount: 0
   weaponSlotCount: 2
   moduleSlotCount: 4
   damageMultiplier: 1
@@ -55,6 +56,12 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
+  engineVfxPrefab: {fileID: 2595350388095881943, guid: 78f96d43fa17abc429a9a033cb567221, type: 3}
+  engineIdleEmissionRate: 0
+  engineMovingEmissionRate: 18
+  engineAfterburnerEmissionMultiplier: 2
+  engineEmissionLerpSpeed: 8
+  engineVfxScale: 1
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
   shipIcon: {fileID: -1025847066175078499, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}

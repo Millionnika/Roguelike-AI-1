@@ -56,12 +56,12 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
-  engineVfxPrefab: {fileID: 2683546806237445005, guid: 94be61cc20786d9429e1d309c74f71ea, type: 3}
-  engineIdleEmissionRate: 1
-  engineMovingEmissionRate: 22
-  engineAfterburnerEmissionMultiplier: 4
-  engineEmissionLerpSpeed: 11
-  engineVfxScale: 2
+  engineVfxPrefab: {fileID: 2595350388095881943, guid: 78f96d43fa17abc429a9a033cb567221, type: 3}
+  engineIdleEmissionRate: 2
+  engineMovingEmissionRate: 60
+  engineAfterburnerEmissionMultiplier: 2
+  engineEmissionLerpSpeed: 8
+  engineVfxScale: 4
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
   shipIcon: {fileID: -6481520680327269525, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
