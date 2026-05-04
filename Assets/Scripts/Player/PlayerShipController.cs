@@ -108,7 +108,7 @@ public sealed class PlayerShipController : MonoBehaviour
         }
 
         player.Transform.position = Vector3.zero;
-        player.Transform.rotation = Quaternion.identity;
+        // player.Transform.rotation = Quaternion.identity; // Убрали сброс поворота
         player.Velocity = Vector2.zero;
         player.MoveCommandActive = false;
     }

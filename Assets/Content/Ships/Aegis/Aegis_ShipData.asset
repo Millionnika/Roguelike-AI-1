@@ -56,7 +56,7 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
-  engineVfxPrefab: {fileID: 2595350388095881943, guid: 78f96d43fa17abc429a9a033cb567221, type: 3}
+  engineVfxPrefab: {fileID: 0}
   engineIdleEmissionRate: 2
   engineMovingEmissionRate: 60
   engineAfterburnerEmissionMultiplier: 2

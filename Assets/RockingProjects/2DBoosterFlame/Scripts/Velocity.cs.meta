@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 2351655e894be4c268e878fd74e97681
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 226796
+  packageName: 2D Booster & Flame (Shader & Controller)
+  packageVersion: 1.0.0
+  assetPath: Assets/RockingProjects/2DBoosterFlame/Scripts/Velocity.cs
+  uploadId: 518977

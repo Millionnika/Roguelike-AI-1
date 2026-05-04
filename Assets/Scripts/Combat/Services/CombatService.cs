@@ -182,7 +182,7 @@ internal sealed class CombatService : ICombatService
         {
             enemy.Retreating = true;
         }
-        else if (currentDistance > reengageDistance && !lowDurability)
+        else if (currentDistance > reengageDistance)
         {
             enemy.Retreating = false;
         }

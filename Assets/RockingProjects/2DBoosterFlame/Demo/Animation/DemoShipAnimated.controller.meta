@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: da955360e15854f89be042e9c21eca60
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 226796
+  packageName: 2D Booster & Flame (Shader & Controller)
+  packageVersion: 1.0.0
+  assetPath: Assets/RockingProjects/2DBoosterFlame/Demo/Animation/DemoShipAnimated.controller
+  uploadId: 518977

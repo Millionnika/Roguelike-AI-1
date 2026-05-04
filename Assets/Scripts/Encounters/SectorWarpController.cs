@@ -80,6 +80,12 @@ public sealed class SectorWarpController : MonoBehaviour
 
         Vector2 dir = distance > 0.001f ? ((Vector2)toTarget).normalized : Vector2.zero;
         activePlayer.Velocity = dir * Mathf.Max(0.01f, warpSpeed * speedMultiplier);
+        
+        if (dir != Vector2.zero)
+        {
+            activePlayer.Transform.rotation = Quaternion.LookRotation(Vector3.forward, dir);
+        }
+
         if (disablePlayerInputDuringWarp)
         {
             activePlayer.MoveCommandActive = false;
@@ -117,6 +123,19 @@ public sealed class SectorWarpController : MonoBehaviour
             if (clearVelocityOnArrival)
             {
                 ClearPlayerVelocity(activePlayer);
+            }
+            else
+            {
+                // Сбрасываем только линейную скорость, сохраняя текущий поворот
+                activePlayer.Velocity = Vector2.zero;
+                if (activePlayer.Transform != null)
+                {
+                    Rigidbody2D body = activePlayer.Transform.GetComponent<Rigidbody2D>();
+                    if (body != null)
+                    {
+                        body.linearVelocity = Vector2.zero;
+                    }
+                }
             }
         }
 

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 89786b20792cc46228a5ed14061c11cb
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 226796
+  packageName: 2D Booster & Flame (Shader & Controller)
+  packageVersion: 1.0.0
+  assetPath: Assets/RockingProjects/2DBoosterFlame/Material/BoosterFlameMaterialBlue.mat
+  uploadId: 518977

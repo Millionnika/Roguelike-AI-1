@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 44438b674a7ae476d9f7e18e930171e6
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 226796
+  packageName: 2D Booster & Flame (Shader & Controller)
+  packageVersion: 1.0.0
+  assetPath: Assets/RockingProjects/2DBoosterFlame/Scripts/Helper.cs
+  uploadId: 518977
