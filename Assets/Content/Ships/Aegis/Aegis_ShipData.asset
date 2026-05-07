@@ -64,4 +64,4 @@ MonoBehaviour:
   engineVfxScale: 4
   accentColor: {r: 0.28, g: 0.6, b: 0.94, a: 1}
   auraColor: {r: 0.38, g: 0.76, b: 1, a: 0.72}
-  shipIcon: {fileID: -6481520680327269525, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}
+  shipIcon: {fileID: -149936938662290505, guid: 0f2e9e8e4883f1746aa561637daf587c, type: 3}

@@ -162,7 +162,7 @@ public sealed class EnemySpawner : MonoBehaviour
             ThrusterEffect = thrusterEffect,
             OrbitDistance = preferredDistance,
             OrbitAngle = Random.Range(0f, Mathf.PI * 2f),
-            OrbitSpeed = Random.Range(0.4f, 0.95f),
+            OrbitSpeed = Random.Range(1.0f, 2.0f),
             RetreatDistance = retreatDistance,
             ReengageDistance = reengageDistance,
             DistanceResponsiveness = Random.Range(1.25f, 1.75f),

@@ -38,7 +38,7 @@ MonoBehaviour:
   missileBoostSpeedMultiplier: 2.9
   missileBoostAcceleration: 46
   fireRate: 0.45
-  capacitorPerShot: 9
+  capacitorPerShot: 0.5
   requiredClass: 0
   icon: {fileID: -3087264978319007404, guid: c4d375201ad035d418c8b02e2444571a, type: 3}
   visualPrefab: {fileID: 2610444728062856946, guid: 3b755526923535040bcc79ab2ab09b21, type: 3}

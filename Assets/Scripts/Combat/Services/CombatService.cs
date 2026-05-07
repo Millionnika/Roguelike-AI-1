@@ -107,28 +107,70 @@ internal sealed class CombatService : ICombatService
                 continue;
             }
 
-            UpdateEnemyPosition(enemy, playerPosition, deltaTime);
+            // Обновляем позицию и получаем фактическое перемещение
+            UpdateEnemyPosition(enemy, playerPosition, deltaTime, out Vector3 appliedDelta);
 
-            Vector3 toPlayer = playerPosition - enemy.Transform.position;
-            if (toPlayer.sqrMagnitude > 0.001f)
+            // Переход в режим облёта только если враг находится на желаемой дистанции (в пределах допуска)
+            float distanceToPlayer = Vector3.Distance(enemy.Transform.position, playerPosition);
+            float orbitDistance = Mathf.Max(0.1f, enemy.OrbitDistance);
+            float tolerance = Mathf.Max(0.05f, enemy.HoldDistanceTolerance);
+            bool isAtOptimalDistance = Mathf.Abs(distanceToPlayer - orbitDistance) <= tolerance;
+
+            // Управление фазами
+            if (enemy.CombatPhase == EnemyCombatPhase.Attack)
             {
-                float lookAngle = Mathf.Atan2(toPlayer.y, toPlayer.x) * Mathf.Rad2Deg - 90f;
-                enemy.Transform.rotation = Quaternion.Euler(0f, 0f, lookAngle);
+                // Если на оптимальной дистанции и не отступаем, с вероятностью переходим в облёт
+                if (isAtOptimalDistance && !enemy.Retreating && UnityEngine.Random.value < 0.2f * deltaTime * 10f)
+                {
+                    enemy.CombatPhase = EnemyCombatPhase.Flanking;
+                    enemy.FlankDirection = UnityEngine.Random.value > 0.5f ? 1f : -1f;
+                    enemy.PhaseTimer = 0f; // сброс таймера при входе в Flanking
+                }
+                // Если слишком далеко или слишком близко, остаёмся в атаке (двигаемся к оптимальной дистанции)
+            }
+            else // Flanking
+            {
+                // Увеличиваем таймер фазы
+                enemy.PhaseTimer += deltaTime;
+                // Максимальное время облёта (секунды)
+                float maxFlankingDuration = 4f;
+                // Если вышел за пределы оптимальной дистанции, или отступаем, или таймер превысил лимит, возвращаемся в атаку
+                if (!isAtOptimalDistance || enemy.Retreating || enemy.PhaseTimer >= maxFlankingDuration)
+                {
+                    enemy.CombatPhase = EnemyCombatPhase.Attack;
+                }
             }
 
+            // Ориентация врага по направлению фактического перемещения (как у игрока)
+            // В фазе Flanking ориентация уже выполнена в UpdateEnemyPosition, но можно дополнительно скорректировать
+            if (appliedDelta.sqrMagnitude > 0.0001f)
+            {
+                // Определяем направление движения
+                Vector3 moveDir = appliedDelta.normalized;
+                // Вычисляем целевую ориентацию, где "вверх" соответствует направлению движения
+                Quaternion targetRot = Quaternion.Euler(0f, 0f, Mathf.Atan2(moveDir.y, moveDir.x) * Mathf.Rad2Deg - 90f);
+                // Скорость поворота зависит от фазы и DistanceResponsiveness
+                float turnSpeedDeg = Mathf.Max(1f, enemy.DistanceResponsiveness) *
+                    (enemy.CombatPhase == EnemyCombatPhase.Attack ? 540f : 360f); // градусов в секунду
+                enemy.Transform.rotation = Quaternion.RotateTowards(
+                    enemy.Transform.rotation,
+                    targetRot,
+                    turnSpeedDeg * deltaTime);
+            }
+
+            Vector3 toPlayer = playerPosition - enemy.Transform.position;
             enemy.AttackTimer += deltaTime;
             enemy.AttackFlashTimer = Mathf.Max(0f, enemy.AttackFlashTimer - deltaTime * 4f);
-            enemy.HitFlashTimer = Mathf.Max(0f, enemy.HitFlashTimer - deltaTime * 4.5f);
+            enemy.HitFlashTimer = Mathf.Max(0f, enemy.HitFlashTimer - deltaTime * 4f);
 
-            bool fired = TryFireEnemyWeapons(context, enemy, playerPosition, deltaTime);
+            bool canFire = enemy.CombatPhase == EnemyCombatPhase.Attack || UnityEngine.Random.value < 0.3f;
+            bool fired = canFire && TryFireEnemyWeapons(context, enemy, playerPosition, deltaTime);
             if (fired)
             {
                 enemy.AttackFlashTimer = 1f;
                 enemy.AttackTimer = 0f;
-                continue;
             }
-
-            if (enemy.AttackTimer >= enemy.AttackCooldown && toPlayer.magnitude <= 3.8f)
+            else if (enemy.CombatPhase == EnemyCombatPhase.Attack && enemy.AttackTimer >= enemy.AttackCooldown && toPlayer.magnitude <= 3.8f)
             {
                 enemy.AttackTimer = 0f;
                 enemy.AttackFlashTimer = 1f;
@@ -145,8 +187,9 @@ internal sealed class CombatService : ICombatService
         }
     }
 
-    private static void UpdateEnemyPosition(EnemyShip enemy, Vector3 playerPosition, float deltaTime)
+    private static void UpdateEnemyPosition(EnemyShip enemy, Vector3 playerPosition, float deltaTime, out Vector3 appliedDelta)
     {
+        appliedDelta = Vector3.zero;
         if (enemy == null || enemy.Transform == null)
         {
             return;
@@ -162,6 +205,17 @@ internal sealed class CombatService : ICombatService
 
         Vector3 radialDirection = awayFromPlayer / currentDistance;
 
+        // Если враг только что заспавнен и не повёрнут, сразу ориентируем его на игрока
+        if (enemy.Transform.rotation == Quaternion.identity)
+        {
+            Vector3 toPlayer = playerPosition - enemy.Transform.position;
+            if (toPlayer.sqrMagnitude > 0.001f)
+            {
+                float angle = Mathf.Atan2(toPlayer.y, toPlayer.x) * Mathf.Rad2Deg - 90f;
+                enemy.Transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            }
+        }
+
         float shieldMax = Mathf.Max(0f, enemy.MaxShield);
         float armorMax = Mathf.Max(0f, enemy.MaxArmor);
         float hullMax = Mathf.Max(0.01f, enemy.MaxHull);
@@ -170,7 +224,19 @@ internal sealed class CombatService : ICombatService
         float durabilityPercent = durabilityNow / durabilityMax;
         bool lowDurability = durabilityPercent <= Mathf.Clamp01(enemy.LowDurabilityRetreatThreshold);
 
-        float desiredDistance = Mathf.Max(0.1f, enemy.OrbitDistance);
+        // Желаемая дистанция зависит от фазы боя
+        float desiredDistance;
+        if (enemy.CombatPhase == EnemyCombatPhase.Attack)
+        {
+            // В атаке стремимся к дистанции эффективной стрельбы (но не дальше орбитальной)
+            desiredDistance = Mathf.Min(enemy.OrbitDistance, enemy.PrimaryWeaponRange * 0.8f);
+        }
+        else
+        {
+            // В облёте используем орбитальную дистанцию
+            desiredDistance = enemy.OrbitDistance;
+        }
+        desiredDistance = Mathf.Max(0.1f, desiredDistance);
         if (lowDurability)
         {
             desiredDistance += Mathf.Max(0f, enemy.LowDurabilityRetreatDistanceBonus);
@@ -201,6 +267,8 @@ internal sealed class CombatService : ICombatService
             float panicSpeed = enemy.DriftSpeed * Mathf.Max(1f, enemy.RetreatSpeedMultiplier) * retreatBoost;
             float retreatError = Mathf.Max(0f, desiredDistance - currentDistance);
             radialSpeed = Mathf.Max(panicSpeed * 0.55f, retreatError * responsiveness);
+            // Минимальная скорость отступления, чтобы не останавливаться
+            radialSpeed = Mathf.Max(radialSpeed, enemy.DriftSpeed * 0.3f);
         }
         else if (outOfFireRange)
         {
@@ -218,19 +286,76 @@ internal sealed class CombatService : ICombatService
                 enemy.DriftSpeed * 0.2f,
                 enemy.DriftSpeed);
         }
+        else if (currentDistance > desiredDistance + holdTolerance)
+        {
+            // Враг дальше желаемой дистанции, но внутри дистанции атаки
+            float farError = currentDistance - (desiredDistance + holdTolerance);
+            radialSpeed = -Mathf.Clamp(
+                farError * responsiveness,
+                enemy.DriftSpeed * 0.2f,
+                enemy.DriftSpeed * 0.8f);
+        }
+        else
+        {
+            // Враг находится в пределах holdTolerance от желаемой дистанции.
+            // Добавим небольшое колебательное движение вперёд/назад, чтобы не стоять на месте.
+            float oscillation = Mathf.Sin(Time.time * 2f + enemy.StrafeJitterPhase) * 0.5f;
+            radialSpeed = oscillation * enemy.DriftSpeed * 0.15f;
+        }
 
         float maxRetreat = enemy.DriftSpeed * Mathf.Max(1.2f, enemy.RetreatSpeedMultiplier) * (lowDurability ? Mathf.Max(1f, enemy.LowDurabilityRetreatSpeedMultiplier) : 1f);
+        // Ограничим максимальную скорость отступления, чтобы игрок мог догнать
+        maxRetreat = Mathf.Min(maxRetreat, enemy.DriftSpeed * 1.5f);
         float maxApproach = enemy.DriftSpeed * 1.25f;
         radialSpeed = Mathf.Clamp(radialSpeed, -maxApproach, maxRetreat);
-        MoveEnemyWithBaseCollision(enemy, radialDirection * radialSpeed * deltaTime);
 
         float jitterAmplitude = Mathf.Max(0f, enemy.StrafeJitterAmplitude);
         float jitterFrequency = Mathf.Max(0.1f, enemy.StrafeJitterFrequency);
         float jitter = Mathf.Sin(Time.time * jitterFrequency + enemy.StrafeJitterPhase) * jitterAmplitude;
-        enemy.OrbitAngle += (enemy.OrbitSpeed + jitter * 0.45f) * deltaTime;
-        Vector3 tangent = new Vector3(-Mathf.Sin(enemy.OrbitAngle), Mathf.Cos(enemy.OrbitAngle), 0f);
-        float tangentScale = enemy.Retreating ? 0.45f : 1f + jitter * 0.3f;
-        MoveEnemyWithBaseCollision(enemy, tangent * enemy.DriftSpeed * Mathf.Max(0.2f, tangentScale) * deltaTime);
+        
+        // Базовая скорость орбиты (используется в фазе Flanking)
+        float orbitSpeed = enemy.OrbitSpeed * enemy.FlankDirection;
+        // Если враг в фазе Flanking, увеличиваем скорость орбиты для активного облёта
+        if (enemy.CombatPhase == EnemyCombatPhase.Flanking)
+        {
+            orbitSpeed *= 2.5f;
+        }
+        
+        // Возвращаем нормальное движение
+        Vector3 tangent = new Vector3(-radialDirection.y, radialDirection.x, 0f) * enemy.FlankDirection;
+        
+        Vector3 moveDelta;
+        if (enemy.Retreating)
+        {
+            // Уже ограничили скорость выше, просто применяем
+            moveDelta = radialDirection * radialSpeed * deltaTime;
+        }
+        else if (enemy.CombatPhase == EnemyCombatPhase.Attack)
+        {
+            // В фазе атаки движемся прямо к игроку (радиально), добавляем боковое движение для живости
+            float tangentScale = jitter * 0.3f; // увеличенное боковое движение
+            // Минимальная радиальная скорость, чтобы не стоять на месте
+            float minRadialSpeed = enemy.DriftSpeed * 0.1f;
+            float effectiveRadialSpeed = Mathf.Abs(radialSpeed) < minRadialSpeed ? Mathf.Sign(radialSpeed) * minRadialSpeed : radialSpeed;
+            moveDelta = (radialDirection * effectiveRadialSpeed + tangent * enemy.DriftSpeed * tangentScale) * deltaTime;
+        }
+        else
+        {
+            // В облете движемся по дуге, сохраняя орбитальную дистанцию, используем orbitSpeed
+            float distError = currentDistance - enemy.OrbitDistance;
+            Vector3 radialCorrection = radialDirection * (-distError * responsiveness * 0.2f);
+            moveDelta = (tangent * orbitSpeed + radialCorrection) * deltaTime;
+            
+            // Медленно меняем OrbitAngle, чтобы враги распределялись по окружности
+            enemy.OrbitAngle += orbitSpeed * 0.5f * deltaTime;
+        }
+
+        // Запоминаем позицию до перемещения
+        Vector3 beforePos = enemy.Transform.position;
+        // Применяем перемещение с учётом коллизий
+        MoveEnemyWithBaseCollision(enemy, moveDelta);
+        // Вычисляем фактическое перемещение
+        appliedDelta = enemy.Transform.position - beforePos;
     }
 
     private static void MoveEnemyWithBaseCollision(EnemyShip enemy, Vector3 delta)

@@ -12,8 +12,17 @@ internal enum ModuleType
     Afterburner
 }
 
+internal enum EnemyCombatPhase
+{
+    Attack,
+    Flanking
+}
+
 internal sealed class EnemyShip
 {
+    public EnemyCombatPhase CombatPhase = EnemyCombatPhase.Attack;
+    public float PhaseTimer;
+    public float FlankDirection = 1f;
     public string Id;
     public string Type;
     public Transform Transform;
