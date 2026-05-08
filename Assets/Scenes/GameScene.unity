@@ -29028,6 +29028,7 @@ MonoBehaviour:
   homePortalCountdownTextSize: 5.2
   autoAcquireTargetInWeaponRange: 1
   autoApproachSelectedTarget: 1
+  autoApproachStandoffFactor: 0.82
   playerAimTurnSpeed: 140
   alliedBaseHealStrength: 0.2
   alliedBaseHealCooldown: 30
@@ -29071,7 +29072,7 @@ MonoBehaviour:
   targetFrameColor: {r: 0.45, g: 0.75, b: 1, a: 0.95}
   targetFramePadding: 0.35
   targetLineColor: {r: 0.9, g: 0.96, b: 1, a: 1}
-  targetLineAlpha: 0.42
+  targetLineAlpha: 0.2
   targetLineWidth: 0.035
   targetLineSortingOrder: 1
   targetLineDashed: 0
@@ -29084,9 +29085,11 @@ MonoBehaviour:
   attackAssistTextHeight: 1.4
   attackAssistFontSize: 4
   showWeaponArcVisual: 1
+  showPerWeaponArcVisual: 1
   weaponArcSegments: 72
   weaponArcLineWidth: 0.03
-  weaponArcColor: {r: 0.5, g: 0.95, b: 1, a: 0.5}
+  weaponArcColor: {r: 0.5, g: 0.95, b: 1, a: 0.19607843}
+  weaponArcAlpha: 0.064
   weaponArcSortingOrder: 18
 --- !u!1 &1720474482
 GameObject:

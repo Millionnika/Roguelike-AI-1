@@ -41,9 +41,11 @@ public sealed class TargetingController : MonoBehaviour
     [SerializeField, Min(2f)] private int attackAssistFontSize = 4;
     [Header("Визуал сектора стрельбы")]
     [SerializeField] private bool showWeaponArcVisual = true;
+    [SerializeField] private bool showPerWeaponArcVisual = true;
     [SerializeField, Min(16)] private int weaponArcSegments = 72;
     [SerializeField, Min(0.005f)] private float weaponArcLineWidth = 0.03f;
-    [SerializeField] private Color weaponArcColor = new Color(0.5f, 0.95f, 1f, 0.5f);
+    [SerializeField] private Color weaponArcColor = new Color(0.5f, 0.95f, 1f, 1f);
+    [SerializeField, Range(0f, 1f)] private float weaponArcAlpha = 0.5f;
     [SerializeField] private int weaponArcSortingOrder = 18;
 
     private IReadOnlyList<EnemyShip> enemies;
@@ -65,6 +67,7 @@ public sealed class TargetingController : MonoBehaviour
     private ShipEquipmentState equipmentState;
     private TextMeshPro attackAssistText;
     private LineRenderer weaponArcRenderer;
+    private readonly List<LineRenderer> perWeaponArcRenderers = new List<LineRenderer>();
 
     internal EnemyShip TargetEnemy => targetEnemy;
     public EnemyBaseLair TargetBase => targetBase;
@@ -415,6 +418,14 @@ public sealed class TargetingController : MonoBehaviour
         {
             Destroy(weaponArcRenderer.gameObject);
         }
+        for (int i = 0; i < perWeaponArcRenderers.Count; i++)
+        {
+            if (perWeaponArcRenderers[i] != null)
+            {
+                Destroy(perWeaponArcRenderers[i].gameObject);
+            }
+        }
+        perWeaponArcRenderers.Clear();
     }
 
     private EnemyBaseLair TrySelectBaseAtWorldPoint(Vector3 worldPosition)
@@ -506,7 +517,7 @@ public sealed class TargetingController : MonoBehaviour
             }
         }
 
-        if (weaponArcRenderer == null && showWeaponArcVisual)
+        if (weaponArcRenderer == null && showWeaponArcVisual && !showPerWeaponArcVisual)
         {
             GameObject arcObject = new GameObject("WeaponArcVisual");
             arcObject.transform.SetParent(parent, false);
@@ -558,7 +569,14 @@ public sealed class TargetingController : MonoBehaviour
         }
         if (weaponArcRenderer != null)
         {
-            weaponArcRenderer.gameObject.SetActive(active && showWeaponArcVisual);
+            weaponArcRenderer.gameObject.SetActive(active && showWeaponArcVisual && !showPerWeaponArcVisual);
+        }
+        for (int i = 0; i < perWeaponArcRenderers.Count; i++)
+        {
+            if (perWeaponArcRenderers[i] != null)
+            {
+                perWeaponArcRenderers[i].gameObject.SetActive(active && showWeaponArcVisual && showPerWeaponArcVisual);
+            }
         }
     }
 
@@ -658,6 +676,16 @@ public sealed class TargetingController : MonoBehaviour
             return;
         }
 
+        if (showPerWeaponArcVisual)
+        {
+            UpdatePerWeaponArcVisuals();
+            if (weaponArcRenderer != null)
+            {
+                weaponArcRenderer.gameObject.SetActive(false);
+            }
+            return;
+        }
+
         EnsureTargetingVisuals();
         if (weaponArcRenderer == null || player == null || player.Transform == null)
         {
@@ -670,14 +698,14 @@ public sealed class TargetingController : MonoBehaviour
             return;
         }
 
-        Vector2 forward = player.Transform.up.sqrMagnitude > 0.0001f ? (Vector2)player.Transform.up : Vector2.up;
-        Vector2 center = player.Transform.position;
+        GetWeaponArcAnchor(out Vector2 center, out Vector2 forward);
         float clampedAngle = Mathf.Clamp(allowedAngle, 1f, 360f);
         int segments = Mathf.Max(16, weaponArcSegments);
         weaponArcRenderer.startWidth = weaponArcLineWidth;
         weaponArcRenderer.endWidth = weaponArcLineWidth;
-        weaponArcRenderer.startColor = weaponArcColor;
-        weaponArcRenderer.endColor = weaponArcColor;
+        Color arcColor = ResolveArcColor();
+        weaponArcRenderer.startColor = arcColor;
+        weaponArcRenderer.endColor = arcColor;
         weaponArcRenderer.sortingOrder = weaponArcSortingOrder;
         weaponArcRenderer.gameObject.SetActive(true);
 
@@ -751,6 +779,217 @@ public sealed class TargetingController : MonoBehaviour
         range = Mathf.Max(0.1f, maxRange);
         allowedAngle = Mathf.Max(1f, maxAngle);
         return true;
+    }
+
+    private void UpdatePerWeaponArcVisuals()
+    {
+        if (player == null || player.Transform == null || equipmentState == null)
+        {
+            SetPerWeaponArcCount(0);
+            return;
+        }
+
+        int count = 0;
+        if (equipmentState.RuntimeWeapons != null && equipmentState.RuntimeWeapons.Count > 0)
+        {
+            for (int i = 0; i < equipmentState.RuntimeWeapons.Count; i++)
+            {
+                WeaponInstance runtimeWeapon = equipmentState.RuntimeWeapons[i];
+                if (runtimeWeapon != null && runtimeWeapon.Data != null)
+                {
+                    count++;
+                }
+            }
+        }
+        else if (equipmentState.InstalledWeapons != null)
+        {
+            for (int i = 0; i < equipmentState.InstalledWeapons.Count; i++)
+            {
+                if (equipmentState.InstalledWeapons[i] != null)
+                {
+                    count++;
+                }
+            }
+        }
+
+        SetPerWeaponArcCount(count);
+        if (count == 0)
+        {
+            return;
+        }
+
+        int rendererIndex = 0;
+        if (equipmentState.RuntimeWeapons != null && equipmentState.RuntimeWeapons.Count > 0)
+        {
+            for (int i = 0; i < equipmentState.RuntimeWeapons.Count; i++)
+            {
+                WeaponInstance runtimeWeapon = equipmentState.RuntimeWeapons[i];
+                if (runtimeWeapon == null || runtimeWeapon.Data == null)
+                {
+                    continue;
+                }
+
+                LineRenderer renderer = perWeaponArcRenderers[rendererIndex++];
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                Transform muzzle = runtimeWeapon.MuzzleTransform;
+                Vector2 center = muzzle != null ? (Vector2)muzzle.position : (Vector2)player.Transform.position;
+                Vector2 forward = player.Transform.up;
+                if (muzzle != null)
+                {
+                    Transform mount = muzzle.parent != null ? muzzle.parent : muzzle;
+                    Vector2 mountForward = mount.up.sqrMagnitude > 0.0001f ? (Vector2)mount.up : (Vector2)muzzle.up;
+                    forward = mountForward.sqrMagnitude > 0.0001f ? mountForward.normalized : (Vector2)player.Transform.up;
+                }
+
+                float range = runtimeWeapon.EffectiveMaxRange;
+                float angle = Mathf.Clamp(runtimeWeapon.Data.firingAngle, 1f, 360f);
+                DrawArcRenderer(renderer, center, forward, Mathf.Max(0.1f, range), angle);
+            }
+        }
+        else if (equipmentState.InstalledWeapons != null)
+        {
+            for (int i = 0; i < equipmentState.InstalledWeapons.Count; i++)
+            {
+                WeaponDataSO weapon = equipmentState.InstalledWeapons[i];
+                if (weapon == null)
+                {
+                    continue;
+                }
+
+                LineRenderer renderer = perWeaponArcRenderers[rendererIndex++];
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                Vector2 center = player.Transform.position;
+                Vector2 forward = player.Transform.up;
+                if (equipmentState.WeaponMuzzles != null && i < equipmentState.WeaponMuzzles.Count && equipmentState.WeaponMuzzles[i] != null)
+                {
+                    Transform muzzle = equipmentState.WeaponMuzzles[i];
+                    Transform mount = muzzle.parent != null ? muzzle.parent : muzzle;
+                    center = muzzle.position;
+                    Vector2 mountForward = mount.up.sqrMagnitude > 0.0001f ? (Vector2)mount.up : (Vector2)muzzle.up;
+                    forward = mountForward.sqrMagnitude > 0.0001f ? mountForward.normalized : (Vector2)player.Transform.up;
+                }
+
+                float range = weapon.maxRange > 0f ? weapon.maxRange : (weapon.projectileMaxDistance > 0f ? weapon.projectileMaxDistance : 6f);
+                DrawArcRenderer(renderer, center, forward, Mathf.Max(0.1f, range), Mathf.Clamp(weapon.firingAngle, 1f, 360f));
+            }
+        }
+    }
+
+    private void SetPerWeaponArcCount(int count)
+    {
+        Transform parent = GetVisualParent();
+        while (perWeaponArcRenderers.Count < count)
+        {
+            GameObject arcObject = new GameObject("WeaponArcVisual_" + perWeaponArcRenderers.Count);
+            arcObject.transform.SetParent(parent, false);
+            LineRenderer renderer = arcObject.AddComponent<LineRenderer>();
+            renderer.useWorldSpace = true;
+            renderer.alignment = LineAlignment.View;
+            renderer.textureMode = LineTextureMode.Stretch;
+            renderer.numCapVertices = 2;
+            renderer.sortingOrder = weaponArcSortingOrder;
+            renderer.material = GetTargetingMaterial();
+            perWeaponArcRenderers.Add(renderer);
+        }
+
+        for (int i = 0; i < perWeaponArcRenderers.Count; i++)
+        {
+            if (perWeaponArcRenderers[i] != null)
+            {
+                perWeaponArcRenderers[i].gameObject.SetActive(i < count);
+            }
+        }
+    }
+
+    private void DrawArcRenderer(LineRenderer renderer, Vector2 center, Vector2 forward, float range, float allowedAngle)
+    {
+        if (renderer == null)
+        {
+            return;
+        }
+
+        float clampedAngle = Mathf.Clamp(allowedAngle, 1f, 360f);
+        int segments = Mathf.Max(16, weaponArcSegments);
+        renderer.startWidth = weaponArcLineWidth;
+        renderer.endWidth = weaponArcLineWidth;
+        Color arcColor = ResolveArcColor();
+        renderer.startColor = arcColor;
+        renderer.endColor = arcColor;
+        renderer.sortingOrder = weaponArcSortingOrder;
+        renderer.gameObject.SetActive(true);
+
+        if (clampedAngle >= 359.5f)
+        {
+            renderer.loop = true;
+            renderer.positionCount = segments;
+            for (int i = 0; i < segments; i++)
+            {
+                float t = i / (float)segments;
+                float radians = t * Mathf.PI * 2f;
+                Vector2 dir = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians));
+                renderer.SetPosition(i, new Vector3(center.x + dir.x * range, center.y + dir.y * range, 0f));
+            }
+            return;
+        }
+
+        renderer.loop = false;
+        int arcPoints = segments + 1;
+        int totalPoints = arcPoints + 2;
+        renderer.positionCount = totalPoints;
+        float half = clampedAngle * 0.5f;
+        Vector2 leftDir = (Quaternion.Euler(0f, 0f, -half) * forward).normalized;
+        renderer.SetPosition(0, new Vector3(center.x, center.y, 0f));
+        renderer.SetPosition(1, new Vector3(center.x + leftDir.x * range, center.y + leftDir.y * range, 0f));
+        for (int i = 0; i < arcPoints; i++)
+        {
+            float t = i / (float)(arcPoints - 1);
+            float angle = Mathf.Lerp(-half, half, t);
+            Vector2 dir = (Quaternion.Euler(0f, 0f, angle) * forward).normalized;
+            renderer.SetPosition(i + 1, new Vector3(center.x + dir.x * range, center.y + dir.y * range, 0f));
+        }
+        renderer.SetPosition(totalPoints - 1, new Vector3(center.x, center.y, 0f));
+    }
+
+    private Color ResolveArcColor()
+    {
+        Color color = weaponArcColor;
+        color.a = Mathf.Clamp01(weaponArcAlpha);
+        return color;
+    }
+
+    private void GetWeaponArcAnchor(out Vector2 center, out Vector2 forward)
+    {
+        center = player != null && player.Transform != null ? (Vector2)player.Transform.position : Vector2.zero;
+        forward = player != null && player.Transform != null ? (Vector2)player.Transform.up : Vector2.up;
+
+        if (equipmentState == null || equipmentState.WeaponMuzzles == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < equipmentState.WeaponMuzzles.Count; i++)
+        {
+            Transform muzzle = equipmentState.WeaponMuzzles[i];
+            if (muzzle == null)
+            {
+                continue;
+            }
+
+            Transform mount = muzzle.parent != null ? muzzle.parent : muzzle;
+            Transform slot = mount.parent != null ? mount.parent : mount;
+            center = muzzle.position;
+            Vector2 arcForward = slot.up.sqrMagnitude > 0.0001f ? (Vector2)slot.up : (Vector2)mount.up;
+            forward = arcForward.sqrMagnitude > 0.0001f ? arcForward.normalized : Vector2.up;
+            return;
+        }
     }
 
     private void LogTargetLocked(string targetName)

@@ -139,6 +139,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private bool autoAcquireTargetInWeaponRange = true;
     [Tooltip("Если выбранная вручную цель вне радиуса, корабль автоматически подлетает к ней.")]
     [SerializeField] private bool autoApproachSelectedTarget = true;
+    [Tooltip("Желаемая дистанция удержания до выбранной цели как доля от дальности оружия.")]
+    [SerializeField, Range(0.35f, 1.25f)] private float autoApproachStandoffFactor = 0.82f;
     [Tooltip("Скорость плавного доворота корпуса игрока к цели (град/сек).")]
     [SerializeField, Min(10f)] private float playerAimTurnSpeed = 140f;
     [Tooltip("Сила лечения союзной базы за тик.")]
@@ -220,6 +222,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private float homePortalCountdownTimer = -1f;
     private bool homePortalTransitionTriggered;
     private TextMeshPro homePortalCountdownWorldText;
+    private bool autoApproachCommandActive;
 
     private enum ConfirmAction
     {
@@ -1537,6 +1540,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         wave = 1;
         enemySpawnSequence = 0;
         targetingController?.ClearTarget();
+        autoApproachCommandActive = false;
         ShowGameOverPanel(false);
         if (combatLogPresenter != null)
         {
@@ -3225,6 +3229,11 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (!targetingController.TryGetCurrentTargetTransform(out Transform targetTransform) || targetTransform == null)
         {
+            if (autoApproachCommandActive && player.MoveCommandActive)
+            {
+                player.MoveCommandActive = false;
+                autoApproachCommandActive = false;
+            }
             return;
         }
 
@@ -3245,11 +3254,54 @@ public class SpaceCombatSceneController : MonoBehaviour
         player.Transform.rotation = Quaternion.RotateTowards(player.Transform.rotation, lookRotation, turnSpeed * deltaTime);
 
         bool manualMoveNow = moveInput.sqrMagnitude > 0.01f || (pointerState.HasPointer && pointerState.PrimaryPressed);
-        if (autoApproachSelectedTarget && targetingController.HasManualTargetSelection && !manualMoveNow && (!inRange || !inArc))
+        if (manualMoveNow && autoApproachCommandActive)
         {
-            player.MoveCommandActive = true;
-            player.MoveCommandTarget = targetTransform.position;
+            autoApproachCommandActive = false;
         }
+
+        float targetRadius = ResolveTargetRadius(targetTransform);
+        float desiredStandoff = Mathf.Max(2f, weaponRange * Mathf.Clamp(autoApproachStandoffFactor, 0.35f, 1.25f)) + targetRadius * 0.65f;
+        float standoffTolerance = Mathf.Max(0.35f, targetRadius * 0.1f);
+        bool tooFar = distance > desiredStandoff + standoffTolerance;
+
+        if (autoApproachSelectedTarget && targetingController.HasManualTargetSelection && !manualMoveNow && tooFar)
+        {
+            Vector2 dirToTarget = toTarget.normalized;
+            Vector3 standoffPoint = targetTransform.position - (Vector3)(dirToTarget * desiredStandoff);
+            standoffPoint.z = player.Transform.position.z;
+            player.MoveCommandActive = true;
+            player.MoveCommandTarget = standoffPoint;
+            autoApproachCommandActive = true;
+        }
+        else if (autoApproachCommandActive && (!tooFar || (inRange && inArc)))
+        {
+            player.MoveCommandActive = false;
+            autoApproachCommandActive = false;
+        }
+    }
+
+    private static float ResolveTargetRadius(Transform targetTransform)
+    {
+        if (targetTransform == null)
+        {
+            return 0f;
+        }
+
+        Collider2D collider = targetTransform.GetComponentInChildren<Collider2D>();
+        if (collider != null)
+        {
+            Bounds bounds = collider.bounds;
+            return Mathf.Max(bounds.extents.x, bounds.extents.y);
+        }
+
+        SpriteRenderer renderer = targetTransform.GetComponentInChildren<SpriteRenderer>();
+        if (renderer != null)
+        {
+            Bounds bounds = renderer.bounds;
+            return Mathf.Max(bounds.extents.x, bounds.extents.y);
+        }
+
+        return 0f;
     }
 
     private bool TryGetPrimaryWeaponEnvelope(out float maxRange, out float maxFiringAngle)
