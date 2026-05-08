@@ -139,8 +139,12 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Header("Автоприцел игрока")]
     [Tooltip("Если игрок не выбрал цель вручную, корабль автоматически берет ближайшую цель в радиусе поражения.")]
     [SerializeField] private bool autoAcquireTargetInWeaponRange = true;
-    [Tooltip("Если выбранная вручную цель вне радиуса, корабль автоматически подлетает к ней.")]
-    [SerializeField] private bool autoApproachSelectedTarget = true;
+    [Tooltip("Если включено, корпус корабля автоматически доворачивается в сторону выбранной цели. По умолчанию выключено, чтобы сохранить приоритет ручного управления.")]
+    [SerializeField] private bool enableHullAutoAim;
+    [Tooltip("Если включено, при ручном lock цели корабль может автоматически подлетать к дистанции стрельбы. По умолчанию выключено, чтобы не создавать эффект 'магнита'.")]
+    [SerializeField] private bool enableAutoApproachToManualTarget;
+    [Tooltip("Задержка (сек) после последнего ручного ввода перед включением авто-подлета к цели.")]
+    [SerializeField, Min(0f)] private float autoApproachInputGrace = 0.3f;
     [Tooltip("Желаемая дистанция удержания до выбранной цели как доля от дальности оружия.")]
     [SerializeField, Range(0.35f, 1.25f)] private float autoApproachStandoffFactor = 0.82f;
     [Tooltip("Скорость плавного доворота корпуса игрока к цели (град/сек).")]
@@ -225,6 +229,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private bool homePortalTransitionTriggered;
     private TextMeshPro homePortalCountdownWorldText;
     private bool autoApproachCommandActive;
+    private float timeSinceManualMoveInput = 0f;
 
     private enum ConfirmAction
     {
@@ -3161,6 +3166,15 @@ public class SpaceCombatSceneController : MonoBehaviour
         Vector2 moveInput = GetMovementVector(keyboard);
         if (moveInput.sqrMagnitude > 0.01f)
         {
+            timeSinceManualMoveInput = 0f;
+        }
+        else
+        {
+            timeSinceManualMoveInput += Mathf.Max(0f, deltaTime);
+        }
+
+        if (moveInput.sqrMagnitude > 0.01f)
+        {
             player.MoveCommandActive = false;
         }
 
@@ -3254,22 +3268,30 @@ public class SpaceCombatSceneController : MonoBehaviour
         bool inRange = distance <= weaponRange * 0.98f;
         bool inArc = weaponArcAngle >= 359.9f || angleToTarget <= weaponArcAngle * 0.5f;
 
-        Quaternion lookRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg - 90f);
-        float turnSpeed = Mathf.Max(10f, playerAimTurnSpeed);
-        player.Transform.rotation = Quaternion.RotateTowards(player.Transform.rotation, lookRotation, turnSpeed * deltaTime);
-
         bool manualMoveNow = moveInput.sqrMagnitude > 0.01f || (pointerState.HasPointer && pointerState.PrimaryPressed);
         if (manualMoveNow && autoApproachCommandActive)
         {
             autoApproachCommandActive = false;
         }
 
+        if (enableHullAutoAim && !manualMoveNow)
+        {
+            Quaternion lookRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg - 90f);
+            float turnSpeed = Mathf.Max(10f, playerAimTurnSpeed);
+            player.Transform.rotation = Quaternion.RotateTowards(player.Transform.rotation, lookRotation, turnSpeed * deltaTime);
+        }
+
         float targetRadius = ResolveTargetRadius(targetTransform);
         float desiredStandoff = Mathf.Max(2f, weaponRange * Mathf.Clamp(autoApproachStandoffFactor, 0.35f, 1.25f)) + targetRadius * 0.65f;
         float standoffTolerance = Mathf.Max(0.35f, targetRadius * 0.1f);
         bool tooFar = distance > desiredStandoff + standoffTolerance;
+        bool canAutoApproachNow = timeSinceManualMoveInput >= Mathf.Max(0f, autoApproachInputGrace);
 
-        if (autoApproachSelectedTarget && targetingController.HasManualTargetSelection && !manualMoveNow && tooFar)
+        if (enableAutoApproachToManualTarget &&
+            targetingController.HasManualTargetSelection &&
+            !manualMoveNow &&
+            canAutoApproachNow &&
+            tooFar)
         {
             Vector2 dirToTarget = toTarget.normalized;
             Vector3 standoffPoint = targetTransform.position - (Vector3)(dirToTarget * desiredStandoff);

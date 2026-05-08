@@ -4,10 +4,12 @@ using UnityEngine;
 [System.Serializable]
 public sealed class SectorMapNode
 {
-    [Tooltip("Координата X узла на карте сектора.")]
+    [Tooltip("Координата X узла в логической сетке карты сектора.")]
     public int x;
-    [Tooltip("Координата Y узла на карте сектора.")]
+    [Tooltip("Координата Y узла в логической сетке карты сектора.")]
     public int y;
+    [Tooltip("Позиция узла на визуальной карте сектора (для отрисовки точек и линий).")]
+    public Vector2 mapPosition;
     [Tooltip("Мировая позиция сектора, куда летит корабль при выборе узла.")]
     public Vector3 worldPosition;
     [Tooltip("Локация, которая запускается после прибытия в этот сектор.")]
@@ -16,17 +18,17 @@ public sealed class SectorMapNode
     public bool visited;
     [Tooltip("Узел является текущей позицией игрока на карте.")]
     public bool current;
-    [Tooltip("Узел доступен для следующего перехода из текущей позиции.")]
+    [Tooltip("Узел доступен для следующего перехода.")]
     public bool reachable;
-    [Tooltip("Узел завершен. Для MVP совпадает с посещением, но хранится отдельно для UI.")]
+    [Tooltip("Узел завершен.")]
     public bool completed;
-    [Tooltip("Если включено, узел не участвует в маршруте и не должен быть кликабельным.")]
+    [Tooltip("Если включено, узел не участвует в маршруте.")]
     public bool locked;
-    [Tooltip("Финальный узел маршрута (верхний правый угол карты).")]
+    [Tooltip("Финальный узел маршрута.")]
     public bool isFinish;
-    [Tooltip("Стартовый домашний сектор, откуда начинается маршрут.")]
+    [Tooltip("Стартовый узел маршрута.")]
     public bool isHome;
-    [Tooltip("Координаты узлов, в которые можно идти вперед из этого узла.")]
+    [Tooltip("Координаты узлов, в которые разрешен переход из текущего узла.")]
     public List<Vector2Int> nextCoordinates = new List<Vector2Int>();
 
     public Vector2Int Coordinates => new Vector2Int(x, y);
@@ -39,10 +41,10 @@ public sealed class SectorMapNode
             return false;
         }
 
-        Vector2Int coordinates = other.Coordinates;
+        Vector2Int target = other.Coordinates;
         for (int i = 0; i < nextCoordinates.Count; i++)
         {
-            if (nextCoordinates[i] == coordinates)
+            if (nextCoordinates[i] == target)
             {
                 return true;
             }

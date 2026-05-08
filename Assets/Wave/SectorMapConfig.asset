@@ -12,11 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 65a64e8b3973a094daf295fd8640c036, type: 3}
   m_Name: SectorMapConfig
   m_EditorClassIdentifier: Assembly-CSharp::SectorMapConfigSO
-  width: 5
-  height: 5
-  choicesPerRow: 3
+  width: 9
+  height: 8
+  minNodesPerRow: 3
+  maxNodesPerRow: 5
+  guaranteedRouteCount: 4
+  extraRouteChance: 0.56
+  maxConnectionsPerNode: 3
+  positionJitterX: 0.38
+  positionJitterY: 0.24
+  useRandomSeedPerRun: 1
+  fixedSeed: 12345
   encounterPool: {fileID: 11400000, guid: 7b61a5b57e52ccf49ad39f48cd4d5d84, type: 2}
-  forceCombatStart: 1
   forceBossOrCombatEnd: 1
   sectorWorldSize: {x: 80, y: 80}
   worldOrigin: {x: 0, y: 0}

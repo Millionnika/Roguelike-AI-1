@@ -12,78 +12,97 @@ public sealed class SectorMapPresenter : MonoBehaviour
     [Header("Панель карты сектора")]
     [Tooltip("Корневой объект панели карты сектора. Если не назначен, создается автоматически.")]
     [SerializeField] private GameObject panelObject;
-    [Tooltip("Заголовок карты сектора.")]
+    [Tooltip("Текст заголовка карты.")]
     [SerializeField] private TMP_Text titleText;
-    [Tooltip("Подсказка под заголовком карты.")]
+    [Tooltip("Текст подсказки под заголовком.")]
     [SerializeField] private TMP_Text hintText;
-    [Tooltip("Контейнер, внутри которого размещаются линии и узлы маршрута.")]
+    [Tooltip("Контейнер, в котором рисуются фон, линии и узлы.")]
     [SerializeField] private RectTransform mapRoot;
 
+    [Header("Визуал фона")]
+    [Tooltip("Фон карты сектора. Если не назначен, используется однотонный фон.")]
+    [SerializeField] private Sprite mapBackgroundSprite;
+    [Tooltip("Цвет/прозрачность фона карты сектора.")]
+    [SerializeField] private Color panelBackgroundColor = new Color(0.05f, 0.08f, 0.12f, 0.95f);
+    [Tooltip("Цвет затемнения за панелью карты.")]
+    [SerializeField] private Color dimBackgroundColor = new Color(0f, 0f, 0f, 0.86f);
+
     [Header("Геометрия карты")]
-    [Tooltip("Размер круглой кнопки узла на карте.")]
-    [SerializeField, Min(24f)] private float nodeSize = 58f;
-    [Tooltip("Горизонтальный шаг между координатами карты.")]
-    [SerializeField, Min(40f)] private float spacingX = 130f;
-    [Tooltip("Вертикальный шаг между координатами карты.")]
-    [SerializeField, Min(40f)] private float spacingY = 92f;
-    [Tooltip("Толщина линий между связанными узлами.")]
-    [SerializeField, Min(1f)] private float lineWidth = 5f;
-    [Tooltip("Размер шрифта подписи внутри узла.")]
-    [SerializeField, Min(8)] private int fontSize = 16;
-    [Tooltip("Отступ карты от краёв панели.")]
-    [SerializeField] private float mapPadding = 60f;
-    [Tooltip("Автоматически центрировать карту внутри панели.")]
-    [SerializeField] private bool centerMapInPanel = true;
-    [Tooltip("Показывать координаты узлов для отладки маршрута.")]
+    [Tooltip("Размер узла на карте.")]
+    [SerializeField, Min(14f)] private float nodeSize = 30f;
+    [Tooltip("Масштаб по X между логическими позициями узлов.")]
+    [SerializeField, Min(24f)] private float spacingX = 88f;
+    [Tooltip("Масштаб по Y между логическими позициями узлов.")]
+    [SerializeField, Min(24f)] private float spacingY = 78f;
+    [Tooltip("Толщина линии маршрута.")]
+    [SerializeField, Min(1f)] private float lineWidth = 3.5f;
+    [Tooltip("Размер шрифта подписи узла.")]
+    [SerializeField, Min(8)] private int fontSize = 13;
+    [Tooltip("Внутренний отступ карты от границ панели.")]
+    [SerializeField, Min(0f)] private float mapPadding = 34f;
+    [Tooltip("Показывать координаты узлов для отладки.")]
     [SerializeField] private bool showDebugCoordinates;
+    [Tooltip("Показывать подписи только для важных узлов (Старт, Выход, Элита, Событие, Ремонт, Отдых).")]
+    [SerializeField] private bool showOnlyImportantLabels = true;
 
-    [Header("Цвета карты")]
-    [Tooltip("Цвет фона панели карты сектора.")]
-    [SerializeField] private Color panelBackgroundColor = new Color(0.035f, 0.075f, 0.12f, 0.98f);
-    [Tooltip("Цвет обычного будущего узла.")]
-    [SerializeField] private Color normalNodeColor = new Color(0.18f, 0.24f, 0.32f, 0.95f);
+    [Header("Цвета узлов")]
+    [Tooltip("Цвет обычного узла.")]
+    [SerializeField] private Color normalNodeColor = new Color(0.7f, 0.78f, 0.92f, 1f);
     [Tooltip("Цвет текущего узла игрока.")]
-    [SerializeField] private Color currentNodeColor = new Color(1f, 0.78f, 0.18f, 1f);
-    [Tooltip("Цвет доступного для выбора следующего узла.")]
-    [SerializeField] private Color reachableNodeColor = new Color(0.22f, 0.72f, 0.34f, 1f);
-    [Tooltip("Цвет посещенного или завершенного узла.")]
-    [SerializeField] private Color visitedNodeColor = new Color(0.28f, 0.46f, 0.68f, 0.92f);
-    [Tooltip("Цвет недоступного или заблокированного узла.")]
-    [SerializeField] private Color lockedNodeColor = new Color(0.08f, 0.09f, 0.11f, 0.68f);
+    [SerializeField] private Color currentNodeColor = new Color(1f, 0.9f, 0.22f, 1f);
+    [Tooltip("Цвет доступного для выбора узла.")]
+    [SerializeField] private Color reachableNodeColor = new Color(0.26f, 0.92f, 0.42f, 1f);
+    [Tooltip("Цвет посещенного узла.")]
+    [SerializeField] private Color visitedNodeColor = new Color(0.42f, 0.62f, 0.86f, 1f);
+    [Tooltip("Цвет недоступного/заблокированного узла.")]
+    [SerializeField] private Color lockedNodeColor = new Color(0.22f, 0.24f, 0.3f, 0.48f);
     [Tooltip("Цвет стартового узла.")]
-    [SerializeField] private Color startNodeColor = new Color(0.35f, 0.85f, 0.42f, 1f);
-    [Tooltip("Цвет финального узла (верхний правый угол карты).")]
-    [SerializeField] private Color finishNodeColor = new Color(0.82f, 0.18f, 0.24f, 1f);
-    [Tooltip("Цвет линии к доступному узлу.")]
-    [SerializeField] private Color reachableLineColor = new Color(0.28f, 0.84f, 0.42f, 0.95f);
-    [Tooltip("Цвет уже пройденной линии маршрута.")]
-    [SerializeField] private Color visitedLineColor = new Color(0.3f, 0.58f, 0.86f, 0.85f);
-    [Tooltip("Цвет линии будущего или недоступного маршрута.")]
-    [SerializeField] private Color lockedLineColor = new Color(0.18f, 0.22f, 0.28f, 0.6f);
+    [SerializeField] private Color startNodeColor = new Color(0.5f, 0.96f, 0.48f, 1f);
+    [Tooltip("Цвет финального узла.")]
+    [SerializeField] private Color bossNodeColor = new Color(0.88f, 0.24f, 0.3f, 1f);
 
-    [Header("Иконки узлов")]
-    [Tooltip("Иконка боевого узла. Если не назначена, используется текст.")]
+    [Header("Цвета линий")]
+    [Tooltip("Показывать постоянные линии маршрутов. Для чистого вида карты можно выключить и использовать только предпросмотр при наведении.")]
+    [SerializeField] private bool showStaticConnections;
+    [Tooltip("Цвет линии к доступному следующему узлу.")]
+    [SerializeField] private Color reachableLineColor = new Color(0.18f, 0.95f, 0.48f, 1f);
+    [Tooltip("Цвет пройденной линии.")]
+    [SerializeField] private Color visitedLineColor = new Color(0.42f, 0.7f, 1f, 0.95f);
+    [Tooltip("Цвет недоступной линии.")]
+    [SerializeField] private Color lockedLineColor = new Color(0.33f, 0.38f, 0.48f, 0.28f);
+    [Tooltip("Цвет пунктирного предпросмотра маршрута при наведении на узел.")]
+    [SerializeField] private Color hoverPreviewLineColor = new Color(0.48f, 0.88f, 1f, 0.95f);
+    [Tooltip("Толщина пунктирной линии предпросмотра.")]
+    [SerializeField, Min(1f)] private float hoverPreviewLineWidth = 3f;
+    [Tooltip("Длина штриха пунктирной линии предпросмотра.")]
+    [SerializeField, Min(2f)] private float hoverDashLength = 12f;
+    [Tooltip("Промежуток между штрихами пунктирной линии предпросмотра.")]
+    [SerializeField, Min(1f)] private float hoverDashGap = 8f;
+
+    [Header("Иконки узлов (опционально)")]
+    [Tooltip("Иконка боевого узла.")]
     [SerializeField] private Sprite combatIcon;
-    [Tooltip("Иконка ремонтного узла. Если не назначена, используется текст.")]
+    [Tooltip("Иконка ремонтного узла.")]
     [SerializeField] private Sprite repairIcon;
-    [Tooltip("Иконка узла отдыха. Если не назначена, используется текст.")]
+    [Tooltip("Иконка узла отдыха.")]
     [SerializeField] private Sprite restIcon;
-    [Tooltip("Иконка события. Если не назначена, используется текст.")]
+    [Tooltip("Иконка узла события.")]
     [SerializeField] private Sprite eventIcon;
-    [Tooltip("Иконка элитного боя. Если не назначена, используется текст.")]
+    [Tooltip("Иконка элитного узла.")]
     [SerializeField] private Sprite eliteIcon;
-    [Tooltip("Иконка ресурсного узла. Если не назначена, используется текст.")]
+    [Tooltip("Иконка ресурсного узла.")]
     [SerializeField] private Sprite resourceIcon;
-    [Tooltip("Иконка boss-узла. Если не назначена, используется текст.")]
+    [Tooltip("Иконка узла босса.")]
     [SerializeField] private Sprite bossIcon;
-    [Tooltip("Иконка стартового узла. Если не назначена, используется текст.")]
+    [Tooltip("Иконка стартового узла.")]
     [SerializeField] private Sprite startIcon;
 
     private readonly List<GameObject> runtimeObjects = new List<GameObject>();
     private readonly List<SectorMapNode> currentNodes = new List<SectorMapNode>();
     private readonly HashSet<SectorMapNode> reachableSet = new HashSet<SectorMapNode>();
     private readonly Dictionary<Vector2Int, SectorMapNode> nodeByCoordinates = new Dictionary<Vector2Int, SectorMapNode>();
-    private readonly Dictionary<SectorMapNode, Vector2> nodePositions = new Dictionary<SectorMapNode, Vector2>();
+    private readonly Dictionary<SectorMapNode, Vector2> nodeAnchors = new Dictionary<SectorMapNode, Vector2>();
+    private readonly List<GameObject> hoverPreviewObjects = new List<GameObject>();
     private Action<SectorMapNode> onSelected;
     private Sprite runtimeCircleSprite;
     private Sprite runtimeLineSprite;
@@ -112,8 +131,12 @@ public sealed class SectorMapPresenter : MonoBehaviour
         titleText.text = "Карта сектора";
         hintText.text = "Выберите следующий сектор";
 
-        CalculateNodePositions();
-        BuildRouteLines();
+        BuildBackground();
+        CalculateNodeAnchors();
+        if (showStaticConnections)
+        {
+            BuildRouteLines();
+        }
         BuildNodeButtons();
         panelObject.SetActive(true);
     }
@@ -124,7 +147,8 @@ public sealed class SectorMapPresenter : MonoBehaviour
         currentNodes.Clear();
         reachableSet.Clear();
         nodeByCoordinates.Clear();
-        nodePositions.Clear();
+        nodeAnchors.Clear();
+        ClearHoverPreview();
         onSelected = null;
         if (panelObject != null)
         {
@@ -143,7 +167,7 @@ public sealed class SectorMapPresenter : MonoBehaviour
             for (int i = 0; i < nodes.Count; i++)
             {
                 SectorMapNode node = nodes[i];
-                if (node == null)
+                if (!IsRenderableGameplayNode(node))
                 {
                     continue;
                 }
@@ -157,55 +181,78 @@ public sealed class SectorMapPresenter : MonoBehaviour
         {
             for (int i = 0; i < reachableNodes.Count; i++)
             {
-                if (reachableNodes[i] != null)
+                SectorMapNode node = reachableNodes[i];
+                if (IsRenderableGameplayNode(node))
                 {
-                    reachableSet.Add(reachableNodes[i]);
+                    reachableSet.Add(node);
                 }
             }
         }
     }
 
-    private void CalculateNodePositions()
+    private static bool IsRenderableGameplayNode(SectorMapNode node)
     {
-        nodePositions.Clear();
+        if (node == null || node.encounter == null || node.locked)
+        {
+            return false;
+        }
 
-        int maxX = 0;
-        int maxY = 0;
+        if (node.isHome || node.isFinish)
+        {
+            return true;
+        }
+
+        bool hasOutgoing = node.nextCoordinates != null && node.nextCoordinates.Count > 0;
+        bool hasIncomingHint = node.current || node.reachable || node.visited || node.completed;
+        return hasOutgoing || hasIncomingHint;
+    }
+
+    private void BuildBackground()
+    {
+        Image bg = CreateImage("MapBackground", mapRoot, panelBackgroundColor);
+        Stretch(bg.rectTransform);
+        bg.raycastTarget = false;
+        if (mapBackgroundSprite != null)
+        {
+            bg.sprite = mapBackgroundSprite;
+            bg.type = Image.Type.Sliced;
+            bg.preserveAspect = false;
+        }
+
+        runtimeObjects.Add(bg.gameObject);
+    }
+
+    private void CalculateNodeAnchors()
+    {
+        nodeAnchors.Clear();
+        float minX = float.MaxValue;
+        float maxX = float.MinValue;
+        float minY = float.MaxValue;
+        float maxY = float.MinValue;
+
         for (int i = 0; i < currentNodes.Count; i++)
         {
-            maxX = Mathf.Max(maxX, currentNodes[i].x);
-            maxY = Mathf.Max(maxY, currentNodes[i].y);
+            Vector2 p = currentNodes[i].mapPosition;
+            minX = Mathf.Min(minX, p.x);
+            maxX = Mathf.Max(maxX, p.x);
+            minY = Mathf.Min(minY, p.y);
+            maxY = Mathf.Max(maxY, p.y);
         }
 
-        float totalWidth = maxX * spacingX;
-        float totalHeight = maxY * spacingY;
+        float spanX = Mathf.Max(0.001f, maxX - minX);
+        float spanY = Mathf.Max(0.001f, maxY - minY);
+        float viewW = Mathf.Max(64f, mapRoot.rect.width - mapPadding * 2f);
+        float viewH = Mathf.Max(64f, mapRoot.rect.height - mapPadding * 2f);
+        float scale = Mathf.Min(viewW / (spanX * spacingX), viewH / (spanY * spacingY));
 
-        if (centerMapInPanel && mapRoot != null)
+        for (int i = 0; i < currentNodes.Count; i++)
         {
-            // Центрируем карту внутри панели с учётом отступов
-            float panelW = mapRoot.rect.width - mapPadding * 2f;
-            float panelH = mapRoot.rect.height - mapPadding * 2f;
-            float scaleX = totalWidth > 0.01f ? Mathf.Min(1f, panelW / totalWidth) : 1f;
-            float scaleY = totalHeight > 0.01f ? Mathf.Min(1f, panelH / totalHeight) : 1f;
-            float scale = Mathf.Min(scaleX, scaleY);
-
-            for (int i = 0; i < currentNodes.Count; i++)
-            {
-                SectorMapNode node = currentNodes[i];
-                nodePositions[node] = new Vector2(
-                    -totalWidth * 0.5f * scale + node.x * spacingX * scale,
-                    -totalHeight * 0.5f * scale + node.y * spacingY * scale);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < currentNodes.Count; i++)
-            {
-                SectorMapNode node = currentNodes[i];
-                nodePositions[node] = new Vector2(
-                    -totalWidth * 0.5f + node.x * spacingX,
-                    -totalHeight * 0.5f + node.y * spacingY);
-            }
+            SectorMapNode node = currentNodes[i];
+            float nx = (node.mapPosition.x - minX) * spacingX * scale;
+            float ny = (node.mapPosition.y - minY) * spacingY * scale;
+            float centeredX = nx - (spanX * spacingX * scale * 0.5f);
+            float centeredY = ny - (spanY * spacingY * scale * 0.5f);
+            nodeAnchors[node] = new Vector2(centeredX, centeredY);
         }
     }
 
@@ -231,25 +278,27 @@ public sealed class SectorMapPresenter : MonoBehaviour
                     continue;
                 }
 
-                CreateRouteLine(lineRoot, from, to);
+                CreateLine(lineRoot, from, to);
             }
         }
     }
 
-    private void CreateRouteLine(Transform parent, SectorMapNode from, SectorMapNode to)
+    private void CreateLine(Transform parent, SectorMapNode from, SectorMapNode to)
     {
-        if (!nodePositions.TryGetValue(from, out Vector2 start) || !nodePositions.TryGetValue(to, out Vector2 end))
+        if (!nodeAnchors.TryGetValue(from, out Vector2 start) || !nodeAnchors.TryGetValue(to, out Vector2 end))
         {
             return;
         }
 
-        Image line = CreateImage("Line_" + from.x + "_" + from.y + "_to_" + to.x + "_" + to.y, parent, ResolveLineColor(from, to));
+        Image line = CreateImage($"Line_{from.x}_{from.y}_to_{to.x}_{to.y}", parent, ResolveLineColor(from, to));
         line.sprite = GetLineSprite();
+        line.type = Image.Type.Sliced;
         RectTransform rect = line.rectTransform;
         Vector2 delta = end - start;
         rect.sizeDelta = new Vector2(delta.magnitude, lineWidth);
         rect.anchoredPosition = (start + end) * 0.5f;
         rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+        line.raycastTarget = false;
     }
 
     private void BuildNodeButtons()
@@ -262,43 +311,48 @@ public sealed class SectorMapPresenter : MonoBehaviour
         for (int i = 0; i < currentNodes.Count; i++)
         {
             SectorMapNode node = currentNodes[i];
-            if (node == null || !nodePositions.TryGetValue(node, out Vector2 position))
+            if (node == null || !nodeAnchors.TryGetValue(node, out Vector2 pos))
             {
                 continue;
             }
 
-            GameObject buttonObject = new GameObject("Node_" + node.x + "_" + node.y, typeof(RectTransform), typeof(Image), typeof(Button));
+            GameObject buttonObject = new GameObject($"Node_{node.x}_{node.y}", typeof(RectTransform), typeof(Image), typeof(Button));
             buttonObject.transform.SetParent(nodeRoot, false);
             RectTransform rect = buttonObject.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(nodeSize, nodeSize);
-            rect.anchoredPosition = position;
+            rect.anchoredPosition = pos;
 
             Image image = buttonObject.GetComponent<Image>();
-            image.sprite = GetCircleSprite();
+            image.sprite = ResolveNodeIcon(node) ?? GetCircleSprite();
             image.color = ResolveNodeColor(node);
 
             Button button = buttonObject.GetComponent<Button>();
-            bool interactable = reachableSet.Contains(node) && node.encounter != null && !node.visited && !node.completed && !node.locked;
-            button.interactable = interactable;
-            if (interactable)
+            bool clickable = reachableSet.Contains(node) && node.encounter != null && !node.visited && !node.completed && !node.locked;
+            button.interactable = clickable;
+            if (clickable)
             {
                 button.onClick.AddListener(() => onSelected?.Invoke(node));
             }
 
-            BuildNodeContent(buttonObject.transform, node);
-        }
-    }
+            AddHoverPreviewHandlers(buttonObject, node, clickable);
 
-    private void BuildNodeContent(Transform parent, SectorMapNode node)
-    {
-        // Показываем только текст — иконки временно отключены для читаемости
-        TMP_Text label = CreateText("Label", parent, BuildNodeLabel(node), fontSize, FontStyle.Bold, Color.white);
-        label.alignment = TextAlignmentOptions.Center;
-        label.textWrappingMode = TextWrappingModes.Normal;
-        Stretch(label.rectTransform);
+            string labelText = BuildNodeLabel(node);
+            if (string.IsNullOrEmpty(labelText))
+            {
+                continue;
+            }
+
+            TMP_Text label = CreateText("Label", buttonObject.transform, labelText, fontSize, FontStyle.Bold, Color.white);
+            label.alignment = TextAlignmentOptions.Bottom;
+            label.overflowMode = TextOverflowModes.Overflow;
+            RectTransform lRect = label.rectTransform;
+            lRect.anchorMin = new Vector2(0.5f, 0f);
+            lRect.anchorMax = new Vector2(0.5f, 0f);
+            lRect.pivot = new Vector2(0.5f, 1f);
+            lRect.sizeDelta = new Vector2(nodeSize * 4f, 38f);
+            lRect.anchoredPosition = new Vector2(0f, -nodeSize * 0.55f);
+        }
     }
 
     private Color ResolveNodeColor(SectorMapNode node)
@@ -308,19 +362,19 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return lockedNodeColor;
         }
 
+        if (node.current)
+        {
+            return currentNodeColor;
+        }
+
         if (node.isFinish)
         {
-            return node.current ? currentNodeColor : finishNodeColor;
+            return bossNodeColor;
         }
 
         if (node.isHome)
         {
-            return node.current ? currentNodeColor : startNodeColor;
-        }
-
-        if (node.current)
-        {
-            return currentNodeColor;
+            return startNodeColor;
         }
 
         if (reachableSet.Contains(node))
@@ -353,33 +407,100 @@ public sealed class SectorMapPresenter : MonoBehaviour
 
     private string BuildNodeLabel(SectorMapNode node)
     {
-        if (node == null || node.encounter == null)
+        if (node == null)
         {
-            return "-";
+            return string.Empty;
         }
 
-        string statePrefix = string.Empty;
-        if (node.current)
+        string state = node.current ? "● " : node.visited || node.completed ? "✓ " : string.Empty;
+        if (showOnlyImportantLabels && !ShouldShowLabel(node))
         {
-            statePrefix = "●\n";
-        }
-        else if (node.visited || node.completed)
-        {
-            statePrefix = "✓\n";
+            if (showDebugCoordinates)
+            {
+                return "(" + node.x + "," + node.y + ")";
+            }
+
+            return string.Empty;
         }
 
-        string label = statePrefix + GetNodeTypeDisplayName(node);
+        string label = state + GetNodeDisplayName(node);
         if (showDebugCoordinates)
         {
-            label += "\n" + node.x + "," + node.y;
+            label += $" ({node.x},{node.y})";
         }
 
         return label;
     }
 
-    private Sprite ResolveIcon(SectorMapNode node)
+    private static bool ShouldShowLabel(SectorMapNode node)
     {
-        if (node == null || node.encounter == null)
+        if (node == null)
+        {
+            return false;
+        }
+
+        if (node.isHome || node.isFinish || node.current || node.reachable)
+        {
+            return true;
+        }
+
+        if (node.encounter == null)
+        {
+            return false;
+        }
+
+        switch (node.encounter.nodeType)
+        {
+            case LocationNodeType.Event:
+            case LocationNodeType.Elite:
+            case LocationNodeType.Repair:
+            case LocationNodeType.Rest:
+            case LocationNodeType.Boss:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string GetNodeDisplayName(SectorMapNode node)
+    {
+        if (node == null)
+        {
+            return "-";
+        }
+
+        if (node.isHome)
+        {
+            return "Старт";
+        }
+
+        if (node.isFinish)
+        {
+            return "Выход";
+        }
+
+        return node.encounter != null ? GetNodeTypeName(node.encounter.nodeType) : "-";
+    }
+
+    private static string GetNodeTypeName(LocationNodeType type)
+    {
+        switch (type)
+        {
+            case LocationNodeType.Combat: return "Бой";
+            case LocationNodeType.Elite: return "Элита";
+            case LocationNodeType.Repair: return "Ремонт";
+            case LocationNodeType.Rest: return "Отдых";
+            case LocationNodeType.Event: return "Событие";
+            case LocationNodeType.Resource: return "Ресурсы";
+            case LocationNodeType.Boss: return "Босс";
+            case LocationNodeType.Shop: return "Магазин";
+            default: return type.ToString();
+        }
+    }
+
+    private Sprite ResolveNodeIcon(SectorMapNode node)
+    {
+        if (node == null)
         {
             return null;
         }
@@ -389,69 +510,26 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return startIcon;
         }
 
+        if (node.isFinish && bossIcon != null)
+        {
+            return bossIcon;
+        }
+
+        if (node.encounter == null)
+        {
+            return null;
+        }
+
         switch (node.encounter.nodeType)
         {
-            case LocationNodeType.Combat:
-                return combatIcon;
-            case LocationNodeType.Repair:
-                return repairIcon;
-            case LocationNodeType.Rest:
-                return restIcon;
-            case LocationNodeType.Event:
-                return eventIcon;
-            case LocationNodeType.Elite:
-                return eliteIcon;
-            case LocationNodeType.Resource:
-                return resourceIcon;
-            case LocationNodeType.Boss:
-                return bossIcon;
-            default:
-                return null;
-        }
-    }
-
-    private static string GetNodeTypeDisplayName(SectorMapNode node)
-    {
-        if (node == null)
-        {
-            return "-";
-        }
-
-        if (node.isFinish)
-        {
-            return "Финиш";
-        }
-
-        if (node.isHome)
-        {
-            return "Старт";
-        }
-
-        return node.encounter != null ? GetNodeTypeDisplayName(node.encounter.nodeType) : "-";
-    }
-
-    private static string GetNodeTypeDisplayName(LocationNodeType nodeType)
-    {
-        switch (nodeType)
-        {
-            case LocationNodeType.Combat:
-                return "Бой";
-            case LocationNodeType.Elite:
-                return "Элита";
-            case LocationNodeType.Repair:
-                return "Ремонт";
-            case LocationNodeType.Rest:
-                return "Отдых";
-            case LocationNodeType.Event:
-                return "Событие";
-            case LocationNodeType.Resource:
-                return "Ресурсы";
-            case LocationNodeType.Boss:
-                return "Босс";
-            case LocationNodeType.Shop:
-                return "Магазин";
-            default:
-                return nodeType.ToString();
+            case LocationNodeType.Combat: return combatIcon;
+            case LocationNodeType.Repair: return repairIcon;
+            case LocationNodeType.Rest: return restIcon;
+            case LocationNodeType.Event: return eventIcon;
+            case LocationNodeType.Elite: return eliteIcon;
+            case LocationNodeType.Resource: return resourceIcon;
+            case LocationNodeType.Boss: return bossIcon;
+            default: return null;
         }
     }
 
@@ -485,33 +563,32 @@ public sealed class SectorMapPresenter : MonoBehaviour
         RectTransform rootRect = panelObject.GetComponent<RectTransform>();
         Stretch(rootRect);
 
-        Image dim = CreateImage("Dimmer", panelObject.transform, new Color(0f, 0f, 0f, 0.88f));
+        Image dim = CreateImage("Dimmer", panelObject.transform, dimBackgroundColor);
         Stretch(dim.rectTransform);
 
         Image panel = CreateImage("Panel", panelObject.transform, panelBackgroundColor);
         RectTransform panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(820f, 640f);
+        panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(1120f, 760f);
 
-        titleText = CreateText("Title", panel.transform, "Карта сектора", 32, FontStyle.Bold, Color.white);
+        titleText = CreateText("Title", panel.transform, "Карта сектора", 34, FontStyle.Bold, Color.white);
         titleText.alignment = TextAlignmentOptions.Center;
-        SetRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -24f), new Vector2(-24f, -72f));
+        SetRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -20f), new Vector2(-20f, -72f));
 
-        hintText = CreateText("Hint", panel.transform, "Выберите следующий сектор", 20, FontStyle.Normal, new Color(0.84f, 0.92f, 1f, 1f));
+        hintText = CreateText("Hint", panel.transform, "Выберите следующий сектор", 20, FontStyle.Normal, new Color(0.85f, 0.93f, 1f, 1f));
         hintText.alignment = TextAlignmentOptions.Center;
-        SetRect(hintText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -76f), new Vector2(-24f, -118f));
+        SetRect(hintText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -74f), new Vector2(-20f, -118f));
 
         mapRoot = new GameObject("RouteMap", typeof(RectTransform)).GetComponent<RectTransform>();
         mapRoot.SetParent(panel.transform, false);
-        SetRect(mapRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-330f, -245f), new Vector2(330f, 205f));
+        SetRect(mapRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-520f, -300f), new Vector2(520f, 260f));
 
         panelObject.SetActive(false);
     }
 
     private void ClearRuntimeObjects()
     {
+        ClearHoverPreview();
         for (int i = runtimeObjects.Count - 1; i >= 0; i--)
         {
             if (runtimeObjects[i] != null)
@@ -523,6 +600,133 @@ public sealed class SectorMapPresenter : MonoBehaviour
         runtimeObjects.Clear();
     }
 
+    private void AddHoverPreviewHandlers(GameObject target, SectorMapNode node, bool enabled)
+    {
+        if (target == null || node == null || !enabled)
+        {
+            return;
+        }
+
+        EventTrigger trigger = target.GetComponent<EventTrigger>();
+        if (trigger == null)
+        {
+            trigger = target.AddComponent<EventTrigger>();
+        }
+
+        trigger.triggers ??= new List<EventTrigger.Entry>();
+        trigger.triggers.Clear();
+
+        EventTrigger.Entry enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+        enter.callback.AddListener(_ => ShowHoverPreview(node));
+        trigger.triggers.Add(enter);
+
+        EventTrigger.Entry exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        exit.callback.AddListener(_ => ClearHoverPreview());
+        trigger.triggers.Add(exit);
+    }
+
+    private void ShowHoverPreview(SectorMapNode hoveredNode)
+    {
+        ClearHoverPreview();
+        if (hoveredNode == null || !nodeAnchors.TryGetValue(hoveredNode, out Vector2 hoveredPos))
+        {
+            return;
+        }
+
+        RectTransform hoverRoot = new GameObject("HoverPreviewLines", typeof(RectTransform)).GetComponent<RectTransform>();
+        hoverRoot.SetParent(mapRoot, false);
+        Stretch(hoverRoot);
+        hoverPreviewObjects.Add(hoverRoot.gameObject);
+
+        SectorMapNode current = FindCurrentNode();
+        if (current != null && nodeAnchors.TryGetValue(current, out Vector2 currentPos))
+        {
+            CreateDashedLine(hoverRoot, currentPos, hoveredPos, hoverPreviewLineColor, hoverPreviewLineWidth);
+        }
+
+        if (hoveredNode.nextCoordinates == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < hoveredNode.nextCoordinates.Count; i++)
+        {
+            if (!nodeByCoordinates.TryGetValue(hoveredNode.nextCoordinates[i], out SectorMapNode next))
+            {
+                continue;
+            }
+
+            if (!nodeAnchors.TryGetValue(next, out Vector2 nextPos))
+            {
+                continue;
+            }
+
+            CreateDashedLine(hoverRoot, hoveredPos, nextPos, hoverPreviewLineColor, hoverPreviewLineWidth);
+        }
+    }
+
+    private SectorMapNode FindCurrentNode()
+    {
+        for (int i = 0; i < currentNodes.Count; i++)
+        {
+            if (currentNodes[i] != null && currentNodes[i].current)
+            {
+                return currentNodes[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void CreateDashedLine(Transform parent, Vector2 start, Vector2 end, Color color, float width)
+    {
+        Vector2 delta = end - start;
+        float distance = delta.magnitude;
+        if (distance <= 0.001f)
+        {
+            return;
+        }
+
+        Vector2 dir = delta / distance;
+        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+        float step = Mathf.Max(1f, hoverDashLength + hoverDashGap);
+        int count = Mathf.CeilToInt(distance / step);
+
+        for (int i = 0; i < count; i++)
+        {
+            float segmentStart = i * step;
+            float segmentLength = Mathf.Min(hoverDashLength, distance - segmentStart);
+            if (segmentLength <= 0.01f)
+            {
+                continue;
+            }
+
+            Vector2 mid = start + dir * (segmentStart + segmentLength * 0.5f);
+            Image dash = CreateImage("Dash", parent, color);
+            dash.sprite = GetLineSprite();
+            dash.type = Image.Type.Sliced;
+            dash.raycastTarget = false;
+            RectTransform rect = dash.rectTransform;
+            rect.sizeDelta = new Vector2(segmentLength, width);
+            rect.anchoredPosition = mid;
+            rect.localRotation = Quaternion.Euler(0f, 0f, angle);
+            hoverPreviewObjects.Add(dash.gameObject);
+        }
+    }
+
+    private void ClearHoverPreview()
+    {
+        for (int i = hoverPreviewObjects.Count - 1; i >= 0; i--)
+        {
+            if (hoverPreviewObjects[i] != null)
+            {
+                Destroy(hoverPreviewObjects[i]);
+            }
+        }
+
+        hoverPreviewObjects.Clear();
+    }
+
     private Sprite GetCircleSprite()
     {
         if (runtimeCircleSprite != null)
@@ -530,18 +734,18 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return runtimeCircleSprite;
         }
 
-        const int size = 64;
+        const int size = 32;
         Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
         texture.name = "SectorMapNodeCircle";
-        float radius = (size - 2) * 0.5f;
         Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float radius = size * 0.46f;
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                float distance = Vector2.Distance(new Vector2(x, y), center);
-                float alpha = distance <= radius ? 1f : 0f;
-                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                float d = Vector2.Distance(new Vector2(x, y), center);
+                float a = d <= radius ? 1f : 0f;
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, a));
             }
         }
 
@@ -572,8 +776,8 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return;
         }
 
-        GameObject eventSystemObject = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
-        eventSystemObject.transform.SetAsLastSibling();
+        GameObject go = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+        go.transform.SetAsLastSibling();
     }
 
     private static Image CreateImage(string name, Transform parent, Color color)

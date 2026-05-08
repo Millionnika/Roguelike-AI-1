@@ -4,19 +4,34 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class SectorMapController : MonoBehaviour
 {
+    private const float RareSingleChoiceChance = 0.08f;
+    private const int DesiredOutgoingChoices = 2;
+
     [Header("Карта сектора")]
-    [Tooltip("Конфигурация карты сектора: размер, пул локаций и мировые координаты.")]
+    [Tooltip("Конфигурация карты сектора: размеры, генерация маршрутов и мировая сетка для warp.")]
     [SerializeField] private SectorMapConfigSO config;
-    [Tooltip("Пресет текущего забега. Используется для стартовой локации и общего пула EncounterSO.")]
+    [Tooltip("Пресет текущего забега. Используется для стартовой локации и fallback-пула encounter.")]
     [SerializeField] private RunPresetSO runPreset;
 
     private readonly List<SectorMapNode> nodes = new List<SectorMapNode>();
     private readonly List<SectorMapNode> reachableBuffer = new List<SectorMapNode>();
+    private readonly Dictionary<Vector2Int, SectorMapNode> nodeByCoordinates = new Dictionary<Vector2Int, SectorMapNode>();
+    private readonly Dictionary<int, List<SectorMapNode>> nodesByRow = new Dictionary<int, List<SectorMapNode>>();
+    private readonly HashSet<int> usedRowX = new HashSet<int>();
+    private readonly HashSet<SectorMapNode> reachableFromStart = new HashSet<SectorMapNode>();
+    private readonly HashSet<SectorMapNode> canReachFinish = new HashSet<SectorMapNode>();
+    private readonly HashSet<SectorMapNode> activeNodes = new HashSet<SectorMapNode>();
+    private readonly Dictionary<SectorMapNode, int> incomingCount = new Dictionary<SectorMapNode, int>();
+    private readonly Dictionary<SectorMapNode, int> outgoingCount = new Dictionary<SectorMapNode, int>();
+    private readonly List<SectorMapNode> removeBuffer = new List<SectorMapNode>();
+
     private SectorMapNode currentNode;
+    private int activeSeed;
 
     public EncounterSO CurrentEncounter => currentNode != null ? currentNode.encounter : null;
     public SectorMapNode CurrentNode => currentNode;
     public IReadOnlyList<SectorMapNode> Nodes => nodes;
+    public int ActiveSeed => activeSeed;
 
     public void Initialize(SectorMapConfigSO mapConfig, RunPresetSO preset)
     {
@@ -32,9 +47,7 @@ public sealed class SectorMapController : MonoBehaviour
 
     public void GenerateMap()
     {
-        nodes.Clear();
-        currentNode = null;
-
+        ClearMap();
         if (config == null)
         {
             Debug.LogWarning("SectorMapController: не назначен SectorMapConfigSO. Карта сектора не создана.", this);
@@ -48,47 +61,38 @@ public sealed class SectorMapController : MonoBehaviour
             return;
         }
 
+        activeSeed = ResolveSeed();
+        Random.State oldState = Random.state;
+        Random.InitState(activeSeed);
+
+        int width = Mathf.Max(5, config.width);
+        int height = Mathf.Max(5, config.height);
+        int finishX = width - 1;
+        int finishY = height - 1;
+
         EncounterSO fallbackCombat = FindFirstByType(pool, LocationNodeType.Combat) ?? FindFirstEncounter(pool.encounters);
         EncounterSO startEncounter = runPreset != null && runPreset.startingEncounter != null
             ? runPreset.startingEncounter
             : fallbackCombat;
-        EncounterSO finishEncounter = FindFirstByType(pool, LocationNodeType.Boss) ?? fallbackCombat;
+        EncounterSO finishEncounter = ResolveFinishEncounter(pool, fallbackCombat);
 
-        // Гарантированно связный route graph: 8 узлов, все соединены в единый маршрут
-        // (0,0) -> (0,1) -> (1,2) -> (2,3) -> (4,4)
-        // (0,0) -> (1,1) -> (1,2) -> (2,2) -> (2,3) -> (4,4)
-        //                    (1,1) -> (2,2) -> (3,3) -> (4,4)
-        SectorMapNode start = AddNode(0, 0, startEncounter);
+        SectorMapNode start = AddOrGetNode(0, 0, startEncounter);
         start.isHome = true;
-        SectorMapNode n01 = AddNode(0, 1, PickEncounter(pool, LocationNodeType.Repair, fallbackCombat));
-        SectorMapNode n11 = AddNode(1, 1, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
-        SectorMapNode n12 = AddNode(1, 2, PickEncounter(pool, LocationNodeType.Rest, fallbackCombat));
-        SectorMapNode n22 = AddNode(2, 2, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
-        SectorMapNode n23 = AddNode(2, 3, PickEncounter(pool, LocationNodeType.Event, fallbackCombat));
-        SectorMapNode n33 = AddNode(3, 3, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
-        SectorMapNode finish = AddNode(4, 4, finishEncounter);
+        SectorMapNode finish = AddOrGetNode(finishX, finishY, finishEncounter);
         finish.isFinish = true;
 
-        // Слой 1: от старта
-        Connect(start, n01);
-        Connect(start, n11);
+        BuildGuaranteedRoutes(start, finish, width, height, pool, fallbackCombat);
+        EnsureIntermediateRowsHaveNodes(width, height, pool, fallbackCombat);
+        BuildAdditionalConnections(height);
 
-        // Слой 2: сходятся в (1,2)
-        Connect(n01, n12);
-        Connect(n11, n12);
-        Connect(n11, n22);
-
-        // Слой 3: расходятся
-        Connect(n12, n23);
-        Connect(n22, n23);
-        Connect(n22, n33);
-
-        // Финиш
-        Connect(n23, finish);
-        Connect(n33, finish);
+        PruneToActiveRouteGraph(start, finish);
+        EnsureRouteVariety(finish);
+        EnsureDegreesAndConnectivity(start, finish);
 
         SetCurrent(start);
         UpdateReachableNodes();
+
+        Random.state = oldState;
     }
 
     public IReadOnlyList<SectorMapNode> GetReachableNextNodes()
@@ -108,14 +112,13 @@ public sealed class SectorMapController : MonoBehaviour
 
     public bool SelectNode(SectorMapNode node)
     {
-        if (node == null || !node.reachable || node.locked || node.visited || node.encounter == null)
+        if (node == null || !node.reachable || node.locked || node.visited || node.completed || node.encounter == null)
         {
             return false;
         }
 
         if (currentNode != null && !currentNode.IsConnectedTo(node))
         {
-            Debug.Log("SectorMapController: выбранный сектор не связан с текущим маршрутом.", this);
             return false;
         }
 
@@ -128,14 +131,11 @@ public sealed class SectorMapController : MonoBehaviour
         }
 
         SetCurrent(node);
-
-        // Если это финиш — не обновляем reachable, карта завершена
-        if (node.isFinish)
+        if (!node.isFinish)
         {
-            return true;
+            UpdateReachableNodes();
         }
 
-        UpdateReachableNodes();
         return true;
     }
 
@@ -164,50 +164,414 @@ public sealed class SectorMapController : MonoBehaviour
         GenerateMap();
     }
 
-    private void SetCurrent(SectorMapNode node)
+    private int ResolveSeed()
     {
-        currentNode = node;
-        if (currentNode != null)
+        if (config == null)
         {
-            currentNode.current = true;
-            currentNode.reachable = false;
-            currentNode.locked = false;
+            return 0;
+        }
+
+        if (!config.useRandomSeedPerRun)
+        {
+            return config.fixedSeed;
+        }
+
+        int seed = System.Environment.TickCount ^ Mathf.RoundToInt(Time.realtimeSinceStartup * 1000f);
+        return seed == 0 ? 1 : seed;
+    }
+
+    private void BuildGuaranteedRoutes(SectorMapNode start, SectorMapNode finish, int width, int height, EncounterPoolSO pool, EncounterSO fallbackCombat)
+    {
+        int routeCount = Mathf.Clamp(config.guaranteedRouteCount, 1, 8);
+        for (int route = 0; route < routeCount; route++)
+        {
+            SectorMapNode from = start;
+            int currentX = 0;
+            float tRoute = routeCount <= 1 ? 0.5f : route / (float)(routeCount - 1);
+            int laneTarget = Mathf.RoundToInt(Mathf.Lerp(0f, width - 1, tRoute));
+
+            for (int y = 1; y < height - 1; y++)
+            {
+                float tY = y / (float)(height - 1);
+                int idealX = Mathf.RoundToInt(Mathf.Lerp(laneTarget, width - 1, tY));
+                int minX = Mathf.Max(0, currentX - 1);
+                int maxX = Mathf.Min(width - 1, currentX + 2);
+                int targetX = Mathf.Clamp(idealX + Random.Range(-1, 2), minX, maxX);
+                if (y >= height - 2)
+                {
+                    targetX = Mathf.Clamp(targetX, currentX, width - 1);
+                }
+
+                SectorMapNode step = AddOrGetNode(targetX, y, PickEncounterForRow(pool, fallbackCombat, y, height));
+                Connect(from, step);
+                from = step;
+                currentX = targetX;
+            }
+
+            Connect(from, finish);
         }
     }
 
-    private void UpdateReachableNodes()
+    private void EnsureIntermediateRowsHaveNodes(int width, int height, EncounterPoolSO pool, EncounterSO fallbackCombat)
     {
-        for (int i = 0; i < nodes.Count; i++)
+        for (int y = 1; y < height - 1; y++)
         {
-            SectorMapNode node = nodes[i];
-            if (node != null && !node.current)
+            List<SectorMapNode> row = GetOrCreateRow(y);
+            int desiredCount = Random.Range(config.minNodesPerRow, config.maxNodesPerRow + 1);
+            desiredCount = Mathf.Clamp(desiredCount, 1, width);
+
+            int toAdd = Mathf.Max(0, desiredCount - row.Count);
+            for (int i = 0; i < toAdd; i++)
             {
-                node.reachable = false;
+                int x = FindFreeXInRow(y, width);
+                if (x < 0)
+                {
+                    break;
+                }
+
+                AddOrGetNode(x, y, PickEncounterForRow(pool, fallbackCombat, y, height));
             }
         }
+    }
 
-        // Если текущий узел — финиш, дальше идти некуда
-        if (currentNode == null || currentNode.isFinish || currentNode.nextCoordinates == null)
+    private void BuildAdditionalConnections(int height)
+    {
+        for (int y = 0; y < height - 1; y++)
         {
-            return;
-        }
-
-        for (int i = 0; i < currentNode.nextCoordinates.Count; i++)
-        {
-            SectorMapNode candidate = GetNode(currentNode.nextCoordinates[i]);
-            if (candidate == null || candidate.encounter == null || candidate.visited || candidate.completed || candidate.locked)
+            List<SectorMapNode> row = GetOrCreateRow(y);
+            List<SectorMapNode> nextRow = GetOrCreateRow(y + 1);
+            if (row.Count == 0 || nextRow.Count == 0)
             {
                 continue;
             }
 
-            candidate.reachable = true;
+            for (int i = 0; i < row.Count; i++)
+            {
+                SectorMapNode from = row[i];
+                if (from == null || from.isFinish)
+                {
+                    continue;
+                }
+
+                int maxLinks = Mathf.Clamp(config.maxConnectionsPerNode, 1, 4);
+                EnsureAtLeastOneForwardLink(from, nextRow);
+
+                while (GetOutgoingCountCached(from) < maxLinks && Random.value <= config.extraRouteChance)
+                {
+                    SectorMapNode alt = FindAlternativeForwardTarget(from, nextRow);
+                    if (alt == null)
+                    {
+                        break;
+                    }
+
+                    Connect(from, alt);
+                }
+            }
         }
     }
 
-    private SectorMapNode AddNode(int x, int y, EncounterSO encounter)
+    private void EnsureAtLeastOneForwardLink(SectorMapNode from, List<SectorMapNode> nextRow)
     {
-        SectorMapNode existing = GetNode(new Vector2Int(x, y));
-        if (existing != null)
+        if (from == null || nextRow == null || nextRow.Count == 0)
+        {
+            return;
+        }
+
+        if (from.nextCoordinates != null && from.nextCoordinates.Count > 0)
+        {
+            return;
+        }
+
+        SectorMapNode best = FindBestForwardTarget(from, nextRow);
+        if (best != null)
+        {
+            Connect(from, best);
+        }
+    }
+
+    private void PruneToActiveRouteGraph(SectorMapNode start, SectorMapNode finish)
+    {
+        BuildReachableSet(start, reachableFromStart);
+        BuildReverseReachableSet(finish, canReachFinish);
+        activeNodes.Clear();
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node == null)
+            {
+                continue;
+            }
+
+            bool isActive = reachableFromStart.Contains(node) && canReachFinish.Contains(node);
+            if (isActive)
+            {
+                activeNodes.Add(node);
+                node.locked = false;
+            }
+            else
+            {
+                node.locked = true;
+            }
+        }
+
+        // Remove references to inactive nodes from active nodes.
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node == null || !activeNodes.Contains(node) || node.nextCoordinates == null)
+            {
+                continue;
+            }
+
+            for (int c = node.nextCoordinates.Count - 1; c >= 0; c--)
+            {
+                SectorMapNode target = GetNode(node.nextCoordinates[c]);
+                if (target == null || !activeNodes.Contains(target))
+                {
+                    node.nextCoordinates.RemoveAt(c);
+                }
+            }
+        }
+
+        RemoveNodesNotInActiveSet();
+    }
+
+    private void EnsureDegreesAndConnectivity(SectorMapNode start, SectorMapNode finish)
+    {
+        bool changed;
+        do
+        {
+            changed = false;
+            RecalculateDegrees();
+            removeBuffer.Clear();
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                SectorMapNode node = nodes[i];
+                if (node == null || node == start || node == finish)
+                {
+                    continue;
+                }
+
+                int incoming = GetIncoming(node);
+                int outgoing = GetOutgoing(node);
+                if (incoming <= 0 || outgoing <= 0)
+                {
+                    removeBuffer.Add(node);
+                }
+            }
+
+            if (removeBuffer.Count > 0)
+            {
+                changed = true;
+                for (int i = 0; i < removeBuffer.Count; i++)
+                {
+                    RemoveNode(removeBuffer[i]);
+                }
+            }
+        } while (changed);
+
+        // Final safety: keep only nodes reachable from start and leading to finish.
+        BuildReachableSet(start, reachableFromStart);
+        BuildReverseReachableSet(finish, canReachFinish);
+        activeNodes.Clear();
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node != null && reachableFromStart.Contains(node) && canReachFinish.Contains(node))
+            {
+                activeNodes.Add(node);
+            }
+        }
+
+        RemoveNodesNotInActiveSet();
+    }
+
+    private void EnsureRouteVariety(SectorMapNode finish)
+    {
+        if (finish == null)
+        {
+            return;
+        }
+
+        int finishY = finish.y;
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode from = nodes[i];
+            if (from == null || from.isFinish || from.locked || from.encounter == null)
+            {
+                continue;
+            }
+
+            // Перед финишем допускаем сужение маршрута, раньше - стараемся держать минимум 2 варианта.
+            bool isNearFinish = from.y >= finishY - 1;
+            int desired = isNearFinish ? 1 : (Random.value < RareSingleChoiceChance ? 1 : DesiredOutgoingChoices);
+            EnsureOutgoingChoices(from, desired);
+        }
+    }
+
+    private void EnsureOutgoingChoices(SectorMapNode from, int desiredCount)
+    {
+        if (from == null || desiredCount <= 0)
+        {
+            return;
+        }
+
+        from.nextCoordinates ??= new List<Vector2Int>();
+        int guard = 0;
+        while (from.nextCoordinates.Count < desiredCount && guard < 32)
+        {
+            guard++;
+            SectorMapNode candidate = FindAdditionalForwardCandidate(from);
+            if (candidate == null)
+            {
+                break;
+            }
+
+            Connect(from, candidate);
+        }
+    }
+
+    private SectorMapNode FindAdditionalForwardCandidate(SectorMapNode from)
+    {
+        if (from == null)
+        {
+            return null;
+        }
+
+        // Предпочитаем следующий ряд для читаемости маршрутов.
+        List<SectorMapNode> nextRow = GetOrCreateRow(from.y + 1);
+        SectorMapNode candidate = PickBestUnusedTarget(from, nextRow, true);
+        if (candidate != null)
+        {
+            return candidate;
+        }
+
+        // Фолбэк: если в следующем ряду вариантов нет, берем любой более дальний активный узел впереди.
+        SectorMapNode fallback = null;
+        float bestScore = float.MaxValue;
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node == null || node == from || node.locked || node.encounter == null)
+            {
+                continue;
+            }
+
+            if (node.y <= from.y || from.IsConnectedTo(node))
+            {
+                continue;
+            }
+
+            float score = Mathf.Abs(node.x - from.x) + (node.y - from.y) * 0.35f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                fallback = node;
+            }
+        }
+
+        return fallback;
+    }
+
+    private static SectorMapNode PickBestUnusedTarget(SectorMapNode from, List<SectorMapNode> candidates, bool preferHorizontalCloseness)
+    {
+        if (from == null || candidates == null || candidates.Count == 0)
+        {
+            return null;
+        }
+
+        SectorMapNode best = null;
+        float bestScore = float.MaxValue;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            SectorMapNode candidate = candidates[i];
+            if (candidate == null || candidate.locked || candidate.encounter == null || from.IsConnectedTo(candidate))
+            {
+                continue;
+            }
+
+            float score = preferHorizontalCloseness ? Mathf.Abs(candidate.x - from.x) : Random.value;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private void RemoveNodesNotInActiveSet()
+    {
+        for (int i = nodes.Count - 1; i >= 0; i--)
+        {
+            SectorMapNode node = nodes[i];
+            if (node == null || activeNodes.Contains(node))
+            {
+                continue;
+            }
+
+            RemoveNode(node);
+        }
+
+        // Cleanup any dangling references.
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node == null || node.nextCoordinates == null)
+            {
+                continue;
+            }
+
+            for (int c = node.nextCoordinates.Count - 1; c >= 0; c--)
+            {
+                if (GetNode(node.nextCoordinates[c]) == null)
+                {
+                    node.nextCoordinates.RemoveAt(c);
+                }
+            }
+        }
+    }
+
+    private void RemoveNode(SectorMapNode node)
+    {
+        if (node == null)
+        {
+            return;
+        }
+
+        Vector2Int key = node.Coordinates;
+        nodeByCoordinates.Remove(key);
+        nodes.Remove(node);
+        if (nodesByRow.TryGetValue(node.y, out List<SectorMapNode> row))
+        {
+            row.Remove(node);
+        }
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode other = nodes[i];
+            if (other == null || other.nextCoordinates == null)
+            {
+                continue;
+            }
+
+            for (int c = other.nextCoordinates.Count - 1; c >= 0; c--)
+            {
+                if (other.nextCoordinates[c] == key)
+                {
+                    other.nextCoordinates.RemoveAt(c);
+                }
+            }
+        }
+    }
+
+    private SectorMapNode AddOrGetNode(int x, int y, EncounterSO encounter)
+    {
+        Vector2Int key = new Vector2Int(x, y);
+        if (nodeByCoordinates.TryGetValue(key, out SectorMapNode existing))
         {
             if (existing.encounter == null)
             {
@@ -223,10 +587,23 @@ public sealed class SectorMapController : MonoBehaviour
             y = y,
             encounter = encounter,
             worldPosition = CalculateWorldPosition(x, y),
+            mapPosition = CalculateMapPosition(x, y),
             locked = encounter == null
         };
+
         nodes.Add(node);
+        nodeByCoordinates[key] = node;
+        GetOrCreateRow(y).Add(node);
         return node;
+    }
+
+    private Vector2 CalculateMapPosition(int x, int y)
+    {
+        float jitterX = config != null ? config.positionJitterX : 0f;
+        float jitterY = config != null ? config.positionJitterY : 0f;
+        float offsetX = (Random.value * 2f - 1f) * jitterX;
+        float offsetY = (Random.value * 2f - 1f) * jitterY;
+        return new Vector2(x + offsetX, y + offsetY);
     }
 
     private static void Connect(SectorMapNode from, SectorMapNode to)
@@ -246,16 +623,7 @@ public sealed class SectorMapController : MonoBehaviour
 
     private SectorMapNode GetNode(Vector2Int coordinates)
     {
-        for (int i = 0; i < nodes.Count; i++)
-        {
-            SectorMapNode node = nodes[i];
-            if (node != null && node.x == coordinates.x && node.y == coordinates.y)
-            {
-                return node;
-            }
-        }
-
-        return null;
+        return nodeByCoordinates.TryGetValue(coordinates, out SectorMapNode node) ? node : null;
     }
 
     private EncounterPoolSO ResolveEncounterPool()
@@ -268,12 +636,50 @@ public sealed class SectorMapController : MonoBehaviour
         return runPreset != null ? runPreset.encounterPool : null;
     }
 
-    private static EncounterSO PickEncounter(EncounterPoolSO pool, LocationNodeType preferredType, EncounterSO fallback)
+    private EncounterSO ResolveFinishEncounter(EncounterPoolSO pool, EncounterSO fallbackCombat)
     {
-        EncounterSO preferred = PickRandomByType(pool, preferredType);
-        if (preferred != null)
+        if (config != null && config.forceBossOrCombatEnd)
         {
-            return preferred;
+            EncounterSO boss = FindFirstByType(pool, LocationNodeType.Boss);
+            if (boss != null)
+            {
+                return boss;
+            }
+        }
+
+        return fallbackCombat;
+    }
+
+    private EncounterSO PickEncounterForRow(EncounterPoolSO pool, EncounterSO fallbackCombat, int y, int height)
+    {
+        if (pool == null || pool.encounters == null || pool.encounters.Count == 0)
+        {
+            return fallbackCombat;
+        }
+
+        float progress = height <= 1 ? 1f : y / (float)(height - 1);
+        if (progress < 0.2f)
+        {
+            return PickByPriority(pool, fallbackCombat, LocationNodeType.Combat, LocationNodeType.Repair, LocationNodeType.Rest);
+        }
+
+        if (progress < 0.7f)
+        {
+            return PickByPriority(pool, fallbackCombat, LocationNodeType.Combat, LocationNodeType.Event, LocationNodeType.Rest, LocationNodeType.Repair);
+        }
+
+        return PickByPriority(pool, fallbackCombat, LocationNodeType.Combat, LocationNodeType.Elite, LocationNodeType.Rest);
+    }
+
+    private static EncounterSO PickByPriority(EncounterPoolSO pool, EncounterSO fallback, params LocationNodeType[] order)
+    {
+        for (int i = 0; i < order.Length; i++)
+        {
+            EncounterSO pick = PickRandomByType(pool, order[i]);
+            if (pick != null)
+            {
+                return pick;
+            }
         }
 
         return fallback;
@@ -368,5 +774,279 @@ public sealed class SectorMapController : MonoBehaviour
         Vector2 origin = config.worldOrigin;
         Vector2 size = config.sectorWorldSize;
         return new Vector3(origin.x + x * size.x, origin.y + y * size.y, 0f);
+    }
+
+    private void SetCurrent(SectorMapNode node)
+    {
+        currentNode = node;
+        if (currentNode != null)
+        {
+            currentNode.current = true;
+            currentNode.reachable = false;
+            currentNode.locked = false;
+        }
+    }
+
+    private void UpdateReachableNodes()
+    {
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node != null && !node.current)
+            {
+                node.reachable = false;
+            }
+        }
+
+        if (currentNode == null || currentNode.isFinish || currentNode.nextCoordinates == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < currentNode.nextCoordinates.Count; i++)
+        {
+            SectorMapNode candidate = GetNode(currentNode.nextCoordinates[i]);
+            if (candidate == null || candidate.encounter == null || candidate.visited || candidate.completed || candidate.locked)
+            {
+                continue;
+            }
+
+            candidate.reachable = true;
+        }
+    }
+
+    private void ClearMap()
+    {
+        nodes.Clear();
+        reachableBuffer.Clear();
+        nodeByCoordinates.Clear();
+        nodesByRow.Clear();
+        usedRowX.Clear();
+        reachableFromStart.Clear();
+        canReachFinish.Clear();
+        activeNodes.Clear();
+        incomingCount.Clear();
+        outgoingCount.Clear();
+        removeBuffer.Clear();
+        currentNode = null;
+        activeSeed = 0;
+    }
+
+    private List<SectorMapNode> GetOrCreateRow(int y)
+    {
+        if (!nodesByRow.TryGetValue(y, out List<SectorMapNode> row))
+        {
+            row = new List<SectorMapNode>();
+            nodesByRow[y] = row;
+        }
+
+        return row;
+    }
+
+    private int FindFreeXInRow(int y, int width)
+    {
+        usedRowX.Clear();
+        List<SectorMapNode> row = GetOrCreateRow(y);
+        for (int i = 0; i < row.Count; i++)
+        {
+            usedRowX.Add(row[i].x);
+        }
+
+        int attempts = width * 2;
+        for (int i = 0; i < attempts; i++)
+        {
+            int x = Random.Range(0, width);
+            if (!usedRowX.Contains(x))
+            {
+                return x;
+            }
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            if (!usedRowX.Contains(x))
+            {
+                return x;
+            }
+        }
+
+        return -1;
+    }
+
+    private void RecalculateDegrees()
+    {
+        incomingCount.Clear();
+        outgoingCount.Clear();
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode node = nodes[i];
+            if (node == null)
+            {
+                continue;
+            }
+
+            incomingCount[node] = 0;
+            outgoingCount[node] = 0;
+        }
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            SectorMapNode from = nodes[i];
+            if (from == null || from.nextCoordinates == null)
+            {
+                continue;
+            }
+
+            for (int c = 0; c < from.nextCoordinates.Count; c++)
+            {
+                SectorMapNode to = GetNode(from.nextCoordinates[c]);
+                if (to == null)
+                {
+                    continue;
+                }
+
+                outgoingCount[from] = outgoingCount[from] + 1;
+                incomingCount[to] = incomingCount[to] + 1;
+            }
+        }
+    }
+
+    private int GetIncoming(SectorMapNode node)
+    {
+        return node != null && incomingCount.TryGetValue(node, out int value) ? value : 0;
+    }
+
+    private int GetOutgoing(SectorMapNode node)
+    {
+        return node != null && outgoingCount.TryGetValue(node, out int value) ? value : 0;
+    }
+
+    private int GetOutgoingCountCached(SectorMapNode node)
+    {
+        if (node == null || node.nextCoordinates == null)
+        {
+            return 0;
+        }
+
+        return node.nextCoordinates.Count;
+    }
+
+    private static SectorMapNode FindBestForwardTarget(SectorMapNode from, List<SectorMapNode> nextRow)
+    {
+        SectorMapNode best = null;
+        float bestScore = float.MaxValue;
+        for (int i = 0; i < nextRow.Count; i++)
+        {
+            SectorMapNode candidate = nextRow[i];
+            if (candidate == null || from.IsConnectedTo(candidate))
+            {
+                continue;
+            }
+
+            float score = Mathf.Abs(candidate.x - from.x);
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private static SectorMapNode FindAlternativeForwardTarget(SectorMapNode from, List<SectorMapNode> nextRow)
+    {
+        SectorMapNode best = null;
+        float bestScore = float.MinValue;
+        for (int i = 0; i < nextRow.Count; i++)
+        {
+            SectorMapNode candidate = nextRow[i];
+            if (candidate == null || from.IsConnectedTo(candidate))
+            {
+                continue;
+            }
+
+            float score = Mathf.Abs(candidate.x - from.x) + Random.value;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private void BuildReachableSet(SectorMapNode start, HashSet<SectorMapNode> destination)
+    {
+        destination.Clear();
+        if (start == null)
+        {
+            return;
+        }
+
+        Queue<SectorMapNode> queue = new Queue<SectorMapNode>();
+        queue.Enqueue(start);
+        destination.Add(start);
+
+        while (queue.Count > 0)
+        {
+            SectorMapNode node = queue.Dequeue();
+            if (node.nextCoordinates == null)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < node.nextCoordinates.Count; i++)
+            {
+                SectorMapNode next = GetNode(node.nextCoordinates[i]);
+                if (next == null || destination.Contains(next))
+                {
+                    continue;
+                }
+
+                destination.Add(next);
+                queue.Enqueue(next);
+            }
+        }
+    }
+
+    private void BuildReverseReachableSet(SectorMapNode finish, HashSet<SectorMapNode> destination)
+    {
+        destination.Clear();
+        if (finish == null)
+        {
+            return;
+        }
+
+        Queue<SectorMapNode> queue = new Queue<SectorMapNode>();
+        queue.Enqueue(finish);
+        destination.Add(finish);
+
+        while (queue.Count > 0)
+        {
+            SectorMapNode node = queue.Dequeue();
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                SectorMapNode candidate = nodes[i];
+                if (candidate == null || destination.Contains(candidate) || candidate.nextCoordinates == null)
+                {
+                    continue;
+                }
+
+                for (int c = 0; c < candidate.nextCoordinates.Count; c++)
+                {
+                    if (candidate.nextCoordinates[c] != node.Coordinates)
+                    {
+                        continue;
+                    }
+
+                    destination.Add(candidate);
+                    queue.Enqueue(candidate);
+                    break;
+                }
+            }
+        }
     }
 }
