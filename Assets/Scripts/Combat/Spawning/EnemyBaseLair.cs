@@ -31,6 +31,14 @@ public sealed class EnemyBaseLair : MonoBehaviour
     [Min(0)] [SerializeField] private int spawnEnemyCount = 4;
     [Tooltip("Интервал между спавном врагов в режиме Timed.")]
     [Min(0.01f)] [SerializeField] private float spawnIntervalSeconds = 1f;
+    [Tooltip("Если включено, база будет периодически спавнить врагов, пока жива.")]
+    [SerializeField] private bool continuousSpawnEnabled;
+    [Tooltip("Сколько врагов спавнить за один цикл непрерывного спавна.")]
+    [Min(1)] [SerializeField] private int continuousSpawnCount = 2;
+    [Tooltip("Пауза между циклами непрерывного спавна.")]
+    [Min(0.25f)] [SerializeField] private float continuousSpawnIntervalSeconds = 8f;
+    [Tooltip("Стартовая задержка перед первым циклом непрерывного спавна.")]
+    [Min(0f)] [SerializeField] private float continuousSpawnStartDelay = 2f;
 
     [Header("Кого спавнить")]
     [Tooltip("ShipData врага. Приоритетнее prefab, потому что создаёт полноценного врага через контроллер сцены.")]
@@ -53,6 +61,7 @@ public sealed class EnemyBaseLair : MonoBehaviour
     private float initialTotalDurability;
     private bool spawnTriggered;
     private bool destroyedHandled;
+    private Coroutine continuousSpawnRoutine;
 
     public bool IsAlive => !destroyedHandled && durabilityState.Hull > 0.01f;
     public ShipDurabilityState CurrentDurability => durabilityState;
@@ -63,6 +72,7 @@ public sealed class EnemyBaseLair : MonoBehaviour
         CombatLayerUtility.ApplyShipLayer(gameObject, CombatFaction.Enemy);
         EnsureDamageReceiver();
         ResolveSceneController();
+        TryStartContinuousSpawn();
     }
 
     private void OnDestroy()
@@ -71,6 +81,8 @@ public sealed class EnemyBaseLair : MonoBehaviour
         {
             damageReceiver.DamageApplied -= OnDamageApplied;
         }
+
+        StopContinuousSpawn();
     }
 
     private void InitializeDurability()
@@ -172,6 +184,76 @@ public sealed class EnemyBaseLair : MonoBehaviour
         }
     }
 
+    public void ConfigureContinuousSpawn(bool enabled, int countPerCycle, float intervalSeconds, float startDelaySeconds)
+    {
+        continuousSpawnEnabled = enabled;
+        continuousSpawnCount = Mathf.Max(1, countPerCycle);
+        continuousSpawnIntervalSeconds = Mathf.Max(0.25f, intervalSeconds);
+        continuousSpawnStartDelay = Mathf.Max(0f, startDelaySeconds);
+
+        if (!continuousSpawnEnabled)
+        {
+            StopContinuousSpawn();
+            return;
+        }
+
+        TryStartContinuousSpawn();
+    }
+
+    public void EnableContinuousSpawn()
+    {
+        continuousSpawnEnabled = true;
+        TryStartContinuousSpawn();
+    }
+
+    private void TryStartContinuousSpawn()
+    {
+        if (!continuousSpawnEnabled || destroyedHandled || !gameObject.activeInHierarchy)
+        {
+            return;
+        }
+
+        if (continuousSpawnRoutine != null)
+        {
+            return;
+        }
+
+        continuousSpawnRoutine = StartCoroutine(ContinuousSpawnRoutine());
+    }
+
+    private void StopContinuousSpawn()
+    {
+        if (continuousSpawnRoutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(continuousSpawnRoutine);
+        continuousSpawnRoutine = null;
+    }
+
+    private IEnumerator ContinuousSpawnRoutine()
+    {
+        if (continuousSpawnStartDelay > 0f)
+        {
+            yield return new WaitForSeconds(continuousSpawnStartDelay);
+        }
+
+        while (!destroyedHandled && IsAlive)
+        {
+            int spawnCount = Mathf.Max(1, continuousSpawnCount);
+            for (int i = 0; i < spawnCount; i++)
+            {
+                SpawnOneEnemy(i);
+            }
+
+            float wait = Mathf.Max(0.25f, continuousSpawnIntervalSeconds);
+            yield return new WaitForSeconds(wait);
+        }
+
+        continuousSpawnRoutine = null;
+    }
+
     private void SpawnOneEnemy(int index)
     {
         ResolveSceneController();
@@ -228,6 +310,7 @@ public sealed class EnemyBaseLair : MonoBehaviour
         }
 
         destroyedHandled = true;
+        StopContinuousSpawn();
         ResolveSceneController();
         if (sceneController != null && experienceReward > 0)
         {
@@ -246,6 +329,9 @@ public sealed class EnemyBaseLair : MonoBehaviour
         spawnTriggerDamagePercent = Mathf.Clamp(spawnTriggerDamagePercent, 0f, 100f);
         spawnEnemyCount = Mathf.Max(0, spawnEnemyCount);
         spawnIntervalSeconds = Mathf.Max(0.01f, spawnIntervalSeconds);
+        continuousSpawnCount = Mathf.Max(1, continuousSpawnCount);
+        continuousSpawnIntervalSeconds = Mathf.Max(0.25f, continuousSpawnIntervalSeconds);
+        continuousSpawnStartDelay = Mathf.Max(0f, continuousSpawnStartDelay);
         fallbackSpawnRadius = Mathf.Max(0.2f, fallbackSpawnRadius);
     }
 }

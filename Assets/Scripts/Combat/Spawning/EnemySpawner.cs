@@ -163,6 +163,7 @@ public sealed class EnemySpawner : MonoBehaviour
             OrbitDistance = preferredDistance,
             OrbitAngle = Random.Range(0f, Mathf.PI * 2f),
             OrbitSpeed = Random.Range(1.0f, 2.0f),
+            FlankDirection = Random.value > 0.5f ? 1f : -1f,
             RetreatDistance = retreatDistance,
             ReengageDistance = reengageDistance,
             DistanceResponsiveness = Random.Range(1.25f, 1.75f),

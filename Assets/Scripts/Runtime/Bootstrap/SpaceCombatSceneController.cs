@@ -89,6 +89,37 @@ public class SpaceCombatSceneController : MonoBehaviour
     [Header("Фон")]
     [Tooltip("Legacy-настройки слоев фона. Используются только как резерв для BackgroundController, чтобы не потерять старые настройки сцены при переносе.")]
     [SerializeField] private List<BackgroundLayerConfig> backgroundLayers = new List<BackgroundLayerConfig>();
+    [Header("Базы и цель сектора")]
+    [Tooltip("Префаб пиратской базы.")]
+    [SerializeField] private GameObject pirateBasePrefab;
+    [Tooltip("Префаб рейдерской базы.")]
+    [SerializeField] private GameObject raiderBasePrefab;
+    [Tooltip("Минимум вражеских баз в секторе.")]
+    [SerializeField, Min(1)] private int minEnemyBasesPerSector = 1;
+    [Tooltip("Максимум вражеских баз в секторе.")]
+    [SerializeField, Min(1)] private int maxEnemyBasesPerSector = 3;
+    [Tooltip("Минимальная дистанция спавна вражеских баз от игрока.")]
+    [SerializeField, Min(4f)] private float enemyBaseSpawnRadiusMin = 18f;
+    [Tooltip("Максимальная дистанция спавна вражеских баз от игрока.")]
+    [SerializeField, Min(6f)] private float enemyBaseSpawnRadiusMax = 34f;
+    [Tooltip("Если включено, контроллер перезапишет параметры спавна на каждой базе значениями ниже.")]
+    [SerializeField] private bool overrideEnemyBaseSpawnSettings;
+    [Tooltip("Сколько врагов спавнит каждая база за один цикл (используется только при override).")]
+    [SerializeField, Min(1)] private int enemyBaseSpawnCountPerCycle = 2;
+    [Tooltip("Пауза между циклами спавна врагов у базы (используется только при override).")]
+    [SerializeField, Min(0.5f)] private float enemyBaseSpawnCycleInterval = 8f;
+    [Tooltip("Задержка перед первым циклом спавна у базы (используется только при override).")]
+    [SerializeField, Min(0f)] private float enemyBaseSpawnStartDelay = 2f;
+    [Tooltip("Префаб союзной ремонтной базы.")]
+    [SerializeField] private GameObject alliedRepairBasePrefab;
+    [Tooltip("Создавать ли союзную ремонтную базу в секторе.")]
+    [SerializeField] private bool spawnAlliedRepairBase = true;
+    [Tooltip("Дистанция союзной базы от игрока при старте сектора.")]
+    [SerializeField, Min(4f)] private float alliedBaseSpawnRadius = 14f;
+    [Tooltip("Сила лечения союзной базы за тик.")]
+    [SerializeField, Range(0f, 1f)] private float alliedBaseHealStrength = 0.2f;
+    [Tooltip("Кулдаун лечения союзной базы (секунды).")]
+    [SerializeField, Min(1f)] private float alliedBaseHealCooldown = 30f;
 
     [Header("Shield Visuals")]
     [Tooltip("РђРјРїР»РёС‚СѓРґР° РїСѓР»СЊСЃР°С†РёРё РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚Рё С‰РёС‚Р° (fallback, РµСЃР»Рё ShipShieldVisual РЅРµ РЅР°Р·РЅР°С‡РµРЅ).")]
@@ -126,6 +157,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Transform worldRoot;
     private Transform enemyRoot;
     private Transform projectileRoot;
+    private Transform baseRoot;
     private Transform gateTransform;
     private Canvas hudCanvas;
     private TMP_Text gateHintText;
@@ -155,6 +187,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     private Vector2 joystickVector;
     private bool suppressPointerMovementUntilRelease;
     private int enemySpawnSequence;
+    private readonly List<EnemyBaseLair> activeEnemyBases = new List<EnemyBaseLair>();
+    private AlliedRepairBase alliedRepairBaseInstance;
+    private bool sectorUsesBaseObjective;
 
     private enum ConfirmAction
     {
@@ -246,7 +281,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         if (combatCameraController == null)
         {
-            combatCameraController = GetComponent<CombatCameraController>();
+            Camera sceneCamera = mainCamera != null ? mainCamera : Camera.main;
+            if (sceneCamera != null)
+            {
+                combatCameraController = sceneCamera.GetComponent<CombatCameraController>();
+            }
         }
 
         if (combatCameraController == null)
@@ -256,7 +295,20 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         if (combatCameraController == null)
         {
-            combatCameraController = gameObject.AddComponent<CombatCameraController>();
+            Camera sceneCamera = mainCamera != null ? mainCamera : Camera.main;
+            if (sceneCamera == null)
+            {
+                GameObject cameraObject = new GameObject("Main Camera");
+                cameraObject.tag = "MainCamera";
+                sceneCamera = cameraObject.AddComponent<Camera>();
+                cameraObject.AddComponent<AudioListener>();
+            }
+
+            combatCameraController = sceneCamera.GetComponent<CombatCameraController>();
+            if (combatCameraController == null)
+            {
+                combatCameraController = sceneCamera.gameObject.AddComponent<CombatCameraController>();
+            }
         }
 
         combatCameraController.Initialize(mainCamera != null ? mainCamera : Camera.main);
@@ -721,7 +773,19 @@ public class SpaceCombatSceneController : MonoBehaviour
     [ContextMenu("Автонастроить ссылки сцены")]
     private void AutoWireSceneReferences()
     {
-        combatCameraController = GetOrAddSceneComponent<CombatCameraController>();
+        Camera sceneCamera = mainCamera != null ? mainCamera : Camera.main;
+        if (sceneCamera == null)
+        {
+            GameObject cameraObject = new GameObject("Main Camera");
+            cameraObject.tag = "MainCamera";
+            sceneCamera = cameraObject.AddComponent<Camera>();
+            cameraObject.AddComponent<AudioListener>();
+        }
+        combatCameraController = sceneCamera.GetComponent<CombatCameraController>();
+        if (combatCameraController == null)
+        {
+            combatCameraController = sceneCamera.gameObject.AddComponent<CombatCameraController>();
+        }
         encounterFlowController = GetOrAddSceneComponent<EncounterFlowController>();
         timelineSpawnController = GetOrAddSceneComponent<TimelineSpawnController>();
         enemySpawner = GetOrAddSceneComponent<EnemySpawner>();
@@ -825,6 +889,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         backgroundController?.Cleanup();
         minimapController?.Cleanup();
+        ClearBases();
     }
 
     private void ValidateSerializedReferences()
@@ -1237,6 +1302,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void BuildWorld()
     {
         worldRoot = new GameObject("SpaceWorld").transform;
+        baseRoot = new GameObject("Bases").transform;
+        baseRoot.SetParent(worldRoot, false);
         enemyRoot = new GameObject("Enemies").transform;
         enemyRoot.SetParent(worldRoot, false);
         projectileRoot = new GameObject("Projectiles").transform;
@@ -1400,6 +1467,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
         ClearEnemies();
         ClearProjectiles();
+        ClearBases();
         if (gateTransform != null)
         {
             gateTransform.gameObject.SetActive(false);
@@ -1424,6 +1492,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         TrySnapPlayerToCurrentSector();
+        SpawnSectorBases();
         encounterStartHullPercent = player != null ? player.HullPercent : 1f;
         LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
@@ -1547,7 +1616,9 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
+        int aliveEnemyBaseCount = GetAliveEnemyBaseCount();
         bool timelineFinished = timelineSpawnController != null && timelineSpawnController.IsTimelineFinished;
+        bool objectiveCompleted = sectorUsesBaseObjective ? aliveEnemyBaseCount <= 0 : timelineFinished;
         LocationNodeType completedNodeType = LocationNodeType.Combat;
         RunManager flowRunManager = encounterFlowController.RunManager;
         if (flowRunManager != null && flowRunManager.CurrentEncounter != null)
@@ -1563,8 +1634,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             damageTaken,
             timelineSpawnController != null ? timelineSpawnController.GameTimer : 0f,
             0, // TODO Stage 3+: expose killed enemy count from combat cleanup.
-            timelineFinished,
-            enemies.Count);
+            objectiveCompleted,
+            enemies.Count + aliveEnemyBaseCount);
 
         encounterFlowController.TryCompleteCombatEncounter(context);
     }
@@ -1608,6 +1679,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     {
         ClearEnemies();
         ClearProjectiles();
+        ClearBases();
         if (timelineSpawnController != null)
         {
             timelineSpawnController.ResetRuntime();
@@ -1616,6 +1688,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     }
 
     private PlayerShip GetPlayerShip()
+    {
+        return player;
+    }
+
+    public PlayerShip GetPlayerShipForExternalSystems()
     {
         return player;
     }
@@ -1873,6 +1950,188 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         return null;
+    }
+
+    private void SpawnSectorBases()
+    {
+        ClearBases();
+        sectorUsesBaseObjective = false;
+
+        if (player == null || player.Transform == null || worldRoot == null)
+        {
+            return;
+        }
+
+        int minCount = Mathf.Max(1, minEnemyBasesPerSector);
+        int maxCount = Mathf.Max(minCount, maxEnemyBasesPerSector);
+        int enemyBaseCount = UnityEngine.Random.Range(minCount, maxCount + 1);
+        sectorUsesBaseObjective = false;
+
+        List<GameObject> basePrefabs = new List<GameObject>(2);
+        if (pirateBasePrefab != null) basePrefabs.Add(pirateBasePrefab);
+        if (raiderBasePrefab != null) basePrefabs.Add(raiderBasePrefab);
+
+        if (basePrefabs.Count == 0)
+        {
+            Debug.LogWarning("SpaceCombatSceneController: не назначены префабы вражеских баз (pirate/raider).", this);
+        }
+        else
+        {
+            List<Vector3> usedPositions = new List<Vector3>(enemyBaseCount + 1);
+            for (int i = 0; i < enemyBaseCount; i++)
+            {
+                Vector3 position = FindBaseSpawnPosition(player.Transform.position, usedPositions, enemyBaseSpawnRadiusMin, enemyBaseSpawnRadiusMax);
+                usedPositions.Add(position);
+
+                GameObject prefab = basePrefabs[UnityEngine.Random.Range(0, basePrefabs.Count)];
+                GameObject instance = Instantiate(prefab, position, Quaternion.identity, baseRoot != null ? baseRoot : worldRoot);
+                instance.name = prefab.name + "_Sector_" + (i + 1);
+
+                EnemyBaseLair lair = instance.GetComponent<EnemyBaseLair>();
+                if (lair != null)
+                {
+                    if (overrideEnemyBaseSpawnSettings)
+                    {
+                        lair.ConfigureContinuousSpawn(
+                            enabled: true,
+                            countPerCycle: Mathf.Max(1, enemyBaseSpawnCountPerCycle),
+                            intervalSeconds: Mathf.Max(0.5f, enemyBaseSpawnCycleInterval),
+                            startDelaySeconds: Mathf.Max(0f, enemyBaseSpawnStartDelay));
+                    }
+                    else
+                    {
+                        lair.EnableContinuousSpawn();
+                    }
+                    activeEnemyBases.Add(lair);
+                }
+            }
+
+            sectorUsesBaseObjective = activeEnemyBases.Count > 0;
+        }
+
+        if (spawnAlliedRepairBase)
+        {
+            SpawnAlliedRepairBase(player.Transform.position);
+        }
+    }
+
+    private void SpawnAlliedRepairBase(Vector3 center)
+    {
+        if (alliedRepairBasePrefab == null)
+        {
+            return;
+        }
+
+        Vector2 dir = UnityEngine.Random.insideUnitCircle;
+        if (dir.sqrMagnitude <= 0.0001f)
+        {
+            dir = Vector2.right;
+        }
+
+        Vector3 position = center + new Vector3(dir.x, dir.y, 0f).normalized * Mathf.Max(4f, alliedBaseSpawnRadius);
+        GameObject instance = Instantiate(alliedRepairBasePrefab, position, Quaternion.identity, baseRoot != null ? baseRoot : worldRoot);
+        instance.name = alliedRepairBasePrefab.name + "_Sector_Allied";
+        alliedRepairBaseInstance = instance.GetComponent<AlliedRepairBase>();
+        if (alliedRepairBaseInstance != null)
+        {
+            alliedRepairBaseInstance.ConfigureHealing(
+                alliedBaseHealStrength,
+                alliedBaseHealCooldown,
+                radius: 3.2f);
+        }
+    }
+
+    private Vector3 FindBaseSpawnPosition(Vector3 center, List<Vector3> usedPositions, float minRadius, float maxRadius)
+    {
+        float minR = Mathf.Max(4f, minRadius);
+        float maxR = Mathf.Max(minR + 1f, maxRadius);
+        const float minSeparation = 9f;
+
+        for (int attempt = 0; attempt < 24; attempt++)
+        {
+            Vector2 dir = UnityEngine.Random.insideUnitCircle;
+            if (dir.sqrMagnitude <= 0.0001f)
+            {
+                continue;
+            }
+
+            float radius = UnityEngine.Random.Range(minR, maxR);
+            Vector3 candidate = center + new Vector3(dir.x, dir.y, 0f).normalized * radius;
+            candidate.z = 0f;
+
+            bool overlaps = false;
+            for (int i = 0; i < usedPositions.Count; i++)
+            {
+                if ((usedPositions[i] - candidate).sqrMagnitude < minSeparation * minSeparation)
+                {
+                    overlaps = true;
+                    break;
+                }
+            }
+
+            if (!overlaps)
+            {
+                return candidate;
+            }
+        }
+
+        Vector3 fallback = center + new Vector3(maxR, 0f, 0f);
+        fallback.z = 0f;
+        return fallback;
+    }
+
+    private int GetAliveEnemyBaseCount()
+    {
+        int aliveCount = 0;
+        for (int i = activeEnemyBases.Count - 1; i >= 0; i--)
+        {
+            EnemyBaseLair lair = activeEnemyBases[i];
+            if (lair == null || !lair.IsAlive)
+            {
+                if (lair == null)
+                {
+                    activeEnemyBases.RemoveAt(i);
+                }
+                continue;
+            }
+
+            aliveCount++;
+        }
+
+        return aliveCount;
+    }
+
+    private void ClearBases()
+    {
+        for (int i = activeEnemyBases.Count - 1; i >= 0; i--)
+        {
+            EnemyBaseLair lair = activeEnemyBases[i];
+            if (lair != null)
+            {
+                Destroy(lair.gameObject);
+            }
+        }
+        activeEnemyBases.Clear();
+
+        if (alliedRepairBaseInstance != null)
+        {
+            Destroy(alliedRepairBaseInstance.gameObject);
+            alliedRepairBaseInstance = null;
+        }
+
+        if (baseRoot != null)
+        {
+            for (int i = baseRoot.childCount - 1; i >= 0; i--)
+            {
+                Transform child = baseRoot.GetChild(i);
+                if (child != null)
+                {
+                    Destroy(child.gameObject);
+                }
+            }
+        }
+
+        sectorUsesBaseObjective = false;
     }
 
     private void ClearEnemies()
@@ -2970,6 +3229,19 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateTimelineSpawner(float deltaTime)
     {
+        if (sectorUsesBaseObjective)
+        {
+            if (gateHintText != null)
+            {
+                gateHintText.transform.parent.gameObject.SetActive(true);
+                int aliveEnemyBaseCount = GetAliveEnemyBaseCount();
+                gateHintText.text = aliveEnemyBaseCount > 0
+                    ? "Базы противника: " + aliveEnemyBaseCount + ". Уничтожьте все базы."
+                    : "Базы уничтожены. Добейте оставшихся противников.";
+            }
+            return;
+        }
+
         WaveTimelineSO activeTimeline = GetActiveTimeline();
         if (timelineSpawnController == null)
         {

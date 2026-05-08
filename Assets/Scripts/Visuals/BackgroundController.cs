@@ -16,6 +16,7 @@ public sealed class BackgroundController : MonoBehaviour
     private Sprite fallbackCircleSprite;
     private GameObject runtimeStarLayerPrefab;
     private GameObject runtimeNebulaLayerPrefab;
+    private GameObject runtimeAsteroidLayerPrefab;
     private bool warnedMissingLayers;
 
     internal void Initialize(
@@ -80,6 +81,12 @@ public sealed class BackgroundController : MonoBehaviour
             Destroy(runtimeNebulaLayerPrefab);
             runtimeNebulaLayerPrefab = null;
         }
+
+        if (runtimeAsteroidLayerPrefab != null)
+        {
+            Destroy(runtimeAsteroidLayerPrefab);
+            runtimeAsteroidLayerPrefab = null;
+        }
     }
 
     private void BuildStarfield(IReadOnlyList<BackgroundLayerConfig> fallbackLayers)
@@ -102,15 +109,26 @@ public sealed class BackgroundController : MonoBehaviour
 
         if (backgroundLayers != null && backgroundLayers.Count > 0)
         {
-            effectiveLayers.AddRange(backgroundLayers);
-            return;
+            for (int i = 0; i < backgroundLayers.Count; i++)
+            {
+                BackgroundLayerConfig layer = backgroundLayers[i];
+                if (layer != null && layer.prefab != null)
+                {
+                    effectiveLayers.Add(layer);
+                }
+            }
+
+            if (effectiveLayers.Count > 0)
+            {
+                return;
+            }
         }
 
         if (fallbackLayers != null && fallbackLayers.Count > 0)
         {
             for (int i = 0; i < fallbackLayers.Count; i++)
             {
-                if (fallbackLayers[i] != null)
+                if (fallbackLayers[i] != null && fallbackLayers[i].prefab != null)
                 {
                     effectiveLayers.Add(fallbackLayers[i]);
                 }
@@ -146,6 +164,13 @@ public sealed class BackgroundController : MonoBehaviour
             tileSize = 36f,
             gridRadius = 2
         });
+        effectiveLayers.Add(new BackgroundLayerConfig
+        {
+            prefab = GetRuntimeAsteroidLayerPrefab(),
+            parallaxFactor = 0.32f,
+            tileSize = 44f,
+            gridRadius = 2
+        });
     }
 
     private GameObject GetRuntimeStarLayerPrefab()
@@ -158,11 +183,13 @@ public sealed class BackgroundController : MonoBehaviour
         runtimeStarLayerPrefab = new GameObject("RuntimeStarLayerPrefab");
         runtimeStarLayerPrefab.SetActive(false);
         runtimeStarLayerPrefab.hideFlags = HideFlags.DontSave;
-        SpriteRenderer renderer = runtimeStarLayerPrefab.AddComponent<SpriteRenderer>();
-        renderer.sprite = fallbackCircleSprite;
-        renderer.color = new Color(0.7f, 0.85f, 1f, 0.85f);
-        renderer.sortingOrder = -20;
-        runtimeStarLayerPrefab.transform.localScale = new Vector3(0.08f, 0.08f, 1f);
+
+        CreateLayerSprite(runtimeStarLayerPrefab.transform, "StarA", new Vector3(-9f, 7f, 0f), 0.08f, new Color(0.75f, 0.88f, 1f, 0.85f), -20);
+        CreateLayerSprite(runtimeStarLayerPrefab.transform, "StarB", new Vector3(12f, 5f, 0f), 0.06f, new Color(0.95f, 0.95f, 1f, 0.8f), -20);
+        CreateLayerSprite(runtimeStarLayerPrefab.transform, "StarC", new Vector3(-4f, -11f, 0f), 0.07f, new Color(0.7f, 0.82f, 1f, 0.82f), -20);
+        CreateLayerSprite(runtimeStarLayerPrefab.transform, "StarD", new Vector3(8f, -6f, 0f), 0.05f, new Color(1f, 0.98f, 0.86f, 0.7f), -20);
+        CreateLayerSprite(runtimeStarLayerPrefab.transform, "StarE", new Vector3(-15f, -2f, 0f), 0.04f, new Color(0.8f, 0.9f, 1f, 0.62f), -20);
+
         return runtimeStarLayerPrefab;
     }
 
@@ -182,5 +209,36 @@ public sealed class BackgroundController : MonoBehaviour
         renderer.sortingOrder = -30;
         runtimeNebulaLayerPrefab.transform.localScale = new Vector3(5.5f, 3.8f, 1f);
         return runtimeNebulaLayerPrefab;
+    }
+
+    private GameObject GetRuntimeAsteroidLayerPrefab()
+    {
+        if (runtimeAsteroidLayerPrefab != null)
+        {
+            return runtimeAsteroidLayerPrefab;
+        }
+
+        runtimeAsteroidLayerPrefab = new GameObject("RuntimeAsteroidLayerPrefab");
+        runtimeAsteroidLayerPrefab.SetActive(false);
+        runtimeAsteroidLayerPrefab.hideFlags = HideFlags.DontSave;
+
+        CreateLayerSprite(runtimeAsteroidLayerPrefab.transform, "AsteroidA", new Vector3(-11f, 8f, 0f), 0.42f, new Color(0.38f, 0.42f, 0.48f, 0.42f), -12);
+        CreateLayerSprite(runtimeAsteroidLayerPrefab.transform, "AsteroidB", new Vector3(10f, -5f, 0f), 0.3f, new Color(0.42f, 0.44f, 0.5f, 0.35f), -12);
+        CreateLayerSprite(runtimeAsteroidLayerPrefab.transform, "AsteroidC", new Vector3(2f, 12f, 0f), 0.24f, new Color(0.34f, 0.39f, 0.44f, 0.3f), -12);
+
+        return runtimeAsteroidLayerPrefab;
+    }
+
+    private void CreateLayerSprite(Transform parent, string objectName, Vector3 localPosition, float uniformScale, Color color, int sortingOrder)
+    {
+        GameObject go = new GameObject(objectName);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPosition;
+        go.transform.localScale = new Vector3(uniformScale, uniformScale, 1f);
+
+        SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+        renderer.sprite = fallbackCircleSprite;
+        renderer.color = color;
+        renderer.sortingOrder = sortingOrder;
     }
 }

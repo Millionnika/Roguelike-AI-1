@@ -8,12 +8,15 @@ public static class EnemyBasePrefabBuilder
     private const string SharedDir = RootDir + "/Shared";
     private const string RaiderDir = RootDir + "/RaiderLair";
     private const string PirateDir = RootDir + "/PirateLair";
+    private const string AlliedDir = RootDir + "/AlliedRepairBase";
 
     private const string RaiderPrefabPath = RaiderDir + "/RaiderLair_Prefab.prefab";
     private const string PiratePrefabPath = PirateDir + "/PirateLair_Prefab.prefab";
+    private const string AlliedPrefabPath = AlliedDir + "/AlliedRepairBase_Prefab.prefab";
 
     private const string RaiderBodySpritePath = SharedDir + "/RaiderLair_Body.png";
     private const string PirateBodySpritePath = SharedDir + "/PirateLair_Body.png";
+    private const string AlliedBodySpritePath = SharedDir + "/AlliedRepairBase_Body.png";
     private const string GlowSpritePath = SharedDir + "/Lair_Glow.png";
 
     private const string E1ShipDataPath = "Assets/Content/Ships/E1/E1_ShipData.asset";
@@ -28,9 +31,11 @@ public static class EnemyBasePrefabBuilder
         EnsureFolder(SharedDir);
         EnsureFolder(RaiderDir);
         EnsureFolder(PirateDir);
+        EnsureFolder(AlliedDir);
 
         Sprite raiderBody = CreateSolidSprite(RaiderBodySpritePath, new Color(0.44f, 0.24f, 0.22f, 1f), 192);
         Sprite pirateBody = CreateSolidSprite(PirateBodySpritePath, new Color(0.2f, 0.28f, 0.42f, 1f), 192);
+        Sprite alliedBody = CreateSolidSprite(AlliedBodySpritePath, new Color(0.18f, 0.42f, 0.34f, 1f), 192);
         Sprite glowSprite = CreateSolidSprite(GlowSpritePath, new Color(0.35f, 0.85f, 0.95f, 1f), 192);
         Sprite shieldSprite = AssetDatabase.LoadAssetAtPath<Sprite>(ShieldSpritePath);
 
@@ -69,9 +74,49 @@ public static class EnemyBasePrefabBuilder
             spawnInterval: 0.85f,
             spawnMode: 1);
 
+        BuildAlliedRepairBasePrefab(
+            AlliedPrefabPath,
+            alliedBody,
+            glowSprite);
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("EnemyBasePrefabBuilder: base prefabs created in " + RootDir);
+    }
+
+    private static void BuildAlliedRepairBasePrefab(string prefabPath, Sprite bodySprite, Sprite glowSprite)
+    {
+        GameObject root = new GameObject("AlliedRepairBase_Prefab");
+
+        CircleCollider2D trigger = root.AddComponent<CircleCollider2D>();
+        trigger.isTrigger = true;
+        trigger.radius = 3.2f;
+
+        AlliedRepairBase repairBase = root.AddComponent<AlliedRepairBase>();
+        SerializedObject repairSo = new SerializedObject(repairBase);
+        repairSo.FindProperty("healStrength").floatValue = 0.2f;
+        repairSo.FindProperty("healCooldownSeconds").floatValue = 30f;
+        repairSo.FindProperty("healRadius").floatValue = 3.2f;
+        repairSo.ApplyModifiedPropertiesWithoutUndo();
+
+        GameObject body = new GameObject("Body");
+        body.transform.SetParent(root.transform, false);
+        SpriteRenderer bodyRenderer = body.AddComponent<SpriteRenderer>();
+        bodyRenderer.sprite = bodySprite;
+        bodyRenderer.color = Color.white;
+        bodyRenderer.sortingOrder = 5;
+        body.transform.localScale = new Vector3(1.8f, 1.8f, 1f);
+
+        GameObject aura = new GameObject("Aura");
+        aura.transform.SetParent(root.transform, false);
+        SpriteRenderer auraRenderer = aura.AddComponent<SpriteRenderer>();
+        auraRenderer.sprite = glowSprite;
+        auraRenderer.color = new Color(0.42f, 1f, 0.86f, 0.36f);
+        auraRenderer.sortingOrder = 4;
+        aura.transform.localScale = new Vector3(2.7f, 2.7f, 1f);
+
+        PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
     }
 
     private static void BuildBasePrefab(
@@ -143,6 +188,10 @@ public static class EnemyBasePrefabBuilder
         lairSo.FindProperty("enemyShipData").objectReferenceValue = enemyShipData;
         lairSo.FindProperty("enemyPrefab").objectReferenceValue = null;
         lairSo.FindProperty("fallbackSpawnRadius").floatValue = 6f;
+        lairSo.FindProperty("continuousSpawnEnabled").boolValue = true;
+        lairSo.FindProperty("continuousSpawnCount").intValue = Mathf.Max(1, spawnCount / 2);
+        lairSo.FindProperty("continuousSpawnIntervalSeconds").floatValue = Mathf.Max(2f, spawnInterval * 6f);
+        lairSo.FindProperty("continuousSpawnStartDelay").floatValue = 2f;
         SerializedProperty pointsProperty = lairSo.FindProperty("spawnPoints");
         pointsProperty.arraySize = points.Length;
         for (int i = 0; i < points.Length; i++)

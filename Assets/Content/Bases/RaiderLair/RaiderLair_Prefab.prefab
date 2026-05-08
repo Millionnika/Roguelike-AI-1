@@ -269,7 +269,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 5
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 5920602748147645133, guid: a34d5982c72c50d45bed877809a90636, type: 3}
+  m_Sprite: {fileID: 1942671570916924360, guid: a34d5982c72c50d45bed877809a90636, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -360,7 +360,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 6
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 5014615275417337933, guid: 46f01d1621c6fe84db14352de755f247, type: 3}
+  m_Sprite: {fileID: 3002166175800293934, guid: af8fedabb74c12546a1dd9ef201a8ab6, type: 3}
   m_Color: {r: 0.7, g: 0.95, b: 1, a: 0.7}
   m_FlipX: 0
   m_FlipY: 0
@@ -494,8 +494,12 @@ MonoBehaviour:
   spawnMode: 1
   spawnEnemyCount: 4
   spawnIntervalSeconds: 1
-  enemyShipData: {fileID: 11400000, guid: 0e4a0e9f7559d1040a0cfe42b5c60a4c, type: 2}
-  enemyPrefab: {fileID: 0}
+  continuousSpawnEnabled: 1
+  continuousSpawnCount: 2
+  continuousSpawnIntervalSeconds: 15
+  continuousSpawnStartDelay: 10
+  enemyShipData: {fileID: 11400000, guid: e60ce807f58b26c4fb9f0961afd65ebe, type: 2}
+  enemyPrefab: {fileID: 2885262006346620227, guid: 205056336fa94054dbb8840fa1a7b094, type: 3}
   spawnPoints:
   - {fileID: 2645447444921252535}
   - {fileID: 5320256266333042733}

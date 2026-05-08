@@ -67,14 +67,13 @@ internal sealed class BackgroundParallaxService : IBackgroundParallaxService
             BackgroundLayerConfig config = layer.Config;
             float tileSize = Mathf.Max(8f, config.tileSize);
             int radius = Mathf.Clamp(config.gridRadius, 1, 3);
+            float factor = Mathf.Clamp01(config.parallaxFactor);
 
-            Vector3 parallaxCenter = new Vector3(
-                focusPosition.x * config.parallaxFactor,
-                focusPosition.y * config.parallaxFactor,
-                0f);
+            int gridCenterX = Mathf.FloorToInt(focusPosition.x / tileSize);
+            int gridCenterY = Mathf.FloorToInt(focusPosition.y / tileSize);
 
-            int gridCenterX = Mathf.FloorToInt(parallaxCenter.x / tileSize);
-            int gridCenterY = Mathf.FloorToInt(parallaxCenter.y / tileSize);
+            float shiftX = Mathf.Repeat(focusPosition.x * factor, tileSize) - tileSize * 0.5f;
+            float shiftY = Mathf.Repeat(focusPosition.y * factor, tileSize) - tileSize * 0.5f;
 
             int cursor = 0;
             for (int y = -radius; y <= radius; y++)
@@ -93,8 +92,8 @@ internal sealed class BackgroundParallaxService : IBackgroundParallaxService
                     }
 
                     Vector3 worldPosition = new Vector3(
-                        (gridCenterX + x) * tileSize,
-                        (gridCenterY + y) * tileSize,
+                        (gridCenterX + x) * tileSize + shiftX,
+                        (gridCenterY + y) * tileSize + shiftY,
                         0f);
                     tile.transform.position = worldPosition;
                 }

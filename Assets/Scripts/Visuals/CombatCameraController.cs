@@ -8,13 +8,15 @@ public sealed class CombatCameraController : MonoBehaviour
     [Tooltip("Камера, которая используется как основная камера боя. Если поле пустое, компонент найдет Camera.main или создаст новую Main Camera.")]
     [SerializeField] private Camera targetCamera;
     [Tooltip("Стартовый orthographic size основной камеры. Определяет базовый масштаб обзора при запуске боя.")]
-    [SerializeField, Min(1f)] private float defaultOrthographicSize = 9f;
+    [SerializeField, Min(1f)] private float defaultOrthographicSize = 13f;
     [Tooltip("Минимально допустимый zoom камеры. Чем меньше значение, тем ближе камера может приблизиться к кораблю.")]
-    [SerializeField, Min(1f)] private float minOrthographicSize = 5f;
+    [SerializeField, Min(1f)] private float minOrthographicSize = 4f;
     [Tooltip("Максимально допустимый zoom камеры. Чем больше значение, тем дальше камера может отдалиться от корабля.")]
-    [SerializeField, Min(1f)] private float maxOrthographicSize = 16f;
+    [SerializeField, Min(1f)] private float maxOrthographicSize = 28f;
     [Tooltip("Шаг изменения zoom от колесика мыши. Рекомендуемый диапазон: 0.5-2.")]
-    [SerializeField, Min(0.1f)] private float zoomStep = 1.2f;
+    [SerializeField, Min(0.1f)] private float zoomStep = 2.4f;
+    [Tooltip("РЎРєРѕР»СЊРєРѕ СЃС‹СЂС‹С… scroll units СЃС‡РёС‚Р°РµС‚СЃСЏ РѕРґРЅРёРј С€Р°РіРѕРј РєРѕР»РµСЃР° (РјРµРЅСЊС€Рµ = Р±С‹СЃС‚СЂРµРµ zoom).")]
+    [SerializeField, Min(1f)] private float scrollUnitsPerNotch = 40f;
     [Tooltip("Сглаживание изменения zoom. Больше значение - быстрее камера приходит к новому масштабу.")]
     [SerializeField, Min(0.1f)] private float zoomSmoothing = 10f;
     [Tooltip("Сглаживание следования камеры за игроком. Больше значение - камера быстрее догоняет цель.")]
@@ -38,6 +40,7 @@ public sealed class CombatCameraController : MonoBehaviour
         maxOrthographicSize = Mathf.Max(minOrthographicSize, maxOrthographicSize);
         defaultOrthographicSize = Mathf.Clamp(defaultOrthographicSize, minOrthographicSize, maxOrthographicSize);
         zoomStep = Mathf.Max(0.1f, zoomStep);
+        scrollUnitsPerNotch = Mathf.Max(1f, scrollUnitsPerNotch);
         zoomSmoothing = Mathf.Max(0.1f, zoomSmoothing);
         followSmoothing = Mathf.Max(0.1f, followSmoothing);
     }
@@ -64,7 +67,8 @@ public sealed class CombatCameraController : MonoBehaviour
         float scrollY = Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
         if (Mathf.Abs(scrollY) > 0.01f)
         {
-            targetOrthographicSize -= Mathf.Sign(scrollY) * zoomStep;
+            float scrollNotches = scrollY / scrollUnitsPerNotch;
+            targetOrthographicSize -= scrollNotches * zoomStep;
             targetOrthographicSize = Mathf.Clamp(targetOrthographicSize, minOrthographicSize, maxOrthographicSize);
         }
 
