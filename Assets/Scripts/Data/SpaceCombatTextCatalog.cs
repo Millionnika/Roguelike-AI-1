@@ -61,6 +61,7 @@ internal sealed class SpaceCombatLocalizationService : ILocalizationService
             case "settings_subtitle": return ru ? "Язык интерфейса и лимит кадров" : "Interface language and frame rate limit";
             case "settings_language": return ru ? "Язык" : "Language";
             case "settings_fps": return ru ? "FPS" : "FPS";
+            case "settings_master_volume": return ru ? "Общая громкость" : "Master Volume";
             case "lang_ru": return "RU";
             case "lang_eng": return "ENG";
             case "joystick_hint": return ru ? "Джойстик" : "Joystick";

@@ -808,6 +808,13 @@ public sealed class EncounterFlowController : MonoBehaviour
         return true;
     }
 
+    public bool IsCurrentSectorHome()
+    {
+        return sectorMapController != null &&
+               sectorMapController.CurrentNode != null &&
+               sectorMapController.CurrentNode.isHome;
+    }
+
     private void Log(string message, string kind)
     {
         logMessage?.Invoke(message, kind);

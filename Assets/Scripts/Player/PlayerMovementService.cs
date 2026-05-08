@@ -217,8 +217,14 @@ internal sealed class PlayerMovementService : IMovementService
         }
 
         Vector3 current = player.Transform.position;
-        Vector3 target = current + delta;
         float radius = ResolveCollisionRadius(player.Transform);
+        if (TryResolveBaseOverlap(current, radius, player.Transform, out Vector3 resolved))
+        {
+            player.Transform.position = resolved;
+            current = resolved;
+        }
+
+        Vector3 target = current + delta;
 
         if (!IsBlockedByBase(target, radius, player.Transform))
         {
@@ -246,6 +252,12 @@ internal sealed class PlayerMovementService : IMovementService
         if (yFree)
         {
             player.Transform.position = yOnly;
+            return;
+        }
+
+        if (TryMoveAlongBaseEdge(current, delta, radius, player.Transform, out Vector3 slidePosition))
+        {
+            player.Transform.position = slidePosition;
             return;
         }
 
@@ -294,6 +306,80 @@ internal sealed class PlayerMovementService : IMovementService
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryResolveBaseOverlap(Vector3 current, float radius, Transform selfRoot, out Vector3 resolvedPosition)
+    {
+        resolvedPosition = current;
+        if (!IsBlockedByBase(current, radius, selfRoot))
+        {
+            return false;
+        }
+
+        float step = Mathf.Max(0.2f, radius * 0.55f);
+        float maxDistance = Mathf.Max(step * 2f, radius * 4f);
+        Vector3[] directions =
+        {
+            Vector3.right, Vector3.left, Vector3.up, Vector3.down,
+            (Vector3.right + Vector3.up).normalized,
+            (Vector3.right + Vector3.down).normalized,
+            (Vector3.left + Vector3.up).normalized,
+            (Vector3.left + Vector3.down).normalized
+        };
+
+        for (float distance = step; distance <= maxDistance; distance += step)
+        {
+            for (int i = 0; i < directions.Length; i++)
+            {
+                Vector3 candidate = current + directions[i] * distance;
+                if (!IsBlockedByBase(candidate, radius, selfRoot))
+                {
+                    resolvedPosition = candidate;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryMoveAlongBaseEdge(Vector3 current, Vector3 delta, float radius, Transform selfRoot, out Vector3 slidePosition)
+    {
+        slidePosition = current;
+        if (delta.sqrMagnitude <= 0.000001f)
+        {
+            return false;
+        }
+
+        Vector3 dir = delta.normalized;
+        Vector3 tangentA = new Vector3(-dir.y, dir.x, 0f);
+        Vector3 tangentB = -tangentA;
+        float length = delta.magnitude;
+        Vector3 candidateA = current + tangentA * length;
+        Vector3 candidateB = current + tangentB * length;
+
+        bool freeA = !IsBlockedByBase(candidateA, radius, selfRoot);
+        bool freeB = !IsBlockedByBase(candidateB, radius, selfRoot);
+
+        if (freeA && freeB)
+        {
+            slidePosition = candidateA;
+            return true;
+        }
+
+        if (freeA)
+        {
+            slidePosition = candidateA;
+            return true;
+        }
+
+        if (freeB)
+        {
+            slidePosition = candidateB;
+            return true;
         }
 
         return false;

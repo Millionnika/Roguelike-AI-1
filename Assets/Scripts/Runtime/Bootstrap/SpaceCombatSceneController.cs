@@ -4,6 +4,8 @@ using SpaceFrontier.Player;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -102,6 +104,10 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField, Min(4f)] private float enemyBaseSpawnRadiusMin = 18f;
     [Tooltip("Максимальная дистанция спавна вражеских баз от игрока.")]
     [SerializeField, Min(6f)] private float enemyBaseSpawnRadiusMax = 34f;
+    [Tooltip("Минимальная дистанция между вражескими базами внутри сектора.")]
+    [SerializeField, Min(6f)] private float enemyBaseMinSeparation = 16f;
+    [Tooltip("Отступ от границы экрана, чтобы базы появлялись вне кадра.")]
+    [SerializeField, Min(0f)] private float enemyBaseOutOfViewPadding = 8f;
     [Tooltip("Если включено, контроллер перезапишет параметры спавна на каждой базе значениями ниже.")]
     [SerializeField] private bool overrideEnemyBaseSpawnSettings;
     [Tooltip("Сколько врагов спавнит каждая база за один цикл (используется только при override).")]
@@ -116,6 +122,25 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private bool spawnAlliedRepairBase = true;
     [Tooltip("Дистанция союзной базы от игрока при старте сектора.")]
     [SerializeField, Min(4f)] private float alliedBaseSpawnRadius = 14f;
+    [Tooltip("Всегда создавать союзную базу и стартовый портал в домашнем секторе.")]
+    [SerializeField] private bool forceHomeSectorSafeZone = true;
+    [Tooltip("Дистанция стартового портала от игрока в домашнем секторе.")]
+    [SerializeField, Min(6f)] private float homePortalSpawnRadius = 18f;
+    [Tooltip("Дистанция, с которой можно активировать стартовый портал в домашнем секторе.")]
+    [SerializeField, Min(1f)] private float homePortalInteractDistance = 4.5f;
+    [Tooltip("Время отсчета у портала перед открытием выбора направления.")]
+    [SerializeField, Min(0.5f)] private float homePortalCountdownDuration = 3f;
+    [Tooltip("Вертикальный оффсет world-текста отсчета над порталом.")]
+    [SerializeField, Min(0f)] private float homePortalCountdownTextHeight = 2.8f;
+    [Tooltip("Размер world-текста отсчета портала.")]
+    [SerializeField, Min(0.2f)] private float homePortalCountdownTextSize = 5.2f;
+    [Header("Автоприцел игрока")]
+    [Tooltip("Если игрок не выбрал цель вручную, корабль автоматически берет ближайшую цель в радиусе поражения.")]
+    [SerializeField] private bool autoAcquireTargetInWeaponRange = true;
+    [Tooltip("Если выбранная вручную цель вне радиуса, корабль автоматически подлетает к ней.")]
+    [SerializeField] private bool autoApproachSelectedTarget = true;
+    [Tooltip("Скорость плавного доворота корпуса игрока к цели (град/сек).")]
+    [SerializeField, Min(10f)] private float playerAimTurnSpeed = 140f;
     [Tooltip("Сила лечения союзной базы за тик.")]
     [SerializeField, Range(0f, 1f)] private float alliedBaseHealStrength = 0.2f;
     [Tooltip("Кулдаун лечения союзной базы (секунды).")]
@@ -142,6 +167,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<EnemyShip> enemies = new List<EnemyShip>();
     private readonly ShipEquipmentState equipmentState = new ShipEquipmentState();
     private readonly int[] fpsOptions = { 60, 90, 120, 144 };
+    private const string MasterVolumePrefKey = "space_master_volume";
 
     private IPlatformService platformService;
     private IInputService inputService;
@@ -181,6 +207,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private float encounterStartHullPercent = 1f;
     private int selectedShipIndex;
     private int selectedFpsIndex = 2;
+    private float masterVolume = 1f;
     private LanguageOption currentLanguage = LanguageOption.RU;
     private bool useVirtualJoystick;
     private bool joystickDragging;
@@ -190,6 +217,9 @@ public class SpaceCombatSceneController : MonoBehaviour
     private readonly List<EnemyBaseLair> activeEnemyBases = new List<EnemyBaseLair>();
     private AlliedRepairBase alliedRepairBaseInstance;
     private bool sectorUsesBaseObjective;
+    private float homePortalCountdownTimer = -1f;
+    private bool homePortalTransitionTriggered;
+    private TextMeshPro homePortalCountdownWorldText;
 
     private enum ConfirmAction
     {
@@ -481,6 +511,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         targetingController.Initialize(player, enemies, worldRoot, mainCamera != null ? mainCamera : Camera.main, LogMessage, Localize);
+        targetingController.SetEquipmentState(CurrentEquipmentState);
     }
 
     private void EnsureMoveCommandVisualController()
@@ -755,6 +786,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         startMenuPresenter.OnStartRunRequested = () => StartRun();
         startMenuPresenter.OnLanguageToggleRequested = SetLanguageByIndex;
         startMenuPresenter.OnFpsToggleRequested = SetFpsIndex;
+        startMenuPresenter.OnMasterVolumeStepRequested = ChangeMasterVolumeStep;
         startMenuPresenter.OnBackRequested = HandleStartMenuBackRequested;
     }
 
@@ -821,6 +853,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void Awake()
     {
         EnsureServices();
+        LoadSettings();
         EnsureCombatAudioController();
         EnsureCombatLogPresenter();
         EnsureCombatCameraController();
@@ -864,6 +897,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsureNonCombatUi();
         EnsureRewardChoiceUi();
         ApplyPerformanceSettings();
+        ApplyMasterVolume();
         RefreshLocalizedTexts();
 
         if (startDirectlyFromExternalMenu)
@@ -1085,6 +1119,23 @@ public class SpaceCombatSceneController : MonoBehaviour
         Application.targetFrameRate = fpsOptions[Mathf.Clamp(selectedFpsIndex, 0, fpsOptions.Length - 1)];
     }
 
+    private void ApplyMasterVolume()
+    {
+        AudioListener.volume = Mathf.Clamp01(masterVolume);
+    }
+
+    private void LoadSettings()
+    {
+        masterVolume = PlayerPrefs.GetFloat(MasterVolumePrefKey, 1f);
+        masterVolume = Mathf.Clamp01(masterVolume);
+    }
+
+    private void SaveSettings()
+    {
+        PlayerPrefs.SetFloat(MasterVolumePrefKey, Mathf.Clamp01(masterVolume));
+        PlayerPrefs.Save();
+    }
+
     private void SetLanguage(LanguageOption language)
     {
         currentLanguage = language;
@@ -1101,6 +1152,15 @@ public class SpaceCombatSceneController : MonoBehaviour
         selectedFpsIndex = Mathf.Clamp(index, 0, fpsOptions.Length - 1);
         ApplyPerformanceSettings();
         RefreshLocalizedTexts();
+    }
+
+    private void ChangeMasterVolumeStep(int direction)
+    {
+        float step = 0.05f;
+        masterVolume = Mathf.Clamp01(masterVolume + Mathf.Sign(direction) * step);
+        ApplyMasterVolume();
+        SaveSettings();
+        RefreshStartMenuPresenter();
     }
 
     private void RefreshLocalizedTexts()
@@ -1331,6 +1391,22 @@ public class SpaceCombatSceneController : MonoBehaviour
         glowRenderer.color = new Color(0.18f, 0.55f, 0.85f, 0.18f);
         glowRenderer.sortingOrder = 2;
         glow.transform.localScale = new Vector3(1.8f, 1.8f, 1f);
+
+        GameObject countdownObject = new GameObject("CountdownWorldText");
+        countdownObject.transform.SetParent(gateTransform, false);
+        countdownObject.transform.localPosition = new Vector3(0f, homePortalCountdownTextHeight, 0f);
+        homePortalCountdownWorldText = countdownObject.AddComponent<TextMeshPro>();
+        homePortalCountdownWorldText.alignment = TextAlignmentOptions.Center;
+        homePortalCountdownWorldText.enableWordWrapping = false;
+        homePortalCountdownWorldText.fontSize = homePortalCountdownTextSize;
+        homePortalCountdownWorldText.color = new Color(0.82f, 0.96f, 1f, 0.98f);
+        homePortalCountdownWorldText.text = string.Empty;
+        homePortalCountdownWorldText.gameObject.SetActive(false);
+        MeshRenderer textRenderer = homePortalCountdownWorldText.GetComponent<MeshRenderer>();
+        if (textRenderer != null)
+        {
+            textRenderer.sortingOrder = 6;
+        }
     }
 
     private void SpawnPlayer()
@@ -1418,6 +1494,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void NotifyEquipmentStateChanged()
     {
         ShipEquipmentState state = CurrentEquipmentState;
+        targetingController?.SetEquipmentState(state);
         EquipmentStateChanged?.Invoke(state);
         RefreshEquipmentUi();
     }
@@ -1471,6 +1548,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         if (gateTransform != null)
         {
             gateTransform.gameObject.SetActive(false);
+        }
+        if (homePortalCountdownWorldText != null)
+        {
+            homePortalCountdownWorldText.gameObject.SetActive(false);
+            homePortalCountdownWorldText.text = string.Empty;
         }
         if (gateHintText != null)
         {
@@ -1746,7 +1828,8 @@ public class SpaceCombatSceneController : MonoBehaviour
             gameStarted && !gameOver,
             currentLanguage == LanguageOption.RU,
             selectedFpsIndex,
-            useVirtualJoystick);
+            useVirtualJoystick,
+            Mathf.RoundToInt(masterVolume * 100f));
     }
 
     private string NextEnemyId()
@@ -1770,10 +1853,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         enemies.Add(enemy);
         EnsureTargetingController();
-        if (targetingController != null && !targetingController.HasPlayerTarget)
-        {
-            targetingController.SetTargetEnemy(enemy);
-        }
+        targetingController?.SetEquipmentState(CurrentEquipmentState);
 
         return true;
     }
@@ -1962,6 +2042,17 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
+        bool isHomeSector = encounterFlowController != null && encounterFlowController.IsCurrentSectorHome();
+        if (isHomeSector && forceHomeSectorSafeZone)
+        {
+            if (spawnAlliedRepairBase || alliedRepairBasePrefab != null)
+            {
+                SpawnAlliedRepairBase(player.Transform.position);
+            }
+            SpawnHomePortal(player.Transform.position);
+            return;
+        }
+
         int minCount = Mathf.Max(1, minEnemyBasesPerSector);
         int maxCount = Mathf.Max(minCount, maxEnemyBasesPerSector);
         int enemyBaseCount = UnityEngine.Random.Range(minCount, maxCount + 1);
@@ -2015,6 +2106,31 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
     }
 
+    private void SpawnHomePortal(Vector3 center)
+    {
+        if (gateTransform == null)
+        {
+            return;
+        }
+
+        Vector2 dir = UnityEngine.Random.insideUnitCircle;
+        if (dir.sqrMagnitude <= 0.0001f)
+        {
+            dir = Vector2.up;
+        }
+
+        Vector3 position = center + new Vector3(dir.x, dir.y, 0f).normalized * Mathf.Max(6f, homePortalSpawnRadius);
+        position.z = 0f;
+        gateTransform.position = position;
+        gateTransform.gameObject.SetActive(true);
+
+        if (gateHintText != null && gateHintText.transform.parent != null)
+        {
+            gateHintText.transform.parent.gameObject.SetActive(true);
+            gateHintText.text = "Домашний сектор: база и портал активны";
+        }
+    }
+
     private void SpawnAlliedRepairBase(Vector3 center)
     {
         if (alliedRepairBasePrefab == null)
@@ -2043,9 +2159,10 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private Vector3 FindBaseSpawnPosition(Vector3 center, List<Vector3> usedPositions, float minRadius, float maxRadius)
     {
-        float minR = Mathf.Max(4f, minRadius);
+        float outOfViewRadius = GetOutOfViewSpawnRadius() + Mathf.Max(0f, enemyBaseOutOfViewPadding);
+        float minR = Mathf.Max(4f, Mathf.Max(minRadius, outOfViewRadius));
         float maxR = Mathf.Max(minR + 1f, maxRadius);
-        const float minSeparation = 9f;
+        float minSeparation = Mathf.Max(6f, enemyBaseMinSeparation);
 
         for (int attempt = 0; attempt < 24; attempt++)
         {
@@ -2078,6 +2195,19 @@ public class SpaceCombatSceneController : MonoBehaviour
         Vector3 fallback = center + new Vector3(maxR, 0f, 0f);
         fallback.z = 0f;
         return fallback;
+    }
+
+    private float GetOutOfViewSpawnRadius()
+    {
+        Camera camera = mainCamera != null ? mainCamera : Camera.main;
+        if (camera == null || !camera.orthographic)
+        {
+            return 0f;
+        }
+
+        float halfH = camera.orthographicSize;
+        float halfW = halfH * Mathf.Max(0.1f, camera.aspect);
+        return Mathf.Sqrt(halfW * halfW + halfH * halfH);
     }
 
     private int GetAliveEnemyBaseCount()
@@ -2132,6 +2262,8 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         sectorUsesBaseObjective = false;
+        homePortalCountdownTimer = -1f;
+        homePortalTransitionTriggered = false;
     }
 
     private void ClearEnemies()
@@ -2183,6 +2315,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void BuildHud()
     {
+        EnsureEventSystemForHud();
         Transform uiRoot = ResolveInspectorUiRoot();
         GameObject canvasObject = uiRoot.gameObject;
         hudCanvas = canvasObject.GetComponent<Canvas>();
@@ -2265,6 +2398,59 @@ public class SpaceCombatSceneController : MonoBehaviour
         minimapController?.Initialize(player, uiRoot);
     }
 
+    private static void EnsureEventSystemForHud()
+    {
+        EventSystem eventSystem = FindAnyObjectByType<EventSystem>(FindObjectsInactive.Include);
+        if (eventSystem == null)
+        {
+            GameObject eventSystemObject = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+            eventSystem = eventSystemObject.GetComponent<EventSystem>();
+        }
+
+        if (eventSystem != null && eventSystem.GetComponent<InputSystemUIInputModule>() == null)
+        {
+            eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
+        }
+    }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        if (Application.isPlaying)
+        {
+            return;
+        }
+
+        EnsureEditorVisibleControllers();
+    }
+
+    private void Reset()
+    {
+        EnsureEditorVisibleControllers();
+    }
+
+    private void EnsureEditorVisibleControllers()
+    {
+        if (targetingController == null)
+        {
+            targetingController = GetComponent<TargetingController>();
+            if (targetingController == null)
+            {
+                targetingController = gameObject.AddComponent<TargetingController>();
+            }
+        }
+
+        if (minimapController == null)
+        {
+            minimapController = GetComponent<MinimapController>();
+            if (minimapController == null)
+            {
+                minimapController = gameObject.AddComponent<MinimapController>();
+            }
+        }
+    }
+#endif
+
     private Transform ResolveInspectorUiRoot()
     {
         GameObject inspectorUi = FindSceneGameObject("InspectorUI");
@@ -2336,6 +2522,11 @@ public class SpaceCombatSceneController : MonoBehaviour
     private void BindGateHint(Transform uiRoot)
     {
         Transform panel = uiRoot.Find("GateHint");
+        if (panel == null)
+        {
+            CreateGateHint(uiRoot);
+            panel = uiRoot.Find("GateHint");
+        }
         gateHintText = FindText(panel, "Text");
     }
 
@@ -3010,6 +3201,116 @@ public class SpaceCombatSceneController : MonoBehaviour
             pointerState,
             pointerWorldPosition);
         movementService.UpdateMovement(player, movementContext, deltaTime);
+
+        UpdatePlayerTargetAssist(deltaTime, moveInput, pointerState);
+
+    }
+
+    private void UpdatePlayerTargetAssist(float deltaTime, Vector2 moveInput, PointerInputState pointerState)
+    {
+        if (player == null || player.Transform == null || targetingController == null)
+        {
+            return;
+        }
+
+        if (!TryGetPrimaryWeaponEnvelope(out float weaponRange, out float weaponArcAngle))
+        {
+            return;
+        }
+
+        if (autoAcquireTargetInWeaponRange && !targetingController.HasManualTargetSelection)
+        {
+            targetingController.AutoAcquireNearestEnemyInRange(weaponRange);
+        }
+
+        if (!targetingController.TryGetCurrentTargetTransform(out Transform targetTransform) || targetTransform == null)
+        {
+            return;
+        }
+
+        Vector2 toTarget = (Vector2)(targetTransform.position - player.Transform.position);
+        if (toTarget.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        float distance = toTarget.magnitude;
+        Vector2 forward = player.Transform.up.sqrMagnitude > 0.0001f ? (Vector2)player.Transform.up : Vector2.up;
+        float angleToTarget = Vector2.Angle(forward.normalized, toTarget.normalized);
+        bool inRange = distance <= weaponRange * 0.98f;
+        bool inArc = weaponArcAngle >= 359.9f || angleToTarget <= weaponArcAngle * 0.5f;
+
+        Quaternion lookRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg - 90f);
+        float turnSpeed = Mathf.Max(10f, playerAimTurnSpeed);
+        player.Transform.rotation = Quaternion.RotateTowards(player.Transform.rotation, lookRotation, turnSpeed * deltaTime);
+
+        bool manualMoveNow = moveInput.sqrMagnitude > 0.01f || (pointerState.HasPointer && pointerState.PrimaryPressed);
+        if (autoApproachSelectedTarget && targetingController.HasManualTargetSelection && !manualMoveNow && (!inRange || !inArc))
+        {
+            player.MoveCommandActive = true;
+            player.MoveCommandTarget = targetTransform.position;
+        }
+    }
+
+    private bool TryGetPrimaryWeaponEnvelope(out float maxRange, out float maxFiringAngle)
+    {
+        maxRange = 0f;
+        maxFiringAngle = 0f;
+
+        ShipEquipmentState state = CurrentEquipmentState;
+        if (state == null || state.InstalledWeapons == null)
+        {
+            return false;
+        }
+
+        bool hasWeapon = false;
+        for (int i = 0; i < state.InstalledWeapons.Count; i++)
+        {
+            WeaponDataSO weapon = state.InstalledWeapons[i];
+            if (weapon == null)
+            {
+                continue;
+            }
+
+            float range = weapon.maxRange > 0f ? weapon.maxRange : (weapon.projectileMaxDistance > 0f ? weapon.projectileMaxDistance : 6f);
+            maxRange = Mathf.Max(maxRange, range);
+            maxFiringAngle = Mathf.Max(maxFiringAngle, Mathf.Clamp(weapon.firingAngle, 0f, 360f));
+            hasWeapon = true;
+        }
+
+        if (!hasWeapon)
+        {
+            return false;
+        }
+
+        maxRange = Mathf.Max(0.1f, maxRange);
+        maxFiringAngle = Mathf.Clamp(maxFiringAngle, 1f, 360f);
+        return true;
+    }
+
+    private bool IsHomeSectorActive()
+    {
+        return encounterFlowController != null && encounterFlowController.IsCurrentSectorHome();
+    }
+
+    private void CompleteHomeSectorViaPortal()
+    {
+        if (encounterFlowController == null || gameOver || IsLevelUpPending())
+        {
+            return;
+        }
+
+        EncounterCompletionContext context = new EncounterCompletionContext(
+            LocationNodeType.Combat,
+            player != null ? player.HullPercent : 1f,
+            0f,
+            timelineSpawnController != null ? timelineSpawnController.GameTimer : 0f,
+            0,
+            true,
+            0);
+        homePortalTransitionTriggered = true;
+        homePortalCountdownTimer = -1f;
+        encounterFlowController.TryCompleteCombatEncounter(context);
     }
 
     private Vector2 GetMovementVector(Keyboard keyboard)
@@ -3229,6 +3530,50 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     private void UpdateTimelineSpawner(float deltaTime)
     {
+        if (IsHomeSectorActive())
+        {
+            if (gateHintText != null && gateTransform != null && gateTransform.gameObject.activeSelf && player != null && player.Transform != null)
+            {
+                gateHintText.transform.parent.gameObject.SetActive(true);
+                float distance = Vector2.Distance(player.Transform.position, gateTransform.position);
+                bool canUse = distance <= Mathf.Max(1f, homePortalInteractDistance);
+                if (homePortalTransitionTriggered)
+                {
+                    gateHintText.text = "Переход...";
+                    UpdateHomePortalWorldCountdown(0);
+                    return;
+                }
+
+                if (!canUse)
+                {
+                    homePortalCountdownTimer = -1f;
+                    gateHintText.text = "Домашний сектор: подлетите к порталу";
+                    UpdateHomePortalWorldCountdown(-1);
+                    return;
+                }
+
+                if (homePortalCountdownTimer < 0f)
+                {
+                    homePortalCountdownTimer = Mathf.Max(0.5f, homePortalCountdownDuration);
+                }
+                else
+                {
+                    homePortalCountdownTimer -= deltaTime;
+                }
+
+                int secondsLeft = Mathf.Max(0, Mathf.CeilToInt(homePortalCountdownTimer));
+                gateHintText.text = "Переход через портал: " + secondsLeft;
+                UpdateHomePortalWorldCountdown(secondsLeft);
+                if (homePortalCountdownTimer <= 0f)
+                {
+                    CompleteHomeSectorViaPortal();
+                }
+            }
+            return;
+        }
+
+        UpdateHomePortalWorldCountdown(-1);
+
         if (sectorUsesBaseObjective)
         {
             if (gateHintText != null)
@@ -3285,6 +3630,26 @@ public class SpaceCombatSceneController : MonoBehaviour
                 gateHintText.text = Localize("timeline_next_event") + timeLeft.ToString("0.0") + Localize("seconds_short");
             }
         }
+    }
+
+    private void UpdateHomePortalWorldCountdown(int seconds)
+    {
+        if (homePortalCountdownWorldText == null)
+        {
+            return;
+        }
+
+        if (seconds < 0)
+        {
+            homePortalCountdownWorldText.text = string.Empty;
+            homePortalCountdownWorldText.gameObject.SetActive(false);
+            return;
+        }
+
+        homePortalCountdownWorldText.transform.localPosition = new Vector3(0f, homePortalCountdownTextHeight, 0f);
+        homePortalCountdownWorldText.fontSize = homePortalCountdownTextSize;
+        homePortalCountdownWorldText.text = seconds.ToString();
+        homePortalCountdownWorldText.gameObject.SetActive(true);
     }
 
     private void UpdateVisuals()

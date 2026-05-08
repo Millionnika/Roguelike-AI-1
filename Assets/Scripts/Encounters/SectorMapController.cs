@@ -59,6 +59,7 @@ public sealed class SectorMapController : MonoBehaviour
         // (0,0) -> (1,1) -> (1,2) -> (2,2) -> (2,3) -> (4,4)
         //                    (1,1) -> (2,2) -> (3,3) -> (4,4)
         SectorMapNode start = AddNode(0, 0, startEncounter);
+        start.isHome = true;
         SectorMapNode n01 = AddNode(0, 1, PickEncounter(pool, LocationNodeType.Repair, fallbackCombat));
         SectorMapNode n11 = AddNode(1, 1, PickEncounter(pool, LocationNodeType.Combat, fallbackCombat));
         SectorMapNode n12 = AddNode(1, 2, PickEncounter(pool, LocationNodeType.Rest, fallbackCombat));

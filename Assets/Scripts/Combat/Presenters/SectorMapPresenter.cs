@@ -313,7 +313,7 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return node.current ? currentNodeColor : finishNodeColor;
         }
 
-        if (node.x == 0 && node.y == 0)
+        if (node.isHome)
         {
             return node.current ? currentNodeColor : startNodeColor;
         }
@@ -384,7 +384,7 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return null;
         }
 
-        if (node.x == 0 && node.y == 0 && startIcon != null)
+        if (node.isHome && startIcon != null)
         {
             return startIcon;
         }
@@ -422,7 +422,7 @@ public sealed class SectorMapPresenter : MonoBehaviour
             return "Финиш";
         }
 
-        if (node.x == 0 && node.y == 0)
+        if (node.isHome)
         {
             return "Старт";
         }

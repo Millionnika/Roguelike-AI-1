@@ -38,6 +38,8 @@ public sealed class StartMenuPresenter : MonoBehaviour
     private TMP_Text settingsSubtitleText;
     private TMP_Text settingsLanguageLabelText;
     private TMP_Text settingsFpsLabelText;
+    private TMP_Text settingsMasterVolumeLabelText;
+    private TMP_Text settingsMasterVolumeValueText;
     private Image startMenuPreviewImage;
     private Image startButtonImage;
     private TMP_Text startButtonText;
@@ -50,6 +52,8 @@ public sealed class StartMenuPresenter : MonoBehaviour
     private UiButtonView settingsBackButtonView;
     private UiButtonView languageRuButtonView;
     private UiButtonView languageEngButtonView;
+    private UiButtonView volumeDownButtonView;
+    private UiButtonView volumeUpButtonView;
 
     private ISpaceCombatUiFactory uiFactory;
     private Font uiFont;
@@ -68,6 +72,7 @@ public sealed class StartMenuPresenter : MonoBehaviour
     public Action OnStartRunRequested;
     public Action<int> OnLanguageToggleRequested;
     public Action<int> OnFpsToggleRequested;
+    public Action<int> OnMasterVolumeStepRequested;
     public Action OnBackRequested;
 
     public StartMenuPage CurrentPage { get; private set; } = StartMenuPage.Main;
@@ -130,10 +135,15 @@ public sealed class StartMenuPresenter : MonoBehaviour
         settingsTitleText = FindText(settings, "Title");
         settingsSubtitleText = FindText(settings, "Subtitle");
         Transform settingsBox = settings != null ? settings.Find("SettingsBox") : null;
+        EnsureMasterVolumeControls(settingsBox);
         settingsLanguageLabelText = FindText(settingsBox, "LanguageLabel");
         languageRuButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_ru") : null, "lang_ru");
         languageEngButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("lang_eng") : null, "lang_eng");
         settingsFpsLabelText = FindText(settingsBox, "FpsLabel");
+        settingsMasterVolumeLabelText = FindText(settingsBox, "MasterVolumeLabel");
+        settingsMasterVolumeValueText = FindText(settingsBox, "MasterVolumeValue");
+        volumeDownButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("volume_down") : null, "volume_down");
+        volumeUpButtonView = BindMenuButton(settingsBox != null ? settingsBox.Find("volume_up") : null, "volume_up");
         for (int i = 0; i < fpsOptions.Length && i < fpsButtonViews.Length; i++)
         {
             fpsButtonViews[i] = BindMenuButton(settingsBox != null ? settingsBox.Find("fps_" + fpsOptions[i]) : null, "fps_" + fpsOptions[i]);
@@ -141,6 +151,41 @@ public sealed class StartMenuPresenter : MonoBehaviour
 
         settingsBackButtonView = BindMenuButton(settings != null ? settings.Find("settings_back") : null, "settings_back");
         SetPage(StartMenuPage.Main);
+    }
+
+    private void EnsureMasterVolumeControls(Transform settingsBox)
+    {
+        if (settingsBox == null || uiFactory == null)
+        {
+            return;
+        }
+
+        if (settingsBox.Find("MasterVolumeLabel") == null)
+        {
+            TMP_Text label = CreateText("MasterVolumeLabel", settingsBox, string.Empty, 22, FontStyle.Bold, Color.white);
+            SetAnchoredRect(label.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(28f, -304f), new Vector2(-28f, -340f));
+        }
+
+        if (settingsBox.Find("volume_down") == null)
+        {
+            UiButtonView down = CreateMenuButton(settingsBox, "volume_down", new Vector2(0f, 1f), new Vector2(28f, -348f), new Vector2(74f, 42f));
+            down.Rect.anchorMax = new Vector2(0f, 1f);
+            down.Rect.pivot = new Vector2(0f, 1f);
+        }
+
+        if (settingsBox.Find("MasterVolumeValue") == null)
+        {
+            TMP_Text value = CreateText("MasterVolumeValue", settingsBox, "100%", 22, FontStyle.Bold, new Color(0.88f, 0.95f, 1f));
+            value.alignment = TextAlignmentOptions.Center;
+            SetAnchoredRect(value.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(112f, -348f), new Vector2(258f, -390f));
+        }
+
+        if (settingsBox.Find("volume_up") == null)
+        {
+            UiButtonView up = CreateMenuButton(settingsBox, "volume_up", new Vector2(0f, 1f), new Vector2(272f, -348f), new Vector2(74f, 42f));
+            up.Rect.anchorMax = new Vector2(0f, 1f);
+            up.Rect.pivot = new Vector2(0f, 1f);
+        }
     }
 
     internal void Build(Transform parent, IReadOnlyList<ShipDataSO> ships)
@@ -216,11 +261,12 @@ public sealed class StartMenuPresenter : MonoBehaviour
         bool canContinue,
         bool isRussian,
         int selectedFpsIndex,
-        bool useVirtualJoystick)
+        bool useVirtualJoystick,
+        int masterVolumePercent)
     {
         activeShipCount = ships != null ? ships.Count : 0;
         RefreshTexts(canContinue, useVirtualJoystick);
-        RefreshSettingsButtons(isRussian, selectedFpsIndex);
+        RefreshSettingsButtons(isRussian, selectedFpsIndex, masterVolumePercent);
         UpdateVisuals(ships, selectedShipIndex, useVirtualJoystick);
     }
 
@@ -312,6 +358,14 @@ public sealed class StartMenuPresenter : MonoBehaviour
                 {
                     OnBackRequested?.Invoke();
                 }
+                else if (IsButtonClicked(volumeDownButtonView, position))
+                {
+                    OnMasterVolumeStepRequested?.Invoke(-1);
+                }
+                else if (IsButtonClicked(volumeUpButtonView, position))
+                {
+                    OnMasterVolumeStepRequested?.Invoke(1);
+                }
             }
         }
     }
@@ -342,9 +396,12 @@ public sealed class StartMenuPresenter : MonoBehaviour
         if (settingsSubtitleText != null) settingsSubtitleText.text = Localize("settings_subtitle");
         if (settingsLanguageLabelText != null) settingsLanguageLabelText.text = Localize("settings_language");
         if (settingsFpsLabelText != null) settingsFpsLabelText.text = Localize("settings_fps");
+        if (settingsMasterVolumeLabelText != null) settingsMasterVolumeLabelText.text = Localize("settings_master_volume");
         if (settingsBackButtonView != null) settingsBackButtonView.Label.text = Localize("back");
         if (languageRuButtonView != null) languageRuButtonView.Label.text = Localize("lang_ru");
         if (languageEngButtonView != null) languageEngButtonView.Label.text = Localize("lang_eng");
+        if (volumeDownButtonView != null) volumeDownButtonView.Label.text = "-";
+        if (volumeUpButtonView != null) volumeUpButtonView.Label.text = "+";
         for (int i = 0; i < fpsButtonViews.Length && i < fpsOptions.Length; i++)
         {
             if (fpsButtonViews[i] != null)
@@ -354,7 +411,7 @@ public sealed class StartMenuPresenter : MonoBehaviour
         }
     }
 
-    private void RefreshSettingsButtons(bool isRussian, int selectedFpsIndex)
+    private void RefreshSettingsButtons(bool isRussian, int selectedFpsIndex, int masterVolumePercent)
     {
         UpdateButtonState(languageRuButtonView, isRussian, new Color(0.45f, 0.72f, 1f, 1f));
         UpdateButtonState(languageEngButtonView, !isRussian, new Color(0.45f, 0.72f, 1f, 1f));
@@ -362,6 +419,12 @@ public sealed class StartMenuPresenter : MonoBehaviour
         {
             UpdateButtonState(fpsButtonViews[i], i == selectedFpsIndex, new Color(1f, 0.7f, 0.36f, 1f));
         }
+        if (settingsMasterVolumeValueText != null)
+        {
+            settingsMasterVolumeValueText.text = Mathf.Clamp(masterVolumePercent, 0, 100) + "%";
+        }
+        UpdateButtonState(volumeDownButtonView, false, new Color(0.52f, 0.82f, 1f, 1f));
+        UpdateButtonState(volumeUpButtonView, false, new Color(0.52f, 0.82f, 1f, 1f));
     }
 
     private void UpdateVisuals(IReadOnlyList<ShipDataSO> ships, int selectedShipIndex, bool useVirtualJoystick)
@@ -585,7 +648,7 @@ public sealed class StartMenuPresenter : MonoBehaviour
         boxRect.anchorMin = new Vector2(0.5f, 0.5f);
         boxRect.anchorMax = new Vector2(0.5f, 0.5f);
         boxRect.pivot = new Vector2(0.5f, 0.5f);
-        boxRect.sizeDelta = new Vector2(760f, 300f);
+        boxRect.sizeDelta = new Vector2(760f, 380f);
         boxRect.anchoredPosition = new Vector2(0f, 10f);
         uiFactory.AddOutline(settingsBox.gameObject, new Color(0.16f, 0.34f, 0.48f, 1f));
 
@@ -609,6 +672,21 @@ public sealed class StartMenuPresenter : MonoBehaviour
             button.Rect.pivot = new Vector2(0f, 1f);
             fpsButtonViews[i] = button;
         }
+
+        settingsMasterVolumeLabelText = CreateText("MasterVolumeLabel", settingsBox.transform, string.Empty, 22, FontStyle.Bold, Color.white);
+        SetAnchoredRect(settingsMasterVolumeLabelText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(28f, -304f), new Vector2(-28f, -340f));
+
+        volumeDownButtonView = CreateMenuButton(settingsBox.transform, "volume_down", new Vector2(0f, 1f), new Vector2(28f, -348f), new Vector2(74f, 42f));
+        volumeDownButtonView.Rect.anchorMax = new Vector2(0f, 1f);
+        volumeDownButtonView.Rect.pivot = new Vector2(0f, 1f);
+
+        settingsMasterVolumeValueText = CreateText("MasterVolumeValue", settingsBox.transform, "100%", 22, FontStyle.Bold, new Color(0.88f, 0.95f, 1f));
+        settingsMasterVolumeValueText.alignment = TextAlignmentOptions.Center;
+        SetAnchoredRect(settingsMasterVolumeValueText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(112f, -348f), new Vector2(258f, -390f));
+
+        volumeUpButtonView = CreateMenuButton(settingsBox.transform, "volume_up", new Vector2(0f, 1f), new Vector2(272f, -348f), new Vector2(74f, 42f));
+        volumeUpButtonView.Rect.anchorMax = new Vector2(0f, 1f);
+        volumeUpButtonView.Rect.pivot = new Vector2(0f, 1f);
 
         settingsBackButtonView = CreateMenuButton(parent, "settings_back", new Vector2(0.5f, 0f), new Vector2(0f, 28f), new Vector2(240f, 54f));
     }
