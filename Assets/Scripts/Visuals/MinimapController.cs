@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using System.Collections.Generic;
 
 [DisallowMultipleComponent]
 public sealed class MinimapController : MonoBehaviour
@@ -22,8 +23,19 @@ public sealed class MinimapController : MonoBehaviour
     [SerializeField, Min(96f)] private float minimapPanelSize = 200f;
     [Tooltip("Цвет фона миникарты (используется как цвет очистки камеры).")]
     [SerializeField] private Color minimapBackgroundColor = new Color(0.03f, 0.08f, 0.14f, 0.82f);
+    [Header("Маркеры миникарты")]
+    [SerializeField] private bool showEntityMarkers = true;
+    [SerializeField, Range(0.6f, 1f)] private float markerEdgeClamp = 0.92f;
+    [SerializeField, Min(2f)] private float enemyMarkerMinSize = 5f;
+    [SerializeField, Min(2f)] private float enemyMarkerMaxSize = 12f;
+    [SerializeField, Min(2f)] private float baseMarkerSize = 11f;
+    [SerializeField, Min(2f)] private float portalMarkerSize = 13f;
+    [SerializeField] private Color enemyMarkerColor = new Color(1f, 0.34f, 0.34f, 0.95f);
+    [SerializeField] private Color baseMarkerColor = new Color(1f, 0.75f, 0.32f, 0.98f);
+    [SerializeField] private Color portalMarkerColor = new Color(0.48f, 0.94f, 1f, 0.98f);
 
     private PlayerShip player;
+    private SpaceCombatSceneController sceneController;
     private Camera minimapCamera;
     private RenderTexture minimapRenderTexture;
     private RawImage minimapRawImage;
@@ -32,6 +44,11 @@ public sealed class MinimapController : MonoBehaviour
     private Button zoomOutButton;
     private TMP_Text zoomInLabel;
     private TMP_Text zoomOutLabel;
+    private RectTransform markerLayerRect;
+    private Sprite markerSprite;
+    private readonly List<Image> enemyMarkers = new List<Image>(32);
+    private readonly List<Image> baseMarkers = new List<Image>(8);
+    private Image portalMarker;
 
     public void Initialize(PlayerShip playerShip, Transform uiRoot)
     {
@@ -61,6 +78,7 @@ public sealed class MinimapController : MonoBehaviour
         Vector3 playerPosition = player.Transform.position;
         minimapCamera.transform.position = new Vector3(playerPosition.x, playerPosition.y, -40f);
         minimapCamera.transform.rotation = Quaternion.identity;
+        UpdateMarkers(playerPosition);
     }
 
     public void ZoomIn()
@@ -93,6 +111,11 @@ public sealed class MinimapController : MonoBehaviour
             Destroy(minimapCamera.gameObject);
             minimapCamera = null;
         }
+
+        markerLayerRect = null;
+        portalMarker = null;
+        enemyMarkers.Clear();
+        baseMarkers.Clear();
     }
 
     private void OnDestroy()
@@ -125,6 +148,8 @@ public sealed class MinimapController : MonoBehaviour
             minimapPanelRect.gameObject.SetActive(true);
         }
         minimapRawImage = minimapPanel.GetComponentInChildren<RawImage>(true);
+        markerLayerRect = EnsureMarkerLayer(minimapPanel, minimapRawImage);
+        EnsureMarkerAssets();
 
         if (minimapCamera == null)
         {
@@ -165,6 +190,217 @@ public sealed class MinimapController : MonoBehaviour
         EnsureZoomUi(minimapPanel);
         ClampZoomBounds();
         ApplyZoomToCamera();
+    }
+
+    private RectTransform EnsureMarkerLayer(Transform minimapPanel, RawImage raw)
+    {
+        if (minimapPanel == null)
+        {
+            return null;
+        }
+
+        Transform existing = minimapPanel.Find("MarkerLayer");
+        RectTransform layer = existing != null ? existing.GetComponent<RectTransform>() : null;
+        if (layer == null)
+        {
+            GameObject layerObject = new GameObject("MarkerLayer", typeof(RectTransform));
+            layerObject.transform.SetParent(minimapPanel, false);
+            layer = layerObject.GetComponent<RectTransform>();
+        }
+
+        if (raw != null)
+        {
+            RectTransform rawRect = raw.rectTransform;
+            layer.anchorMin = rawRect.anchorMin;
+            layer.anchorMax = rawRect.anchorMax;
+            layer.pivot = rawRect.pivot;
+            layer.anchoredPosition = rawRect.anchoredPosition;
+            layer.sizeDelta = rawRect.sizeDelta;
+        }
+        else
+        {
+            layer.anchorMin = new Vector2(0.5f, 0.5f);
+            layer.anchorMax = new Vector2(0.5f, 0.5f);
+            layer.pivot = new Vector2(0.5f, 0.5f);
+            layer.anchoredPosition = Vector2.zero;
+            layer.sizeDelta = new Vector2(minimapPanelSize, minimapPanelSize);
+        }
+
+        layer.SetAsLastSibling();
+        if (zoomInButton != null) zoomInButton.transform.SetAsLastSibling();
+        if (zoomOutButton != null) zoomOutButton.transform.SetAsLastSibling();
+        return layer;
+    }
+
+    private void EnsureMarkerAssets()
+    {
+        if (markerSprite != null)
+        {
+            return;
+        }
+
+        Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+        markerSprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
+        markerSprite.name = "MinimapMarkerSprite_Runtime";
+    }
+
+    private void UpdateMarkers(Vector3 playerPosition)
+    {
+        if (!showEntityMarkers || markerLayerRect == null || player == null || player.Transform == null)
+        {
+            SetAllMarkerInactive();
+            return;
+        }
+
+        sceneController ??= FindAnyObjectByType<SpaceCombatSceneController>();
+        if (sceneController == null)
+        {
+            SetAllMarkerInactive();
+            return;
+        }
+
+        IReadOnlyList<EnemyShip> enemies = sceneController.ActiveEnemies;
+        IReadOnlyList<EnemyBaseLair> bases = sceneController.ActiveEnemyBases;
+        Transform portal = sceneController.ActivePortalTransform;
+
+        int aliveEnemyCount = 0;
+        if (enemies != null)
+        {
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                EnemyShip enemy = enemies[i];
+                if (enemy == null || !enemy.IsAlive() || enemy.Transform == null)
+                {
+                    continue;
+                }
+
+                Image marker = EnsureMarker(enemyMarkers, aliveEnemyCount, "EnemyMarker_");
+                float dist = Vector2.Distance(playerPosition, enemy.Transform.position);
+                float t = 1f - Mathf.Clamp01(dist / Mathf.Max(1f, minimapOrthoSize * 2f));
+                float size = Mathf.Lerp(enemyMarkerMinSize, enemyMarkerMaxSize, t);
+                marker.color = enemyMarkerColor;
+                SetMarker(marker.rectTransform, (Vector2)(enemy.Transform.position - playerPosition), size);
+                aliveEnemyCount++;
+            }
+        }
+        SetMarkersActive(enemyMarkers, aliveEnemyCount);
+
+        int aliveBaseCount = 0;
+        if (bases != null)
+        {
+            for (int i = 0; i < bases.Count; i++)
+            {
+                EnemyBaseLair baseLair = bases[i];
+                if (baseLair == null || !baseLair.IsAlive)
+                {
+                    continue;
+                }
+
+                Image marker = EnsureMarker(baseMarkers, aliveBaseCount, "BaseMarker_");
+                marker.color = baseMarkerColor;
+                SetMarker(marker.rectTransform, (Vector2)(baseLair.transform.position - playerPosition), baseMarkerSize);
+                aliveBaseCount++;
+            }
+        }
+        SetMarkersActive(baseMarkers, aliveBaseCount);
+
+        if (portal != null)
+        {
+            portalMarker ??= EnsureSingleMarker("PortalMarker");
+            portalMarker.color = portalMarkerColor;
+            portalMarker.gameObject.SetActive(true);
+            SetMarker(portalMarker.rectTransform, (Vector2)(portal.position - playerPosition), portalMarkerSize);
+        }
+        else if (portalMarker != null)
+        {
+            portalMarker.gameObject.SetActive(false);
+        }
+    }
+
+    private Image EnsureSingleMarker(string name)
+    {
+        return CreateMarkerObject(name);
+    }
+
+    private Image EnsureMarker(List<Image> pool, int index, string namePrefix)
+    {
+        while (pool.Count <= index)
+        {
+            pool.Add(CreateMarkerObject(namePrefix + pool.Count));
+        }
+
+        Image marker = pool[index];
+        marker.gameObject.SetActive(true);
+        return marker;
+    }
+
+    private Image CreateMarkerObject(string objectName)
+    {
+        EnsureMarkerAssets();
+        GameObject go = new GameObject(objectName, typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(markerLayerRect, false);
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = Vector2.one * 8f;
+
+        Image image = go.GetComponent<Image>();
+        image.sprite = markerSprite;
+        image.raycastTarget = false;
+        image.color = Color.white;
+        return image;
+    }
+
+    private void SetMarker(RectTransform rect, Vector2 worldDelta, float size)
+    {
+        if (rect == null || markerLayerRect == null)
+        {
+            return;
+        }
+
+        float halfW = markerLayerRect.rect.width * 0.5f;
+        float halfH = markerLayerRect.rect.height * 0.5f;
+        float safeHalfW = Mathf.Max(4f, halfW * Mathf.Clamp(markerEdgeClamp, 0.6f, 1f));
+        float safeHalfH = Mathf.Max(4f, halfH * Mathf.Clamp(markerEdgeClamp, 0.6f, 1f));
+        float worldRadius = Mathf.Max(1f, minimapOrthoSize);
+
+        Vector2 normalized = worldDelta / worldRadius;
+        Vector2 panelPos = new Vector2(normalized.x * safeHalfW, normalized.y * safeHalfH);
+
+        float clampScale = Mathf.Max(Mathf.Abs(panelPos.x) / safeHalfW, Mathf.Abs(panelPos.y) / safeHalfH);
+        if (clampScale > 1f)
+        {
+            panelPos /= clampScale;
+        }
+
+        rect.anchoredPosition = panelPos;
+        float clampedSize = Mathf.Max(2f, size);
+        rect.sizeDelta = new Vector2(clampedSize, clampedSize);
+    }
+
+    private void SetMarkersActive(List<Image> markers, int activeCount)
+    {
+        for (int i = activeCount; i < markers.Count; i++)
+        {
+            if (markers[i] != null)
+            {
+                markers[i].gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private void SetAllMarkerInactive()
+    {
+        SetMarkersActive(enemyMarkers, 0);
+        SetMarkersActive(baseMarkers, 0);
+        if (portalMarker != null)
+        {
+            portalMarker.gameObject.SetActive(false);
+        }
     }
 
     private void EnsureZoomUi(Transform minimapPanel)

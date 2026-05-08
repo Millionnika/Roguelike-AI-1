@@ -106,6 +106,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField, Min(6f)] private float enemyBaseSpawnRadiusMax = 34f;
     [Tooltip("Минимальная дистанция между вражескими базами внутри сектора.")]
     [SerializeField, Min(6f)] private float enemyBaseMinSeparation = 16f;
+    [Tooltip("Дополнительный множитель разведения баз между собой.")]
+    [SerializeField, Min(1f)] private float enemyBaseSeparationMultiplier = 1.6f;
     [Tooltip("Отступ от границы экрана, чтобы базы появлялись вне кадра.")]
     [SerializeField, Min(0f)] private float enemyBaseOutOfViewPadding = 8f;
     [Tooltip("Если включено, контроллер перезапишет параметры спавна на каждой базе значениями ниже.")]
@@ -235,6 +237,9 @@ public class SpaceCombatSceneController : MonoBehaviour
 
     public event Action<ShipEquipmentState> EquipmentStateChanged;
     public ShipEquipmentState CurrentEquipmentState => playerShipController != null ? playerShipController.EquipmentState : equipmentState;
+    internal IReadOnlyList<EnemyShip> ActiveEnemies => enemies;
+    internal IReadOnlyList<EnemyBaseLair> ActiveEnemyBases => activeEnemyBases;
+    internal Transform ActivePortalTransform => gateTransform != null && gateTransform.gameObject.activeInHierarchy ? gateTransform : null;
 
     internal void ConfigureServices(
         IPlatformService newPlatformService,
@@ -2166,7 +2171,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         float outOfViewRadius = GetOutOfViewSpawnRadius() + Mathf.Max(0f, enemyBaseOutOfViewPadding);
         float minR = Mathf.Max(4f, Mathf.Max(minRadius, outOfViewRadius));
         float maxR = Mathf.Max(minR + 1f, maxRadius);
-        float minSeparation = Mathf.Max(6f, enemyBaseMinSeparation);
+        float minSeparation = Mathf.Max(6f, enemyBaseMinSeparation * Mathf.Max(1f, enemyBaseSeparationMultiplier));
 
         for (int attempt = 0; attempt < 24; attempt++)
         {
