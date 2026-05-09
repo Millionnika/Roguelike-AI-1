@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SpaceFrontier.Player;
 using TMPro;
@@ -7,39 +7,41 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class TargetingController : MonoBehaviour
 {
-    [Header("Визуал цели")]
-    [Tooltip("Спрайт рамки цели. Если поле пустое, компонент создаст простую runtime-рамку автоматически.")]
+    [Header("Р’РёР·СѓР°Р» С†РµР»Рё")]
+    [Tooltip("РЎРїСЂР°Р№С‚ СЂР°РјРєРё С†РµР»Рё. Р•СЃР»Рё РїРѕР»Рµ РїСѓСЃС‚РѕРµ, РєРѕРјРїРѕРЅРµРЅС‚ СЃРѕР·РґР°СЃС‚ РїСЂРѕСЃС‚СѓСЋ runtime-СЂР°РјРєСѓ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.")]
     [SerializeField] private Sprite targetFrameSourceSprite;
-    [Tooltip("Цвет рамки вокруг выбранной цели.")]
+    [Tooltip("Р¦РІРµС‚ СЂР°РјРєРё РІРѕРєСЂСѓРі РІС‹Р±СЂР°РЅРЅРѕР№ С†РµР»Рё.")]
     [SerializeField] private Color targetFrameColor = new Color(0.45f, 0.75f, 1f, 0.95f);
-    [Tooltip("Дополнительный отступ рамки от видимых границ цели в мировых единицах. Обычно 0.2-0.5.")]
+    [Tooltip("Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ РѕС‚СЃС‚СѓРї СЂР°РјРєРё РѕС‚ РІРёРґРёРјС‹С… РіСЂР°РЅРёС† С†РµР»Рё РІ РјРёСЂРѕРІС‹С… РµРґРёРЅРёС†Р°С…. РћР±С‹С‡РЅРѕ 0.2-0.5.")]
     [SerializeField, Min(0f)] private float targetFramePadding = 0.35f;
 
-    [Header("Линия цели")]
-    [Tooltip("Цвет линии от корабля игрока до выбранной цели.")]
+    [Header("Р›РёРЅРёСЏ С†РµР»Рё")]
+    [Tooltip("Р¦РІРµС‚ Р»РёРЅРёРё РѕС‚ РєРѕСЂР°Р±Р»СЏ РёРіСЂРѕРєР° РґРѕ РІС‹Р±СЂР°РЅРЅРѕР№ С†РµР»Рё.")]
     [SerializeField] private Color targetLineColor = new Color(0.9f, 0.96f, 1f, 1f);
     [SerializeField, Range(0f, 1f)] private float targetLineAlpha = 0.42f;
-    [Tooltip("Толщина линии цели в мировых единицах. Обычно 0.02-0.06.")]
+    [Tooltip("РўРѕР»С‰РёРЅР° Р»РёРЅРёРё С†РµР»Рё РІ РјРёСЂРѕРІС‹С… РµРґРёРЅРёС†Р°С…. РћР±С‹С‡РЅРѕ 0.02-0.06.")]
     [SerializeField, Min(0.01f)] private float targetLineWidth = 0.035f;
-    [Tooltip("Sorting Order линии цели. Увеличьте значение, если линия скрывается под спрайтами.")]
+    [Tooltip("Sorting Order Р»РёРЅРёРё С†РµР»Рё. РЈРІРµР»РёС‡СЊС‚Рµ Р·РЅР°С‡РµРЅРёРµ, РµСЃР»Рё Р»РёРЅРёСЏ СЃРєСЂС‹РІР°РµС‚СЃСЏ РїРѕРґ СЃРїСЂР°Р№С‚Р°РјРё.")]
     [SerializeField] private int targetLineSortingOrder = 1;
-    [Tooltip("Если включено, линия цели отображается пунктиром.")]
+    [Tooltip("Р•СЃР»Рё РІРєР»СЋС‡РµРЅРѕ, Р»РёРЅРёСЏ С†РµР»Рё РѕС‚РѕР±СЂР°Р¶Р°РµС‚СЃСЏ РїСѓРЅРєС‚РёСЂРѕРј.")]
     [SerializeField] private bool targetLineDashed;
-    [Tooltip("Длина видимого сегмента пунктира. Используется только при включенном пунктире.")]
+    [Tooltip("Р”Р»РёРЅР° РІРёРґРёРјРѕРіРѕ СЃРµРіРјРµРЅС‚Р° РїСѓРЅРєС‚РёСЂР°. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РїСЂРё РІРєР»СЋС‡РµРЅРЅРѕРј РїСѓРЅРєС‚РёСЂРµ.")]
     [SerializeField, Min(0.02f)] private float targetLineDashSize = 0.35f;
-    [Tooltip("Длина промежутка между сегментами пунктира. Используется только при включенном пунктире.")]
+    [Tooltip("Р”Р»РёРЅР° РїСЂРѕРјРµР¶СѓС‚РєР° РјРµР¶РґСѓ СЃРµРіРјРµРЅС‚Р°РјРё РїСѓРЅРєС‚РёСЂР°. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РїСЂРё РІРєР»СЋС‡РµРЅРЅРѕРј РїСѓРЅРєС‚РёСЂРµ.")]
     [SerializeField, Min(0.01f)] private float targetLineGapSize = 0.2f;
 
-    [Header("Выбор цели")]
-    [Tooltip("Дополнительный отступ зоны клика вокруг видимых границ цели в мировых единицах. Увеличьте, если по мелким врагам трудно попасть мышью.")]
+    [Header("Р’С‹Р±РѕСЂ С†РµР»Рё")]
+    [Tooltip("Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ РѕС‚СЃС‚СѓРї Р·РѕРЅС‹ РєР»РёРєР° РІРѕРєСЂСѓРі РІРёРґРёРјС‹С… РіСЂР°РЅРёС† С†РµР»Рё РІ РјРёСЂРѕРІС‹С… РµРґРёРЅРёС†Р°С…. РЈРІРµР»РёС‡СЊС‚Рµ, РµСЃР»Рё РїРѕ РјРµР»РєРёРј РІСЂР°РіР°Рј С‚СЂСѓРґРЅРѕ РїРѕРїР°СЃС‚СЊ РјС‹С€СЊСЋ.")]
     [SerializeField, Min(0f)] private float targetWorldClickPadding = 0.25f;
-    [Header("Подсказка атаки")]
+    [Tooltip("Если включено, ближайшая вражеская цель в дальности оружия может выбираться автоматически.")]
+    [SerializeField] private bool autoTargetEnabled = true;
+    [Header("РџРѕРґСЃРєР°Р·РєР° Р°С‚Р°РєРё")]
     [SerializeField] private bool showAttackAssist;
     [SerializeField] private Color attackAssistOkColor = new Color(0.42f, 1f, 0.56f, 0.95f);
     [SerializeField] private Color attackAssistWarningColor = new Color(1f, 0.72f, 0.28f, 0.95f);
     [SerializeField, Min(0.2f)] private float attackAssistTextHeight = 1.4f;
     [SerializeField, Min(2f)] private int attackAssistFontSize = 4;
-    [Header("Визуал сектора стрельбы")]
+    [Header("Р’РёР·СѓР°Р» СЃРµРєС‚РѕСЂР° СЃС‚СЂРµР»СЊР±С‹")]
     [SerializeField] private bool showWeaponArcVisual = true;
     [SerializeField] private bool showPerWeaponArcVisual = true;
     [SerializeField, Min(16)] private int weaponArcSegments = 72;
@@ -71,6 +73,7 @@ public sealed class TargetingController : MonoBehaviour
 
     internal EnemyShip TargetEnemy => targetEnemy;
     public EnemyBaseLair TargetBase => targetBase;
+    public bool AutoTargetEnabled => autoTargetEnabled;
     public bool HasPlayerTarget => TryGetPlayerTargetPosition(out _);
     public Vector3 PlayerTargetPosition
     {
@@ -134,8 +137,8 @@ public sealed class TargetingController : MonoBehaviour
     {
         if (manualTargetSelection)
         {
-            // Приоритет ручного выбора игрока: авто-обновления не должны перезаписывать цель,
-            // пока вручную выбранная цель еще валидна.
+            // РџСЂРёРѕСЂРёС‚РµС‚ СЂСѓС‡РЅРѕРіРѕ РІС‹Р±РѕСЂР° РёРіСЂРѕРєР°: Р°РІС‚Рѕ-РѕР±РЅРѕРІР»РµРЅРёСЏ РЅРµ РґРѕР»Р¶РЅС‹ РїРµСЂРµР·Р°РїРёСЃС‹РІР°С‚СЊ С†РµР»СЊ,
+            // РїРѕРєР° РІСЂСѓС‡РЅСѓСЋ РІС‹Р±СЂР°РЅРЅР°СЏ С†РµР»СЊ РµС‰Рµ РІР°Р»РёРґРЅР°.
             bool manualEnemyAlive = targetEnemy != null && targetEnemy.IsAlive();
             bool manualBaseAlive = targetBase != null && targetBase.IsAlive;
             if (manualEnemyAlive || manualBaseAlive)
@@ -238,6 +241,64 @@ public sealed class TargetingController : MonoBehaviour
     }
 
     public bool HasManualTargetSelection => manualTargetSelection;
+    public void SetAutoTargetEnabled(bool enabled)
+    {
+        autoTargetEnabled = enabled;
+    }
+
+    public void ToggleAutoTargetEnabled()
+    {
+        autoTargetEnabled = !autoTargetEnabled;
+    }
+
+    public void TickAutoTarget(float weaponRange)
+    {
+        if (!autoTargetEnabled || player == null || player.Transform == null || enemies == null)
+        {
+            return;
+        }
+
+        float clampedRange = Mathf.Max(0.1f, weaponRange);
+        float rangeSqr = clampedRange * clampedRange;
+
+        UpdateTargetState();
+
+        if (manualTargetSelection)
+        {
+            if (TryGetCurrentTargetTransform(out Transform manualTargetTransform) &&
+                manualTargetTransform != null &&
+                IsTargetInRange(manualTargetTransform.position, rangeSqr))
+            {
+                return;
+            }
+
+            manualTargetSelection = false;
+            targetEnemy = null;
+            targetBase = null;
+        }
+
+        if (targetEnemy != null &&
+            targetEnemy.IsAlive() &&
+            targetEnemy.Transform != null &&
+            IsTargetInRange(targetEnemy.Transform.position, rangeSqr))
+        {
+            return;
+        }
+
+        EnemyShip best = FindNearestEnemyInRange(rangeSqr);
+        if (best != null)
+        {
+            targetBase = null;
+            targetEnemy = best;
+        }
+        else
+        {
+            targetEnemy = null;
+            targetBase = null;
+        }
+
+        UpdateTargetState();
+    }
 
     public void AutoAcquireNearestEnemyInRange(float maxRange)
     {
@@ -272,6 +333,38 @@ public sealed class TargetingController : MonoBehaviour
         }
     }
 
+
+    private EnemyShip FindNearestEnemyInRange(float rangeSqr)
+    {
+        EnemyShip best = null;
+        float bestSqr = rangeSqr;
+        Vector2 playerPosition = player.Transform.position;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            EnemyShip enemy = enemies[i];
+            if (enemy == null || !enemy.IsAlive() || enemy.Transform == null)
+            {
+                continue;
+            }
+
+            float distanceSqr = ((Vector2)enemy.Transform.position - playerPosition).sqrMagnitude;
+            if (distanceSqr <= bestSqr)
+            {
+                bestSqr = distanceSqr;
+                best = enemy;
+            }
+        }
+
+        return best;
+    }
+
+    private bool IsTargetInRange(Vector3 targetPosition, float rangeSqr)
+    {
+        Vector2 playerPosition = player.Transform.position;
+        float distanceSqr = ((Vector2)targetPosition - playerPosition).sqrMagnitude;
+        return distanceSqr <= rangeSqr;
+    }
     public bool TryGetPlayerTargetPosition(out Vector3 targetPosition)
     {
         if (TryGetCurrentTargetTransform(out Transform targetTransform))
@@ -607,7 +700,7 @@ public sealed class TargetingController : MonoBehaviour
         bool inAngle = allowedAngle >= 359.9f || angle <= allowedAngle * 0.5f + 0.1f;
         attackAssistText.color = inRange && inAngle ? attackAssistOkColor : attackAssistWarningColor;
         attackAssistText.text = "R " + distance.ToString("0.0") + "/" + range.ToString("0.0") +
-                                "  A " + angle.ToString("0") + "°/" + allowedAngle.ToString("0") + "°";
+                                "  A " + angle.ToString("0") + "В°/" + allowedAngle.ToString("0") + "В°";
         Vector3 anchor = player.Transform.position;
         attackAssistText.transform.position = new Vector3(anchor.x, anchor.y + attackAssistTextHeight, 0f);
         attackAssistText.gameObject.SetActive(true);
@@ -999,7 +1092,7 @@ public sealed class TargetingController : MonoBehaviour
             return;
         }
 
-        string prefix = localize != null ? localize("log_target_locked") : "Цель захвачена: ";
+        string prefix = localize != null ? localize("log_target_locked") : "Р¦РµР»СЊ Р·Р°С…РІР°С‡РµРЅР°: ";
         logMessage(prefix + targetName, "info");
     }
 
@@ -1205,3 +1298,8 @@ public sealed class TargetingController : MonoBehaviour
                lowerName.Contains("enginefire");
     }
 }
+
+
+
+
+

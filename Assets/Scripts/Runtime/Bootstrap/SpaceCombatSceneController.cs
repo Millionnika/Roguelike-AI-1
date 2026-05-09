@@ -3205,6 +3205,11 @@ public class SpaceCombatSceneController : MonoBehaviour
         }
 
         playerModuleController?.HandleHotkeys(keyboard);
+        if (keyboard != null && keyboard.tKey.wasPressedThisFrame && targetingController != null)
+        {
+            targetingController.ToggleAutoTargetEnabled();
+            LogMessage(targetingController.AutoTargetEnabled ? "Автонаведение включено" : "Автонаведение выключено", "info");
+        }
 
         PointerInputState pointerState = inputService.ReadPointerState();
         if (suppressPointerMovementUntilRelease && (!pointerState.HasPointer || !pointerState.PrimaryPressed))
@@ -3241,9 +3246,9 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        if (autoAcquireTargetInWeaponRange && !targetingController.HasManualTargetSelection)
+        if (autoAcquireTargetInWeaponRange)
         {
-            targetingController.AutoAcquireNearestEnemyInRange(weaponRange);
+            targetingController.TickAutoTarget(weaponRange);
         }
 
         if (!targetingController.TryGetCurrentTargetTransform(out Transform targetTransform) || targetTransform == null)
@@ -3923,3 +3928,7 @@ public class SpaceCombatSceneController : MonoBehaviour
     }
 
 }
+
+
+
+
