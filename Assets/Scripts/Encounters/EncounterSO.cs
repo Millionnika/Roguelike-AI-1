@@ -34,6 +34,8 @@ public sealed class EncounterSO : ScriptableObject
     [TextArea(2, 4)] public string shortDescription;
     [Tooltip("Таблица наград, из которой выбираются варианты после завершения этой локации.")]
     public RewardTableSO rewardTable;
+    [Tooltip("Дополнительная цель сектора. Если не назначена, локация завершается как раньше (по бою/таймлайну).")]
+    public SectorObjectiveSO objective;
 
     private void OnValidate()
     {

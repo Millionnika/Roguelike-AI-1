@@ -40,6 +40,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
     private TMP_Text experienceText;
     private TMP_Text shipText;
     private TMP_Text scrapText;
+    private TMP_Text objectiveText;
     private Image targetPanel;
     private Image targetShieldFill;
     private Image targetArmorFill;
@@ -101,6 +102,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
             BindOverviewPanel(uiRoot);
             BindPlayerStatusPanel(uiRoot);
             BindEquipmentPanel(uiRoot);
+            EnsureObjectiveTextFallback();
             statusText = FindText(uiRoot, "StatusLabel");
             return;
         }
@@ -145,6 +147,15 @@ public sealed class CombatHudPresenter : MonoBehaviour
         if (targetDisplayText != null) targetDisplayText.text = Localize("target_label") + targetDisplayName;
         if (shipText != null) shipText.text = Localize("ship_label") + context.ShipName;
         if (scrapText != null) scrapText.text = "Лом: " + Mathf.Max(0, context.Scrap);
+        if (objectiveText != null)
+        {
+            bool showObjective = context.HasObjective && !string.IsNullOrWhiteSpace(context.ObjectiveProgressText);
+            objectiveText.gameObject.SetActive(showObjective);
+            if (showObjective)
+            {
+                objectiveText.text = context.ObjectiveProgressText;
+            }
+        }
         if (levelText != null) levelText.text = Localize("level_label") + context.Player.Level;
         if (experienceText != null) experienceText.text = Localize("xp_label") + context.Player.Experience + " / " + context.Player.ExperienceToNext;
 
@@ -375,6 +386,7 @@ public sealed class CombatHudPresenter : MonoBehaviour
         targetDisplayText = FindText(panel, "TargetDisplay");
         shipText = FindText(panel, "ShipText");
         scrapText = FindText(panel, "ScrapText");
+        objectiveText = FindText(panel, "ObjectiveText");
         levelText = FindText(panel, "LevelText");
         experienceText = FindText(panel, "ExperienceText");
 
@@ -463,6 +475,20 @@ public sealed class CombatHudPresenter : MonoBehaviour
         equipmentUiController = runtimeController;
     }
 
+    private void EnsureObjectiveTextFallback()
+    {
+        if (objectiveText != null || overviewPanelRect == null || uiFactory == null)
+        {
+            return;
+        }
+
+        objectiveText = CreateText("ObjectiveText", overviewPanelRect, string.Empty, 14, FontStyle.Normal, new Color(0.92f, 0.95f, 1f));
+        objectiveText.textWrappingMode = TextWrappingModes.Normal;
+        objectiveText.alignment = TextAlignmentOptions.Left;
+        SetAnchoredRect(objectiveText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -88f), new Vector2(-10f, -52f));
+        objectiveText.gameObject.SetActive(false);
+    }
+
     private void CreateRightOverviewPanel(Transform parent)
     {
         Image panel = CreateImage("OverviewPanel", parent, new Color(0.04f, 0.08f, 0.11f, 0.94f));
@@ -539,6 +565,11 @@ public sealed class CombatHudPresenter : MonoBehaviour
         experienceText = CreateText("ExperienceText", panel.transform, "XP: 0 / 100", 15, FontStyle.Normal, new Color(0.88f, 0.92f, 1f));
         SetAnchoredRect(experienceText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -48f), new Vector2(-10f, -24f));
         experienceText.gameObject.SetActive(false);
+        objectiveText = CreateText("ObjectiveText", panel.transform, string.Empty, 14, FontStyle.Normal, new Color(0.92f, 0.95f, 1f));
+        objectiveText.textWrappingMode = TextWrappingModes.Normal;
+        objectiveText.alignment = TextAlignmentOptions.Left;
+        SetAnchoredRect(objectiveText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(10f, -88f), new Vector2(-10f, -52f));
+        objectiveText.gameObject.SetActive(false);
     }
 
     private void CreatePlayerStatusHud(Transform parent)
@@ -921,4 +952,7 @@ internal struct CombatHudContext
     public bool UseVirtualJoystick;
     public string ShipName;
     public int Scrap;
+    public bool HasObjective;
+    public string ObjectiveProgressText;
+    public float ObjectiveProgress01;
 }

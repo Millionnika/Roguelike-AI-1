@@ -74,6 +74,8 @@ public class SpaceCombatSceneController : MonoBehaviour
     [SerializeField] private RewardChoicePresenter rewardChoicePresenter;
     [Tooltip("Контроллер применения наград MVP и Scrap.")]
     [SerializeField] private RunRewardController runRewardController;
+    [Tooltip("Контроллер целей сектора: сбор контейнеров, удержание зоны и сканирование аномалии.")]
+    [SerializeField] private SectorObjectiveController sectorObjectiveController;
     [Tooltip("Inspector: shield hit material")]
     [SerializeField] private Material shieldHitMaterial;
     [Tooltip("Если включено, встроенное старт-меню отключается и бой начинается сразу после загрузки сцены.")]
@@ -435,6 +437,26 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         RunManager manager = encounterFlowController != null ? encounterFlowController.RunManager : null;
         runRewardController.Initialize(manager, () => player, LogMessage);
+    }
+
+    private void EnsureSectorObjectiveController()
+    {
+        if (sectorObjectiveController == null)
+        {
+            sectorObjectiveController = GetComponent<SectorObjectiveController>();
+        }
+
+        if (sectorObjectiveController == null)
+        {
+            sectorObjectiveController = FindAnyObjectByType<SectorObjectiveController>(FindObjectsInactive.Include);
+        }
+
+        if (sectorObjectiveController == null)
+        {
+            sectorObjectiveController = gameObject.AddComponent<SectorObjectiveController>();
+        }
+
+        sectorObjectiveController.Initialize(worldRoot, circleSprite, AddObjectiveScrapReward, LogMessage);
     }
 
     private void EnsureEncounterFlowController()
@@ -851,6 +873,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         nonCombatEncounterPresenter = GetOrAddSceneComponent<NonCombatEncounterPresenter>();
         rewardChoicePresenter = GetOrAddSceneComponent<RewardChoicePresenter>();
         runRewardController = GetOrAddSceneComponent<RunRewardController>();
+        sectorObjectiveController = GetOrAddSceneComponent<SectorObjectiveController>();
         combatAudioController = GetOrAddSceneComponent<CombatAudioController>();
         combatLogPresenter = GetOrAddSceneComponent<CombatLogPresenter>();
 
@@ -881,12 +904,14 @@ public class SpaceCombatSceneController : MonoBehaviour
         EnsurePlayerProgressionController();
         EnsureStartMenuPresenter();
         EnsureEncounterFlowController();
+        EnsureSectorObjectiveController();
         EnsureTimelineSpawnController();
         ValidateSerializedReferences();
         useVirtualJoystick = platformService.ShouldUseVirtualJoystick();
         CreateSprites();
         CreateStarterShips();
         BuildWorld();
+        EnsureSectorObjectiveController();
         EnsurePlayerShipController();
         EnsurePlayerModuleController();
         EnsurePlayerProgressionController();
@@ -936,6 +961,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         backgroundController?.Cleanup();
         minimapController?.Cleanup();
+        sectorObjectiveController?.CleanupObjective();
         ClearBases();
     }
 
@@ -1093,6 +1119,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         UpdatePlayer(deltaTime);
         UpdateCombat(deltaTime);
         UpdateTimelineSpawner(deltaTime);
+        sectorObjectiveController?.Tick(deltaTime);
         TryCompleteEncounter();
         backgroundController?.Tick();
         UpdateVisuals();
@@ -1559,6 +1586,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         ClearEnemies();
         ClearProjectiles();
         ClearBases();
+        sectorObjectiveController?.CleanupObjective();
         if (gateTransform != null)
         {
             gateTransform.gameObject.SetActive(false);
@@ -1589,6 +1617,7 @@ public class SpaceCombatSceneController : MonoBehaviour
 
         TrySnapPlayerToCurrentSector();
         SpawnSectorBases();
+        BeginCurrentEncounterObjective();
         encounterStartHullPercent = player != null ? player.HullPercent : 1f;
         LogMessage(Localize("log_launch") + availableShips[selectedShipIndex].displayName);
         LogMessage(Localize("log_sector_scan"));
@@ -1705,6 +1734,32 @@ public class SpaceCombatSceneController : MonoBehaviour
         player = playerShipController != null ? playerShipController.Player : player;
     }
 
+    private void AddObjectiveScrapReward(int amount)
+    {
+        if (amount <= 0 || encounterFlowController == null || encounterFlowController.RunManager == null)
+        {
+            return;
+        }
+
+        encounterFlowController.RunManager.AddScrap(amount);
+    }
+
+    private void BeginCurrentEncounterObjective()
+    {
+        EnsureSectorObjectiveController();
+        if (sectorObjectiveController == null)
+        {
+            return;
+        }
+
+        EncounterSO currentEncounter = encounterFlowController != null && encounterFlowController.RunManager != null
+            ? encounterFlowController.RunManager.CurrentEncounter
+            : null;
+
+        SectorObjectiveSO objective = currentEncounter != null ? currentEncounter.objective : null;
+        sectorObjectiveController.BeginObjective(objective, player != null ? player.Transform : null);
+    }
+
     private void TryCompleteEncounter()
     {
         if (gameOver || IsLevelUpPending() || encounterFlowController == null)
@@ -1712,14 +1767,41 @@ public class SpaceCombatSceneController : MonoBehaviour
             return;
         }
 
-        int aliveEnemyBaseCount = GetAliveEnemyBaseCount();
-        bool timelineFinished = timelineSpawnController != null && timelineSpawnController.IsTimelineFinished;
-        bool objectiveCompleted = sectorUsesBaseObjective ? aliveEnemyBaseCount <= 0 : timelineFinished;
-        LocationNodeType completedNodeType = LocationNodeType.Combat;
         RunManager flowRunManager = encounterFlowController.RunManager;
-        if (flowRunManager != null && flowRunManager.CurrentEncounter != null)
+        EncounterSO currentEncounter = flowRunManager != null ? flowRunManager.CurrentEncounter : null;
+        int aliveEnemyBaseCount = GetAliveEnemyBaseCount();
+
+        WaveTimelineSO activeTimeline = GetActiveTimeline();
+        bool hasCombatTimeline = activeTimeline != null && activeTimeline.events != null && activeTimeline.events.Count > 0;
+        bool requiresBaseObjective = sectorUsesBaseObjective;
+        bool requiresCombatResolution = hasCombatTimeline || requiresBaseObjective;
+
+        bool combatCompleted = true;
+        if (requiresBaseObjective)
         {
-            completedNodeType = flowRunManager.CurrentEncounter.nodeType;
+            combatCompleted = aliveEnemyBaseCount <= 0;
+        }
+        else if (hasCombatTimeline)
+        {
+            combatCompleted = timelineSpawnController != null && timelineSpawnController.IsTimelineFinished;
+        }
+
+        bool encounterHasObjective =
+            currentEncounter != null &&
+            currentEncounter.objective != null &&
+            currentEncounter.objective.objectiveType != SectorObjectiveType.None;
+        bool objectiveCompleted = !encounterHasObjective ||
+                                 (sectorObjectiveController != null && sectorObjectiveController.IsObjectiveCompleted);
+        bool completionReady = combatCompleted && objectiveCompleted;
+
+        int aliveCombatObjects = requiresCombatResolution
+            ? enemies.Count + (requiresBaseObjective ? aliveEnemyBaseCount : 0)
+            : 0;
+
+        LocationNodeType completedNodeType = LocationNodeType.Combat;
+        if (currentEncounter != null)
+        {
+            completedNodeType = currentEncounter.nodeType;
         }
 
         float hullPercent = player != null ? player.HullPercent : 0f;
@@ -1730,10 +1812,14 @@ public class SpaceCombatSceneController : MonoBehaviour
             damageTaken,
             timelineSpawnController != null ? timelineSpawnController.GameTimer : 0f,
             0, // TODO Stage 3+: expose killed enemy count from combat cleanup.
-            objectiveCompleted,
-            enemies.Count + aliveEnemyBaseCount);
+            completionReady,
+            aliveCombatObjects);
 
         encounterFlowController.TryCompleteCombatEncounter(context);
+        if (completionReady && aliveCombatObjects <= 0)
+        {
+            sectorObjectiveController?.CleanupObjective();
+        }
     }
 
     private void HandleEncounterChoiceInput()
@@ -1776,6 +1862,7 @@ public class SpaceCombatSceneController : MonoBehaviour
         ClearEnemies();
         ClearProjectiles();
         ClearBases();
+        sectorObjectiveController?.CleanupObjective();
         if (timelineSpawnController != null)
         {
             timelineSpawnController.ResetRuntime();
@@ -3689,7 +3776,14 @@ public class SpaceCombatSceneController : MonoBehaviour
             if (gateHintText != null)
             {
                 gateHintText.transform.parent.gameObject.SetActive(true);
-                gateHintText.text = Localize("timeline_missing");
+                if (sectorObjectiveController != null && sectorObjectiveController.HasActiveObjective)
+                {
+                    gateHintText.text = sectorObjectiveController.ProgressText;
+                }
+                else
+                {
+                    gateHintText.text = Localize("timeline_missing");
+                }
             }
             return;
         }
@@ -3836,6 +3930,9 @@ public class SpaceCombatSceneController : MonoBehaviour
         {
             scrapAmount = encounterFlowController.RunManager.Resources.Scrap;
         }
+        bool hasObjective = sectorObjectiveController != null && sectorObjectiveController.HasActiveObjective;
+        string objectiveProgressText = hasObjective ? sectorObjectiveController.ProgressText : string.Empty;
+        float objectiveProgress01 = hasObjective ? sectorObjectiveController.Progress01 : 0f;
         combatHudPresenter?.Tick(new CombatHudContext
         {
             Player = player,
@@ -3849,7 +3946,10 @@ public class SpaceCombatSceneController : MonoBehaviour
             LevelUpPending = levelUpPending,
             UseVirtualJoystick = useVirtualJoystick,
             ShipName = shipName,
-            Scrap = scrapAmount
+            Scrap = scrapAmount,
+            HasObjective = hasObjective,
+            ObjectiveProgressText = objectiveProgressText,
+            ObjectiveProgress01 = objectiveProgress01
         });
 
         if (statusText != null && (combatHudPresenter == null || combatHudPresenter.StatusText == null))
