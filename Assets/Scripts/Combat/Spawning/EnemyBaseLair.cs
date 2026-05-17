@@ -17,6 +17,11 @@ public sealed class EnemyBaseLair : MonoBehaviour
     [Min(0f)] [SerializeField] private float maxArmor = 900f;
     [Tooltip("Максимальное значение корпуса базы.")]
     [Min(1f)] [SerializeField] private float maxHull = 1800f;
+    [Header("Визуал")]
+    [Tooltip("Медленное вращение базы вокруг своей оси (без перемещения).")]
+    [SerializeField] private bool idleSpinEnabled = true;
+    [Tooltip("Скорость вращения базы в градусах/сек.")]
+    [SerializeField, Range(-30f, 30f)] private float idleSpinSpeed = 4f;
 
     [Header("Награда")]
     [Tooltip("Сколько опыта получит игрок после уничтожения базы.")]
@@ -45,6 +50,8 @@ public sealed class EnemyBaseLair : MonoBehaviour
     [SerializeField] private ShipDataSO enemyShipData;
     [Tooltip("Префаб врага. Используется, если ShipData не задан.")]
     [SerializeField] private GameObject enemyPrefab;
+    [Tooltip("Оружие базы. Если не задано, будет использовано первое оружие из enemyShipData.")]
+    [SerializeField] private WeaponDataSO baseWeaponData;
 
     [Header("Где спавнить")]
     [Tooltip("Точки спавна врагов. Если список пуст, враги появляются случайно вокруг базы.")]
@@ -70,7 +77,9 @@ public sealed class EnemyBaseLair : MonoBehaviour
     {
         InitializeDurability();
         CombatLayerUtility.ApplyShipLayer(gameObject, CombatFaction.Enemy);
+        EnsureTeamMember();
         EnsureDamageReceiver();
+        EnsureDefenseBattery();
         ResolveSceneController();
         TryStartContinuousSpawn();
     }
@@ -83,6 +92,20 @@ public sealed class EnemyBaseLair : MonoBehaviour
         }
 
         StopContinuousSpawn();
+    }
+
+    private void Update()
+    {
+        if (!idleSpinEnabled)
+        {
+            return;
+        }
+
+        float spin = idleSpinSpeed * Time.deltaTime;
+        if (Mathf.Abs(spin) > 0.0001f)
+        {
+            transform.Rotate(0f, 0f, spin, Space.Self);
+        }
     }
 
     private void InitializeDurability()
@@ -125,6 +148,51 @@ public sealed class EnemyBaseLair : MonoBehaviour
         {
             sceneController = FindFirstObjectByType<SpaceCombatSceneController>();
         }
+    }
+
+    private void EnsureTeamMember()
+    {
+        TeamMember member = GetComponent<TeamMember>();
+        if (member == null)
+        {
+            member = gameObject.AddComponent<TeamMember>();
+        }
+
+        member.SetFaction(CombatFaction.Enemy);
+    }
+
+    private void EnsureDefenseBattery()
+    {
+        BaseDefenseBattery battery = GetComponent<BaseDefenseBattery>();
+        if (battery == null)
+        {
+            battery = gameObject.AddComponent<BaseDefenseBattery>();
+        }
+
+        battery.ConfigureFaction(CombatFaction.Enemy);
+        battery.EnsureWeapon(ResolveBaseWeapon());
+    }
+
+    private WeaponDataSO ResolveBaseWeapon()
+    {
+        if (baseWeaponData != null)
+        {
+            return baseWeaponData;
+        }
+
+        if (enemyShipData != null && enemyShipData.startingWeapons != null)
+        {
+            for (int i = 0; i < enemyShipData.startingWeapons.Count; i++)
+            {
+                WeaponDataSO weapon = enemyShipData.startingWeapons[i];
+                if (weapon != null)
+                {
+                    return weapon;
+                }
+            }
+        }
+
+        return null;
     }
 
     private ShipDurabilityState ReadDurability()

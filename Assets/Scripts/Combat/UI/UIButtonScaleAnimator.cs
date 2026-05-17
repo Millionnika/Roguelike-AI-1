@@ -8,6 +8,7 @@ public sealed class UIButtonScaleAnimator : MonoBehaviour, IPointerEnterHandler,
     [SerializeField, Range(0.8f, 1f)] private float pressedScale = 0.94f;
     [SerializeField, Min(1f)] private float scaleLerpSpeed = 16f;
 
+    private Vector3 authoredBaseScale = Vector3.one;
     private Vector3 baseScale = Vector3.one;
     private float targetScale = 1f;
     private bool hovered;
@@ -15,12 +16,19 @@ public sealed class UIButtonScaleAnimator : MonoBehaviour, IPointerEnterHandler,
 
     private void Awake()
     {
-        baseScale = transform.localScale;
+        authoredBaseScale = transform.localScale;
+        baseScale = authoredBaseScale;
     }
 
     private void OnEnable()
     {
-        baseScale = transform.localScale;
+        if (authoredBaseScale.sqrMagnitude <= 0.000001f)
+        {
+            authoredBaseScale = transform.localScale;
+        }
+
+        baseScale = authoredBaseScale;
+        transform.localScale = authoredBaseScale;
         targetScale = 1f;
         hovered = false;
         pressed = false;

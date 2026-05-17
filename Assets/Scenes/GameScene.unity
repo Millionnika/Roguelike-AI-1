@@ -28986,6 +28986,7 @@ MonoBehaviour:
   nonCombatEncounterPresenter: {fileID: 0}
   rewardChoicePresenter: {fileID: 0}
   runRewardController: {fileID: 0}
+  sectorObjectiveController: {fileID: 0}
   shieldHitMaterial: {fileID: 0}
   startDirectlyFromExternalMenu: 0
   mainMenuSceneName: MainMenuScene
@@ -29012,6 +29013,7 @@ MonoBehaviour:
   enemyBaseSpawnRadiusMin: 18
   enemyBaseSpawnRadiusMax: 34
   enemyBaseMinSeparation: 16
+  enemyBaseSeparationMultiplier: 1.6
   enemyBaseOutOfViewPadding: 8
   overrideEnemyBaseSpawnSettings: 0
   enemyBaseSpawnCountPerCycle: 2
@@ -29027,7 +29029,9 @@ MonoBehaviour:
   homePortalCountdownTextHeight: 2.8
   homePortalCountdownTextSize: 5.2
   autoAcquireTargetInWeaponRange: 1
-  autoApproachSelectedTarget: 1
+  enableHullAutoAim: 0
+  enableAutoApproachToManualTarget: 0
+  autoApproachInputGrace: 0.3
   autoApproachStandoffFactor: 0.82
   playerAimTurnSpeed: 140
   alliedBaseHealStrength: 0.2
@@ -29056,6 +29060,15 @@ MonoBehaviour:
   minimapZoomStep: 4
   minimapPanelSize: 200
   minimapBackgroundColor: {r: 0.03, g: 0.08, b: 0.14, a: 0.82}
+  showEntityMarkers: 1
+  markerEdgeClamp: 0.92
+  enemyMarkerMinSize: 5
+  enemyMarkerMaxSize: 12
+  baseMarkerSize: 11
+  portalMarkerSize: 13
+  enemyMarkerColor: {r: 1, g: 0.34, b: 0.34, a: 0.95}
+  baseMarkerColor: {r: 1, g: 0.75, b: 0.32, a: 0.98}
+  portalMarkerColor: {r: 0.48, g: 0.94, b: 1, a: 0.98}
 --- !u!114 &1716240004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29079,6 +29092,7 @@ MonoBehaviour:
   targetLineDashSize: 0.35
   targetLineGapSize: 0.2
   targetWorldClickPadding: 0.25
+  autoTargetEnabled: 1
   showAttackAssist: 1
   attackAssistOkColor: {r: 0.42, g: 1, b: 0.56, a: 0.95}
   attackAssistWarningColor: {r: 1, g: 0.72, b: 0.28, a: 0.95}

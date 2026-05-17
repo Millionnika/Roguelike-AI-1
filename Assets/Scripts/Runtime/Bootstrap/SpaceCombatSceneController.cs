@@ -545,7 +545,7 @@ public class SpaceCombatSceneController : MonoBehaviour
             targetingController = gameObject.AddComponent<TargetingController>();
         }
 
-        targetingController.Initialize(player, enemies, worldRoot, mainCamera != null ? mainCamera : Camera.main, LogMessage, Localize);
+        targetingController.Initialize(player, enemies, activeEnemyBases, worldRoot, mainCamera != null ? mainCamera : Camera.main, LogMessage, Localize);
         targetingController.SetEquipmentState(CurrentEquipmentState);
     }
 
@@ -4028,7 +4028,6 @@ public class SpaceCombatSceneController : MonoBehaviour
     }
 
 }
-
 
 
 

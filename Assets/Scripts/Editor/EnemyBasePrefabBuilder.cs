@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,10 +10,14 @@ public static class EnemyBasePrefabBuilder
     private const string RaiderDir = RootDir + "/RaiderLair";
     private const string PirateDir = RootDir + "/PirateLair";
     private const string AlliedDir = RootDir + "/AlliedRepairBase";
+    private const string BaseWeaponsDir = RootDir + "/Weapons";
 
     private const string RaiderPrefabPath = RaiderDir + "/RaiderLair_Prefab.prefab";
     private const string PiratePrefabPath = PirateDir + "/PirateLair_Prefab.prefab";
     private const string AlliedPrefabPath = AlliedDir + "/AlliedRepairBase_Prefab.prefab";
+    private const string PirateBaseWeaponPath = BaseWeaponsDir + "/Base_Pirate_Missile_360.asset";
+    private const string RaiderBaseWeaponPath = BaseWeaponsDir + "/Base_Raider_Railgun_360.asset";
+    private const string AlliedBaseWeaponPath = BaseWeaponsDir + "/Base_Allied_Railgun_360.asset";
 
     private const string RaiderBodySpritePath = SharedDir + "/RaiderLair_Body.png";
     private const string PirateBodySpritePath = SharedDir + "/PirateLair_Body.png";
@@ -20,10 +25,61 @@ public static class EnemyBasePrefabBuilder
     private const string GlowSpritePath = SharedDir + "/Lair_Glow.png";
 
     private const string E1ShipDataPath = "Assets/Content/Ships/E1/E1_ShipData.asset";
-    private const string ZoozShipDataPath = "Assets/Content/Ships/Zooz/Zooz_ShipData.asset";
+    private const string PirateShipDataPath = "Assets/Content/Ships/AeXia/AeXia_ShipData.asset";
     private const string ShieldSpritePath = "Assets/Sprites/Shield.png";
+    private const string SourceMissileWeaponPath = "Assets/Content/Weapons/Missile/Missile_WeaponData.asset";
+    private const string SourceRailgunWeaponPath = "Assets/Content/Weapons/Рельсотрончик/Рельсотрончик_WeaponData.asset";
+    private const string SourceMinigunWeaponPath = "Assets/Content/Weapons/Minigan505/Minigan505_WeaponData.asset";
+    private const int EnemyBaseWeaponSlotCount = 4;
+    private const int AlliedBaseWeaponSlotCount = 3;
 
-    [MenuItem("Tools/Roguelike/Create Base Prefabs")]
+    [MenuItem("Tools/Roguelike/Bases/Create Base Weapons (360)")]
+    public static void CreateBaseWeapons()
+    {
+        EnsureFolder("Assets/Content");
+        EnsureFolder(RootDir);
+        EnsureFolder(BaseWeaponsDir);
+
+        WeaponDataSO sourceMissile = LoadWeaponTemplate(SourceMissileWeaponPath);
+        WeaponDataSO sourceRailgun = LoadWeaponTemplate(SourceRailgunWeaponPath);
+        WeaponDataSO sourceMinigun = LoadWeaponTemplate(SourceMinigunWeaponPath);
+
+        CreateOrUpdateBaseWeapon(
+            PirateBaseWeaponPath,
+            "Base_Pirate_Missile_360",
+            sourceMissile != null ? sourceMissile : sourceMinigun,
+            FireMode.Missile,
+            damage: 22f,
+            cooldown: 0.95f,
+            range: 18f,
+            aimTurn: 360f);
+
+        CreateOrUpdateBaseWeapon(
+            RaiderBaseWeaponPath,
+            "Base_Raider_Railgun_360",
+            sourceRailgun != null ? sourceRailgun : sourceMinigun,
+            FireMode.Hitscan,
+            damage: 34f,
+            cooldown: 0.75f,
+            range: 20f,
+            aimTurn: 340f);
+
+        CreateOrUpdateBaseWeapon(
+            AlliedBaseWeaponPath,
+            "Base_Allied_Railgun_360",
+            sourceRailgun != null ? sourceRailgun : sourceMinigun,
+            FireMode.Hitscan,
+            damage: 28f,
+            cooldown: 0.85f,
+            range: 19f,
+            aimTurn: 300f);
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("EnemyBasePrefabBuilder: base weapons created/updated in " + BaseWeaponsDir);
+    }
+
+    [MenuItem("Tools/Roguelike/Bases/Create Base Prefabs")]
     public static void CreateBasePrefabs()
     {
         EnsureFolder("Assets/Content");
@@ -32,6 +88,12 @@ public static class EnemyBasePrefabBuilder
         EnsureFolder(RaiderDir);
         EnsureFolder(PirateDir);
         EnsureFolder(AlliedDir);
+        EnsureFolder(BaseWeaponsDir);
+
+        CreateBaseWeapons();
+        WeaponDataSO pirateBaseWeapon = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(PirateBaseWeaponPath);
+        WeaponDataSO raiderBaseWeapon = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(RaiderBaseWeaponPath);
+        WeaponDataSO alliedBaseWeapon = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(AlliedBaseWeaponPath);
 
         Sprite raiderBody = CreateSolidSprite(RaiderBodySpritePath, new Color(0.44f, 0.24f, 0.22f, 1f), 192);
         Sprite pirateBody = CreateSolidSprite(PirateBodySpritePath, new Color(0.2f, 0.28f, 0.42f, 1f), 192);
@@ -40,7 +102,7 @@ public static class EnemyBasePrefabBuilder
         Sprite shieldSprite = AssetDatabase.LoadAssetAtPath<Sprite>(ShieldSpritePath);
 
         ShipDataSO e1Ship = AssetDatabase.LoadAssetAtPath<ShipDataSO>(E1ShipDataPath);
-        ShipDataSO zoozShip = AssetDatabase.LoadAssetAtPath<ShipDataSO>(ZoozShipDataPath);
+        ShipDataSO pirateShip = AssetDatabase.LoadAssetAtPath<ShipDataSO>(PirateShipDataPath);
 
         BuildBasePrefab(
             RaiderPrefabPath,
@@ -56,7 +118,8 @@ public static class EnemyBasePrefabBuilder
             spawnTriggerPercent: 10f,
             spawnCount: 4,
             spawnInterval: 1f,
-            spawnMode: 1);
+            spawnMode: 1,
+            baseWeaponData: raiderBaseWeapon);
 
         BuildBasePrefab(
             PiratePrefabPath,
@@ -64,7 +127,7 @@ public static class EnemyBasePrefabBuilder
             pirateBody,
             glowSprite,
             shieldSprite,
-            zoozShip,
+            pirateShip,
             maxShield: 2400f,
             maxArmor: 1900f,
             maxHull: 3200f,
@@ -72,19 +135,28 @@ public static class EnemyBasePrefabBuilder
             spawnTriggerPercent: 10f,
             spawnCount: 6,
             spawnInterval: 0.85f,
-            spawnMode: 1);
+            spawnMode: 1,
+            baseWeaponData: pirateBaseWeapon);
 
         BuildAlliedRepairBasePrefab(
             AlliedPrefabPath,
             alliedBody,
-            glowSprite);
+            glowSprite,
+            alliedBaseWeapon);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("EnemyBasePrefabBuilder: base prefabs created in " + RootDir);
     }
 
-    private static void BuildAlliedRepairBasePrefab(string prefabPath, Sprite bodySprite, Sprite glowSprite)
+    [MenuItem("Tools/Roguelike/Bases/Rebuild Weapons + Base Prefabs")]
+    public static void RebuildWeaponsAndBasePrefabs()
+    {
+        CreateBaseWeapons();
+        CreateBasePrefabs();
+    }
+
+    private static void BuildAlliedRepairBasePrefab(string prefabPath, Sprite bodySprite, Sprite glowSprite, WeaponDataSO defenseWeaponData)
     {
         GameObject root = new GameObject("AlliedRepairBase_Prefab");
 
@@ -97,7 +169,15 @@ public static class EnemyBasePrefabBuilder
         repairSo.FindProperty("healStrength").floatValue = 0.2f;
         repairSo.FindProperty("healCooldownSeconds").floatValue = 30f;
         repairSo.FindProperty("healRadius").floatValue = 3.2f;
+        repairSo.FindProperty("defenseWeaponData").objectReferenceValue = defenseWeaponData;
         repairSo.ApplyModifiedPropertiesWithoutUndo();
+
+        BaseDefenseBattery battery = root.AddComponent<BaseDefenseBattery>();
+        battery.ConfigureFaction(CombatFaction.Player);
+        Transform[] weaponMuzzles = CreateWeaponSlots(root.transform, AlliedBaseWeaponSlotCount, radius: 1.35f, arcStartDeg: -120f, arcEndDeg: 120f);
+        List<WeaponDataSO> loadout = BuildRepeatedLoadout(defenseWeaponData, weaponMuzzles.Length);
+        battery.ConfigureLoadout(loadout, weaponMuzzles);
+        AttachWeaponVisuals(weaponMuzzles, defenseWeaponData);
 
         GameObject body = new GameObject("Body");
         body.transform.SetParent(root.transform, false);
@@ -133,7 +213,8 @@ public static class EnemyBasePrefabBuilder
         float spawnTriggerPercent,
         int spawnCount,
         float spawnInterval,
-        int spawnMode)
+        int spawnMode,
+        WeaponDataSO baseWeaponData)
     {
         GameObject root = new GameObject(baseName + "_Prefab");
 
@@ -142,6 +223,12 @@ public static class EnemyBasePrefabBuilder
         collider.radius = 1.25f;
 
         EnemyBaseLair lair = root.AddComponent<EnemyBaseLair>();
+        BaseDefenseBattery battery = root.AddComponent<BaseDefenseBattery>();
+        battery.ConfigureFaction(CombatFaction.Enemy);
+        Transform[] weaponMuzzles = CreateWeaponSlots(root.transform, EnemyBaseWeaponSlotCount, radius: 1.6f, arcStartDeg: -160f, arcEndDeg: 160f);
+        List<WeaponDataSO> loadout = BuildRepeatedLoadout(baseWeaponData, weaponMuzzles.Length);
+        battery.ConfigureLoadout(loadout, weaponMuzzles);
+        AttachWeaponVisuals(weaponMuzzles, baseWeaponData);
 
         GameObject body = new GameObject("Body");
         body.transform.SetParent(root.transform, false);
@@ -186,6 +273,7 @@ public static class EnemyBasePrefabBuilder
         lairSo.FindProperty("spawnEnemyCount").intValue = spawnCount;
         lairSo.FindProperty("spawnIntervalSeconds").floatValue = spawnInterval;
         lairSo.FindProperty("enemyShipData").objectReferenceValue = enemyShipData;
+        lairSo.FindProperty("baseWeaponData").objectReferenceValue = baseWeaponData;
         lairSo.FindProperty("enemyPrefab").objectReferenceValue = null;
         lairSo.FindProperty("fallbackSpawnRadius").floatValue = 6f;
         lairSo.FindProperty("continuousSpawnEnabled").boolValue = true;
@@ -202,6 +290,140 @@ public static class EnemyBasePrefabBuilder
 
         PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
+    }
+
+    private static WeaponDataSO LoadWeaponTemplate(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return null;
+        }
+
+        return AssetDatabase.LoadAssetAtPath<WeaponDataSO>(path);
+    }
+
+    private static List<WeaponDataSO> BuildRepeatedLoadout(WeaponDataSO weapon, int count)
+    {
+        List<WeaponDataSO> loadout = new List<WeaponDataSO>(Mathf.Max(0, count));
+        for (int i = 0; i < count; i++)
+        {
+            loadout.Add(weapon);
+        }
+
+        return loadout;
+    }
+
+    private static Transform[] CreateWeaponSlots(Transform root, int slotCount, float radius, float arcStartDeg, float arcEndDeg)
+    {
+        GameObject slotsRoot = new GameObject("WeaponSlots");
+        slotsRoot.transform.SetParent(root, false);
+
+        int safeCount = Mathf.Max(1, slotCount);
+        Transform[] muzzles = new Transform[safeCount];
+        for (int i = 0; i < safeCount; i++)
+        {
+            float t = safeCount == 1 ? 0.5f : i / (float)(safeCount - 1);
+            float angle = Mathf.Lerp(arcStartDeg, arcEndDeg, t);
+            Vector3 dir = Quaternion.Euler(0f, 0f, angle) * Vector3.up;
+
+            GameObject slot = new GameObject("WeaponSlot_" + (i + 1));
+            slot.transform.SetParent(slotsRoot.transform, false);
+            slot.transform.localPosition = dir * radius;
+            slot.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+
+            GameObject mount = new GameObject("WeaponMount_" + (i + 1));
+            mount.transform.SetParent(slot.transform, false);
+            mount.transform.localPosition = Vector3.zero;
+            mount.transform.localRotation = Quaternion.identity;
+
+            GameObject muzzle = new GameObject("Muzzle");
+            muzzle.transform.SetParent(mount.transform, false);
+            muzzle.transform.localPosition = Vector3.up * 0.32f;
+            muzzle.transform.localRotation = Quaternion.identity;
+            muzzles[i] = muzzle.transform;
+        }
+
+        return muzzles;
+    }
+
+    private static void AttachWeaponVisuals(IReadOnlyList<Transform> muzzles, WeaponDataSO weaponData)
+    {
+        if (muzzles == null || weaponData == null || weaponData.visualPrefab == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < muzzles.Count; i++)
+        {
+            Transform muzzle = muzzles[i];
+            if (muzzle == null)
+            {
+                continue;
+            }
+
+            Transform mount = muzzle.parent != null ? muzzle.parent : muzzle;
+            Transform existing = mount.Find("WeaponVisualInstance");
+            if (existing != null)
+            {
+                Object.DestroyImmediate(existing.gameObject);
+            }
+
+            GameObject visual = PrefabUtility.InstantiatePrefab(weaponData.visualPrefab) as GameObject;
+            if (visual == null)
+            {
+                continue;
+            }
+
+            visual.name = "WeaponVisualInstance";
+            visual.transform.SetParent(mount, false);
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+            visual.transform.localScale = Vector3.one;
+        }
+    }
+
+    private static void CreateOrUpdateBaseWeapon(
+        string path,
+        string assetName,
+        WeaponDataSO template,
+        FireMode fireMode,
+        float damage,
+        float cooldown,
+        float range,
+        float aimTurn)
+    {
+        WeaponDataSO weapon = AssetDatabase.LoadAssetAtPath<WeaponDataSO>(path);
+        if (weapon == null)
+        {
+            weapon = ScriptableObject.CreateInstance<WeaponDataSO>();
+            AssetDatabase.CreateAsset(weapon, path);
+        }
+
+        Undo.RecordObject(weapon, "Update Base Weapon");
+
+        if (template != null)
+        {
+            EditorUtility.CopySerialized(template, weapon);
+        }
+
+        weapon.name = assetName;
+        weapon.fireMode = fireMode;
+        weapon.damage = Mathf.Max(1f, damage);
+        weapon.cooldown = Mathf.Max(0.05f, cooldown);
+        weapon.fireRate = weapon.cooldown;
+        weapon.maxRange = Mathf.Max(2f, range);
+        weapon.projectileMaxDistance = Mathf.Max(weapon.maxRange, weapon.projectileMaxDistance);
+        weapon.firingAngle = 360f;
+        weapon.spreadAngle = Mathf.Clamp(weapon.spreadAngle, 0f, 8f);
+        weapon.aimTurnSpeed = Mathf.Max(60f, aimTurn);
+
+        if (weapon.fireMode == FireMode.Missile)
+        {
+            weapon.missileSeekRadius = Mathf.Max(weapon.missileSeekRadius, weapon.maxRange + 3f);
+            weapon.missileTurnSpeed = Mathf.Max(weapon.missileTurnSpeed, 220f);
+        }
+
+        EditorUtility.SetDirty(weapon);
     }
 
     private static Transform CreateSpawnPoint(Transform parent, string pointName, Vector3 localPosition)

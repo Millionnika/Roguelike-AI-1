@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5d4e9234307b3d4ea7f4ae0e54c9efd, type: 3}
+  m_Name: Base_Raider_Railgun_360
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponDataSO
+  fireMode: 1
+  damageProfile: {fileID: 11400000, guid: 4d45f641f0fc4d6d8f4462a6bc90e001, type: 2}
+  damage: 34
+  cooldown: 0.75
+  maxRange: 20
+  firingAngle: 360
+  spreadAngle: 0
+  aimTurnSpeed: 340
+  projectileRotationOffset: 90
+  projectilePrefab: {fileID: 317976935477892410, guid: 5deb430b8c06bb249a9c58d0743a9084, type: 3}
+  projectileSpeed: 18
+  projectileMaxDistance: 20
+  projectileLifetime: 2
+  projectileVisualScale: 0.16
+  missileTurnSpeed: 240
+  missileSeekRadius: 18
+  missileWobbleAmplitude: 0.08
+  missileWobbleFrequency: 8
+  missileAcceleration: 0.6
+  missileLaunchSpeedMultiplier: 0.35
+  missileLaunchDuration: 0.2
+  missileAimPauseDuration: 0.12
+  missileAimPauseSpeedMultiplier: 0.05
+  missileBoostSpeedMultiplier: 2.8
+  missileBoostAcceleration: 42
+  fireRate: 0.75
+  capacitorPerShot: 9
+  requiredClass: 0
+  icon: {fileID: 782661000662402953, guid: af8fedabb74c12546a1dd9ef201a8ab6, type: 3}
+  visualPrefab: {fileID: 100000, guid: a1b2c3d4e5f6478899aabbccddeeff03, type: 3}
+  impactVfxPrefab: {fileID: 0}
+  impactVfxLifetime: 0.75
+  impactVfxScale: 1
+  projectileTrailPrefab: {fileID: 0}
+  projectileTrailScale: 1
+  detachTrailOnDespawn: 1
+  detachedTrailLifetime: 0.4
+  fireSound: {fileID: 8300000, guid: 0b735146f5483fc4ead61a880543885b, type: 3}

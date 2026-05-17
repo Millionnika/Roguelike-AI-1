@@ -51,6 +51,7 @@ public sealed class TargetingController : MonoBehaviour
     [SerializeField] private int weaponArcSortingOrder = 18;
 
     private IReadOnlyList<EnemyShip> enemies;
+    private IReadOnlyList<EnemyBaseLair> enemyBases;
     private PlayerShip player;
     private Camera mainCamera;
     private Transform worldRoot;
@@ -87,6 +88,7 @@ public sealed class TargetingController : MonoBehaviour
     internal void Initialize(
         PlayerShip playerShip,
         IReadOnlyList<EnemyShip> enemyList,
+        IReadOnlyList<EnemyBaseLair> enemyBaseList,
         Transform worldRootTransform,
         Camera camera,
         Action<string, string> logCallback,
@@ -94,6 +96,7 @@ public sealed class TargetingController : MonoBehaviour
     {
         player = playerShip;
         enemies = enemyList;
+        enemyBases = enemyBaseList;
         worldRoot = worldRootTransform;
         mainCamera = camera;
         logMessage = logCallback;
@@ -103,6 +106,11 @@ public sealed class TargetingController : MonoBehaviour
     internal void SetEnemies(IReadOnlyList<EnemyShip> enemyList)
     {
         enemies = enemyList;
+    }
+
+    internal void SetEnemyBases(IReadOnlyList<EnemyBaseLair> baseList)
+    {
+        enemyBases = baseList;
     }
 
     internal void SetPlayer(PlayerShip playerShip)
@@ -253,7 +261,7 @@ public sealed class TargetingController : MonoBehaviour
 
     public void TickAutoTarget(float weaponRange)
     {
-        if (!autoTargetEnabled || player == null || player.Transform == null || enemies == null)
+        if (!autoTargetEnabled || player == null || player.Transform == null)
         {
             return;
         }
@@ -266,8 +274,7 @@ public sealed class TargetingController : MonoBehaviour
         if (manualTargetSelection)
         {
             if (TryGetCurrentTargetTransform(out Transform manualTargetTransform) &&
-                manualTargetTransform != null &&
-                IsTargetInRange(manualTargetTransform.position, rangeSqr))
+                manualTargetTransform != null)
             {
                 return;
             }
@@ -280,16 +287,44 @@ public sealed class TargetingController : MonoBehaviour
         if (targetEnemy != null &&
             targetEnemy.IsAlive() &&
             targetEnemy.Transform != null &&
-            IsTargetInRange(targetEnemy.Transform.position, rangeSqr))
+            IsTargetInsideWeaponEnvelope(targetEnemy.Transform))
         {
             return;
         }
 
-        EnemyShip best = FindNearestEnemyInRange(rangeSqr);
-        if (best != null)
+        if (targetBase != null &&
+            targetBase.IsAlive &&
+            IsTargetInsideWeaponEnvelope(targetBase.transform))
         {
+            return;
+        }
+
+        EnemyShip bestEnemy = FindNearestEnemyInRange(rangeSqr);
+        EnemyBaseLair bestBase = FindNearestBaseInRange(rangeSqr);
+        if (bestEnemy != null && bestBase != null)
+        {
+            float enemyDistance = ((Vector2)bestEnemy.Transform.position - (Vector2)player.Transform.position).sqrMagnitude;
+            float baseDistance = ((Vector2)bestBase.transform.position - (Vector2)player.Transform.position).sqrMagnitude;
+            if (enemyDistance <= baseDistance)
+            {
+                targetEnemy = bestEnemy;
+                targetBase = null;
+            }
+            else
+            {
+                targetEnemy = null;
+                targetBase = bestBase;
+            }
+        }
+        else if (bestEnemy != null)
+        {
+            targetEnemy = bestEnemy;
             targetBase = null;
-            targetEnemy = best;
+        }
+        else if (bestBase != null)
+        {
+            targetEnemy = null;
+            targetBase = bestBase;
         }
         else
         {
@@ -349,7 +384,7 @@ public sealed class TargetingController : MonoBehaviour
             }
 
             float distanceSqr = ((Vector2)enemy.Transform.position - playerPosition).sqrMagnitude;
-            if (distanceSqr <= bestSqr)
+            if (distanceSqr <= bestSqr && IsTargetInsideWeaponEnvelope(enemy.Transform))
             {
                 bestSqr = distanceSqr;
                 best = enemy;
@@ -357,6 +392,118 @@ public sealed class TargetingController : MonoBehaviour
         }
 
         return best;
+    }
+
+    private EnemyBaseLair FindNearestBaseInRange(float rangeSqr)
+    {
+        if (enemyBases == null || player == null || player.Transform == null)
+        {
+            return null;
+        }
+
+        EnemyBaseLair best = null;
+        float bestSqr = rangeSqr;
+        Vector2 playerPosition = player.Transform.position;
+
+        for (int i = 0; i < enemyBases.Count; i++)
+        {
+            EnemyBaseLair baseLair = enemyBases[i];
+            if (baseLair == null || !baseLair.IsAlive)
+            {
+                continue;
+            }
+
+            float distanceSqr = ((Vector2)baseLair.transform.position - playerPosition).sqrMagnitude;
+            if (distanceSqr <= bestSqr && IsTargetInsideWeaponEnvelope(baseLair.transform))
+            {
+                bestSqr = distanceSqr;
+                best = baseLair;
+            }
+        }
+
+        return best;
+    }
+
+    private bool IsTargetInsideWeaponEnvelope(Transform targetTransform)
+    {
+        if (targetTransform == null || equipmentState == null || player == null || player.Transform == null)
+        {
+            return false;
+        }
+
+        float targetRadius = ResolveTargetRadius(targetTransform);
+        if (equipmentState.RuntimeWeapons != null)
+        {
+            for (int i = 0; i < equipmentState.RuntimeWeapons.Count; i++)
+            {
+                WeaponInstance weapon = equipmentState.RuntimeWeapons[i];
+                if (weapon == null || weapon.Data == null)
+                {
+                    continue;
+                }
+
+                if (IsInsideWeaponArcWithTouch(weapon, targetTransform.position, targetRadius))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static float ResolveTargetRadius(Transform targetTransform)
+    {
+        if (targetTransform == null)
+        {
+            return 0f;
+        }
+
+        Collider2D collider = targetTransform.GetComponentInChildren<Collider2D>();
+        if (collider != null)
+        {
+            return Mathf.Max(collider.bounds.extents.x, collider.bounds.extents.y);
+        }
+
+        SpriteRenderer renderer = targetTransform.GetComponentInChildren<SpriteRenderer>();
+        if (renderer != null)
+        {
+            return Mathf.Max(renderer.bounds.extents.x, renderer.bounds.extents.y);
+        }
+
+        return 0f;
+    }
+
+    private static bool IsInsideWeaponArcWithTouch(WeaponInstance weapon, Vector3 targetPosition, float targetRadius)
+    {
+        if (weapon == null || weapon.Data == null)
+        {
+            return false;
+        }
+
+        Vector2 origin = weapon.GetMuzzlePosition();
+        Vector2 toTarget = (Vector2)targetPosition - origin;
+        float distance = toTarget.magnitude;
+        float range = Mathf.Max(0.1f, weapon.EffectiveMaxRange);
+        if (distance > range + Mathf.Max(0f, targetRadius))
+        {
+            return false;
+        }
+
+        float arc = Mathf.Clamp(weapon.Data.firingAngle, 0f, 360f);
+        if (arc >= 359.9f || distance <= 0.0001f)
+        {
+            return true;
+        }
+
+        Vector2 forward = weapon.GetArcCenterDirection();
+        float angleToCenter = Vector2.Angle(forward, toTarget.normalized);
+        float halfArc = arc * 0.5f;
+        float extraAngle = targetRadius > 0f && distance > 0.0001f
+            ? Mathf.Rad2Deg * Mathf.Asin(Mathf.Clamp(targetRadius / Mathf.Max(0.0001f, distance), 0f, 1f))
+            : 0f;
+
+        return angleToCenter <= halfArc + extraAngle;
     }
 
     private bool IsTargetInRange(Vector3 targetPosition, float rangeSqr)
@@ -934,8 +1081,10 @@ public sealed class TargetingController : MonoBehaviour
                 if (muzzle != null)
                 {
                     Transform mount = muzzle.parent != null ? muzzle.parent : muzzle;
-                    Vector2 mountForward = mount.up.sqrMagnitude > 0.0001f ? (Vector2)mount.up : (Vector2)muzzle.up;
-                    forward = mountForward.sqrMagnitude > 0.0001f ? mountForward.normalized : (Vector2)player.Transform.up;
+                    Transform slot = mount.parent != null ? mount.parent : mount;
+                    center = slot.position;
+                    Vector2 slotForward = slot.up.sqrMagnitude > 0.0001f ? (Vector2)slot.up : (Vector2)muzzle.up;
+                    forward = slotForward.sqrMagnitude > 0.0001f ? slotForward.normalized : (Vector2)player.Transform.up;
                 }
 
                 float range = runtimeWeapon.EffectiveMaxRange;
@@ -965,9 +1114,10 @@ public sealed class TargetingController : MonoBehaviour
                 {
                     Transform muzzle = equipmentState.WeaponMuzzles[i];
                     Transform mount = muzzle.parent != null ? muzzle.parent : muzzle;
-                    center = muzzle.position;
-                    Vector2 mountForward = mount.up.sqrMagnitude > 0.0001f ? (Vector2)mount.up : (Vector2)muzzle.up;
-                    forward = mountForward.sqrMagnitude > 0.0001f ? mountForward.normalized : (Vector2)player.Transform.up;
+                    Transform slot = mount.parent != null ? mount.parent : mount;
+                    center = slot.position;
+                    Vector2 slotForward = slot.up.sqrMagnitude > 0.0001f ? (Vector2)slot.up : (Vector2)muzzle.up;
+                    forward = slotForward.sqrMagnitude > 0.0001f ? slotForward.normalized : (Vector2)player.Transform.up;
                 }
 
                 float range = weapon.maxRange > 0f ? weapon.maxRange : (weapon.projectileMaxDistance > 0f ? weapon.projectileMaxDistance : 6f);
@@ -1298,8 +1448,6 @@ public sealed class TargetingController : MonoBehaviour
                lowerName.Contains("enginefire");
     }
 }
-
-
 
 
 

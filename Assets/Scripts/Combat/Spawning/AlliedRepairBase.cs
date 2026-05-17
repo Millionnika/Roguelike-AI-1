@@ -11,6 +11,14 @@ public sealed class AlliedRepairBase : MonoBehaviour
     [Min(0.1f)] [SerializeField] private float healCooldownSeconds = 30f;
     [Tooltip("Радиус действия лечения.")]
     [Min(0.5f)] [SerializeField] private float healRadius = 3.2f;
+    [Header("Defense")]
+    [Tooltip("Оружие союзной базы. Если не задано, база не будет атаковать.")]
+    [SerializeField] private WeaponDataSO defenseWeaponData;
+    [Header("Visual")]
+    [Tooltip("Медленное вращение станции вокруг своей оси (без перемещения).")]
+    [SerializeField] private bool idleSpinEnabled = true;
+    [Tooltip("Скорость вращения в градусах/сек.")]
+    [SerializeField, Range(-30f, 30f)] private float idleSpinSpeed = 3f;
 
     private SpaceCombatSceneController sceneController;
     private float nextHealTime;
@@ -18,11 +26,22 @@ public sealed class AlliedRepairBase : MonoBehaviour
     private void Awake()
     {
         sceneController = FindFirstObjectByType<SpaceCombatSceneController>();
+        EnsureTeamMember();
+        EnsureDefenseBattery();
         EnsureTrigger();
     }
 
     private void Update()
     {
+        if (idleSpinEnabled)
+        {
+            float spin = idleSpinSpeed * Time.deltaTime;
+            if (Mathf.Abs(spin) > 0.0001f)
+            {
+                transform.Rotate(0f, 0f, spin, Space.Self);
+            }
+        }
+
         if (Time.time < nextHealTime || sceneController == null)
         {
             return;
@@ -75,6 +94,30 @@ public sealed class AlliedRepairBase : MonoBehaviour
 
         trigger.isTrigger = true;
         trigger.radius = Mathf.Max(0.5f, healRadius);
+    }
+
+    private void EnsureTeamMember()
+    {
+        TeamMember member = GetComponent<TeamMember>();
+        if (member == null)
+        {
+            member = gameObject.AddComponent<TeamMember>();
+        }
+
+        member.SetFaction(CombatFaction.Player);
+        CombatLayerUtility.ApplyShipLayer(gameObject, CombatFaction.Player);
+    }
+
+    private void EnsureDefenseBattery()
+    {
+        BaseDefenseBattery battery = GetComponent<BaseDefenseBattery>();
+        if (battery == null)
+        {
+            battery = gameObject.AddComponent<BaseDefenseBattery>();
+        }
+
+        battery.ConfigureFaction(CombatFaction.Player);
+        battery.EnsureWeapon(defenseWeaponData);
     }
 
     private void OnValidate()
